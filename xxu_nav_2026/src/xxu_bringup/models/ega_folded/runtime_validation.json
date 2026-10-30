@@ -1,0 +1,474 @@
+{
+  "schema_version": 2,
+  "verified_at": "2026-10-27",
+  "robot": "ega_folded",
+  "scope": "RMUL 2027 single-point simulator navigation with RGL, fake frame and 1.5 rad/s chassis spin; not real-vehicle validation",
+  "lidar_cover_configuration": "removed; provisional operating assumption, real cover handling pending user confirmation",
+  "result": "single_point_navigation_regression_passed_with_remaining_slow_convergence",
+  "changes": {
+    "vehicle_profile": "navigation_profile.yaml",
+    "lio_simulator_profile": "lio_profile.yaml",
+    "summary": [
+      "Preserve configured clearance and put the inflation field outside the emergency-stop octagon plus one costmap cell when a vehicle navigation profile is selected.",
+      "Apply consistent per-axis XY limits to MPPI and velocity_smoother; tighten estimated-pose goal tolerance without relaxing the physical 0.12 m criterion.",
+      "Use a vehicle-specific LIO laser measurement covariance overlay; keep existing timestamps, TF ownership, estimator publication rate and emergency-stop polygon."
+    ]
+  },
+  "acceptance": {
+    "physical_xy_tolerance_m": 0.12,
+    "measured_at": [
+      "Action completion",
+      "two wall seconds after completion"
+    ],
+    "all_goals_completed": true,
+    "all_true_endpoint_errors_within_tolerance": true,
+    "all_final_velocity_commands_zero": true,
+    "all_final_wheel_velocities_below_0_001_rad_s": true,
+    "navigation_uses_ground_truth": false
+  },
+  "repeated_validation": {
+    "runs": [
+      "lio_cov_retry",
+      "lio_cov_repeat",
+      "combined",
+      "final"
+    ],
+    "total_goals": 20,
+    "max_true_endpoint_error_m": 0.11685666606584569,
+    "emergency_samples": 0,
+    "max_goal_wall_seconds": 75.9868848979986,
+    "progress_recovery_error_count": 12
+  },
+  "installed_default_parameters": {
+    "/local_costmap/local_costmap": {
+      "robot_radius": 0.533,
+      "inflation_layer.inflation_radius": 0.85
+    },
+    "/controller_server": {
+      "goal_checker.xy_goal_tolerance": 0.06,
+      "FollowPath.vx_max": 0.5
+    },
+    "/small_point_lio": {
+      "laser_point_cov": 0.001
+    },
+    "/fake_vel_transform": {
+      "spin_speed": 1.5
+    },
+    "/collision_monitor": {
+      "EmergencyStop.points": "[[0.60939, 0.0], [0.4309, 0.4309], [0.0, 0.60939], [-0.4309, 0.4309], [-0.60939, 0.0], [-0.4309, -0.4309], [-0.0, -0.60939], [0.4309, -0.4309]]"
+    }
+  },
+  "installed_default_run": "validation/20261027/final.json",
+  "navigation_goals": [
+    {
+      "target": [
+        6.59,
+        4.44
+      ],
+      "start_truth": [
+        1.9999999999999925,
+        2.000000000000002
+      ],
+      "emergency_samples": 0,
+      "safe_peak": 0.6134416109975898,
+      "wheel_peak": 13.593451966189845,
+      "scan_min": 0.7027660608291626,
+      "stalled": false,
+      "status": 4,
+      "wall_seconds": 18.226088125000388,
+      "simulation_seconds": 17.514,
+      "truth_at_result": [
+        6.658219685935244,
+        4.382940221822946
+      ],
+      "truth_error_m": 0.08893674063466635,
+      "map_at_result": [
+        6.618140632806604,
+        4.3619973253440785
+      ],
+      "settled_truth": [
+        6.663830459294912,
+        4.376985551986404
+      ],
+      "settled_error_m": 0.0970657374059251,
+      "safe_after_stop": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "odom_after_stop": [
+        0.10827217401282911,
+        0.027395756707014798,
+        0.0011382438202768468
+      ],
+      "wheel_after_stop": 1.3352924980237721e-17
+    },
+    {
+      "target": [
+        2,
+        2
+      ],
+      "start_truth": [
+        6.663830459294912,
+        4.376985551986404
+      ],
+      "emergency_samples": 0,
+      "safe_peak": 0.6435551832475289,
+      "wheel_peak": 13.592811162906411,
+      "scan_min": 1.1354790925979614,
+      "stalled": false,
+      "status": 4,
+      "wall_seconds": 72.06808963499861,
+      "simulation_seconds": 66.572,
+      "truth_at_result": [
+        2.0899467034663393,
+        1.9730383082695497
+      ],
+      "truth_error_m": 0.0939007043926157,
+      "map_at_result": [
+        1.9735939029611373,
+        1.9371526083535902
+      ],
+      "settled_truth": [
+        2.0897271603927297,
+        1.973296095448037
+      ],
+      "settled_error_m": 0.09361656814081033,
+      "safe_after_stop": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "odom_after_stop": [
+        -0.1285955205032788,
+        0.10231780103298997,
+        0.014930187206006496
+      ],
+      "wheel_after_stop": 1.5528919917347826e-17
+    },
+    {
+      "target": [
+        3,
+        2
+      ],
+      "start_truth": [
+        2.0897271603927297,
+        1.973296095448037
+      ],
+      "emergency_samples": 0,
+      "safe_peak": 0.4420618058855723,
+      "wheel_peak": 11.127003177616578,
+      "scan_min": 1.1676632165908813,
+      "stalled": false,
+      "status": 4,
+      "wall_seconds": 42.285100492999845,
+      "simulation_seconds": 40.91199999999999,
+      "truth_at_result": [
+        2.974911952831999,
+        1.974787485254173
+      ],
+      "truth_error_m": 0.03556797731826176,
+      "map_at_result": [
+        2.9766437943093873,
+        2.0633112190721334
+      ],
+      "settled_truth": [
+        2.9720797272787802,
+        1.967121678816278
+      ],
+      "settled_error_m": 0.04313381078327387,
+      "safe_after_stop": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "odom_after_stop": [
+        0.01304649340305059,
+        -0.05424841874141847,
+        -0.008008671478391923
+      ],
+      "wheel_after_stop": 1.8693883359826893e-17
+    },
+    {
+      "target": [
+        2,
+        3
+      ],
+      "start_truth": [
+        2.9720797272787802,
+        1.967121678816278
+      ],
+      "emergency_samples": 0,
+      "safe_peak": 0.5822389897946794,
+      "wheel_peak": 12.39449144785771,
+      "scan_min": 0.7755987048149109,
+      "stalled": false,
+      "status": 4,
+      "wall_seconds": 11.890213280999888,
+      "simulation_seconds": 10.961000000000013,
+      "truth_at_result": [
+        2.064077019341712,
+        3.083075559334857
+      ],
+      "truth_error_m": 0.10491621879632096,
+      "map_at_result": [
+        2.111829711596733,
+        3.0419376269998093
+      ],
+      "settled_truth": [
+        2.0573418991799315,
+        3.0857034754440544
+      ],
+      "settled_error_m": 0.10311730749370383,
+      "safe_after_stop": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "odom_after_stop": [
+        -0.011911305945586455,
+        0.021552828654542056,
+        0.005495589632675523
+      ],
+      "wheel_after_stop": 1.9936194075458348e-17
+    },
+    {
+      "target": [
+        2,
+        2
+      ],
+      "start_truth": [
+        2.0573418991799315,
+        3.0857034754440544
+      ],
+      "emergency_samples": 0,
+      "safe_peak": 0.4752473484392938,
+      "wheel_peak": 11.314938522676522,
+      "scan_min": 1.2295814752578735,
+      "stalled": false,
+      "status": 4,
+      "wall_seconds": 38.65038564799943,
+      "simulation_seconds": 35.41199999999998,
+      "truth_at_result": [
+        2.072058961960162,
+        2.0000880442390327
+      ],
+      "truth_error_m": 0.07205901574795544,
+      "map_at_result": [
+        1.978359546502257,
+        2.012189774175581
+      ],
+      "settled_truth": [
+        2.0743320447214817,
+        1.9950929499206127
+      ],
+      "settled_error_m": 0.07449383875836961,
+      "safe_after_stop": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "odom_after_stop": [
+        -0.033544693019685407,
+        -0.08405562381039475,
+        0.002631752915145441
+      ],
+      "wheel_after_stop": 1.9279715389423775e-17
+    }
+  ],
+  "checks": {
+    "parameter_contract_tests": {
+      "result": "passed",
+      "test_methods": 6,
+      "entry": "tools/navigation/test_vehicle_parameters.py",
+      "scope": "navigation/exploration and fake/non-fake profile resolution, preservation of stricter user limits, no-profile compatibility and LIO parameter precedence"
+    },
+    "interface_bindings": {
+      "result": "passed",
+      "checked": 144,
+      "errors": 0,
+      "entry": "tools/navigation/check_interfaces.py"
+    },
+    "generated_model_static_check": {
+      "result": "passed",
+      "date": "2026-10-27",
+      "scope": "validate_folded_robot.validate() on a temporary model copy; original static_validation.json was preserved"
+    },
+    "build": {
+      "package": "xxu_bringup",
+      "result": "passed"
+    },
+    "installation": {
+      "profile_files_match_source": true,
+      "default_launch_closed_loop_result": "passed",
+      "evidence": "validation/20261027/final.json"
+    }
+  },
+  "comparisons": {
+    "baseline": {
+      "completed_goals": 0,
+      "expected_goals": 1,
+      "max_true_error_m": 2.893012075208759,
+      "passed": false,
+      "emergency_samples": 60,
+      "max_goal_wall_seconds": 18.091838887999984,
+      "progress_recovery_error_count": 0,
+      "evidence": "validation/20261027/baseline.json"
+    },
+    "candidate_repeat": {
+      "completed_goals": 0,
+      "expected_goals": 5,
+      "max_true_error_m": 2.8753571459374943,
+      "passed": false,
+      "emergency_samples": 64,
+      "max_goal_wall_seconds": 19.07764607199988,
+      "progress_recovery_error_count": 0,
+      "evidence": "validation/20261027/candidate_repeat.json"
+    },
+    "no_spin": {
+      "completed_goals": 0,
+      "expected_goals": 1,
+      "max_true_error_m": 0.4455866095601241,
+      "passed": false,
+      "emergency_samples": 0,
+      "max_goal_wall_seconds": 24.46162022199951,
+      "progress_recovery_error_count": 0,
+      "evidence": "validation/20261027/no_spin.json"
+    },
+    "slow": {
+      "completed_goals": 5,
+      "expected_goals": 5,
+      "max_true_error_m": 0.1469530258051789,
+      "passed": false,
+      "emergency_samples": 0,
+      "max_goal_wall_seconds": 32.85080670999923,
+      "progress_recovery_error_count": 0,
+      "evidence": "validation/20261027/slow.json"
+    },
+    "precise": {
+      "completed_goals": 5,
+      "expected_goals": 5,
+      "max_true_error_m": 0.09249563227428882,
+      "passed": true,
+      "emergency_samples": 0,
+      "max_goal_wall_seconds": 47.21731587500017,
+      "progress_recovery_error_count": 3,
+      "evidence": "validation/20261027/precise.json"
+    },
+    "profile_verify": {
+      "completed_goals": 5,
+      "expected_goals": 5,
+      "max_true_error_m": 0.10865366495975931,
+      "passed": true,
+      "emergency_samples": 0,
+      "max_goal_wall_seconds": 68.81333002899919,
+      "progress_recovery_error_count": 2,
+      "evidence": "validation/20261027/profile_verify.json"
+    },
+    "installed": {
+      "completed_goals": 5,
+      "expected_goals": 5,
+      "max_true_error_m": 0.14236243225212622,
+      "passed": false,
+      "emergency_samples": 0,
+      "max_goal_wall_seconds": 44.09818032300063,
+      "progress_recovery_error_count": 1,
+      "evidence": "validation/20261027/installed.json"
+    },
+    "amcl_sigma": {
+      "completed_goals": 4,
+      "expected_goals": 5,
+      "max_true_error_m": 0.1224128668427789,
+      "passed": false,
+      "emergency_samples": 0,
+      "max_goal_wall_seconds": 106.08787675599888,
+      "progress_recovery_error_count": 8,
+      "evidence": "validation/20261027/amcl_sigma.json"
+    },
+    "strict": {
+      "completed_goals": 1,
+      "expected_goals": 5,
+      "max_true_error_m": 0.08832715055782185,
+      "passed": false,
+      "emergency_samples": 0,
+      "max_goal_wall_seconds": 106.09521681499973,
+      "progress_recovery_error_count": 4,
+      "evidence": "validation/20261027/strict.json"
+    },
+    "map_frame": {
+      "completed_goals": 4,
+      "expected_goals": 5,
+      "max_true_error_m": 0.102459988001192,
+      "passed": false,
+      "emergency_samples": 0,
+      "max_goal_wall_seconds": 106.0693095860006,
+      "progress_recovery_error_count": 1,
+      "evidence": "validation/20261027/map_frame.json"
+    },
+    "lio_cov_retry": {
+      "completed_goals": 5,
+      "expected_goals": 5,
+      "max_true_error_m": 0.1074449319600553,
+      "passed": true,
+      "emergency_samples": 0,
+      "max_goal_wall_seconds": 38.62714867399882,
+      "progress_recovery_error_count": 0,
+      "evidence": "validation/20261027/lio_cov_retry.json"
+    },
+    "lio_cov_repeat": {
+      "completed_goals": 5,
+      "expected_goals": 5,
+      "max_true_error_m": 0.1095305329089035,
+      "passed": true,
+      "emergency_samples": 0,
+      "max_goal_wall_seconds": 69.67575677500099,
+      "progress_recovery_error_count": 2,
+      "evidence": "validation/20261027/lio_cov_repeat.json"
+    },
+    "combined": {
+      "completed_goals": 5,
+      "expected_goals": 5,
+      "max_true_error_m": 0.11685666606584569,
+      "passed": true,
+      "emergency_samples": 0,
+      "max_goal_wall_seconds": 75.9868848979986,
+      "progress_recovery_error_count": 4,
+      "evidence": "validation/20261027/combined.json"
+    },
+    "final": {
+      "completed_goals": 5,
+      "expected_goals": 5,
+      "max_true_error_m": 0.10491621879632096,
+      "passed": true,
+      "emergency_samples": 0,
+      "max_goal_wall_seconds": 72.06808963499861,
+      "progress_recovery_error_count": 6,
+      "evidence": "validation/20261027/final.json"
+    }
+  },
+  "remaining_limitations": [
+    "Some short goals still need progress recovery; a validated goal took about 76 wall seconds. Slow convergence and source pose/velocity noise are not declared resolved.",
+    "The existing single-MID360 geometric blind spots remain; see blindspot_analysis/REPORT.md.",
+    "Runtime regression covers the listed paths at spin_speed=1.5. Other modes and arbitrary paths are not covered by this result.",
+    "CAD contact friction and actuator response remain provisional; sensor mounting and physical vehicle calibration have not been verified."
+  ],
+  "previous_report": "validation/20261018_runtime.json",
+  "user_acceptance": "not_performed",
+  "release_authorization": "not_requested",
+  "existing_user_session_restarted": false,
+  "inputs_sha256": {
+    "src/xxu_bringup/xxu_bringup/launch_helpers.py": "3abf797c62d388a1c608a3dc37c3bdca435f540824b9dae3d8b130617ab6b7ac",
+    "src/xxu_bringup/models/ega_folded/geometry.json": "1f6be41cf3efc05e7766177d46a0235be7f80a82cc6824685d90d41e30043531",
+    "src/xxu_bringup/models/ega_folded/model.sdf": "99830772e9bde4701fceb1ffe1335f97b799b5e99f67cf6c7fa7c33b1a8f1732",
+    "src/xxu_bringup/models/ega_folded/robot.urdf": "580b39e63b2d9bfac5c5157298d29c7c9ae58f6f6fd6da0bf53f8c313d977033",
+    "src/xxu_bringup/models/ega_folded/navigation_profile.yaml": "25158b32bdcec2e65fc78e99fedc30838b8e7569c8e9767289a7e6b74db0c664",
+    "src/xxu_bringup/models/ega_folded/lio_profile.yaml": "f4dcae766527f2557b4153d981c544168d66dcc0fda3d6f2984a400b77dbc6b9",
+    "src/xxu_bringup/models/rmul_2027/navigation/rmul_2027.yaml": "11f78dfeacf9b9ce0d60d7f6161f93e695744c8ca0f5306c3e1207f0c3856af5",
+    "src/xxu_bringup/models/rmul_2027/navigation/rmul_2027.pgm": "aa2bd2f25c258af8033b969e15f4366def29f1281e2859616a9875e9177d9ab9",
+    "src/xxu_bringup/config/rm_sim_lio.yaml": "da54034a7b2594858764f11b72188ef90cbbc07f50687c5aef5d33c41804b279",
+    "tools/navigation/check_ega_navigation.py": "964cc904b2c269211d758bce569edf7bfc023b8c8cda731806100a7b337ae933",
+    "tools/navigation/test_vehicle_parameters.py": "867a164337ebe2d5796be023fcad0b9e14af11be3ad3c8d3ca9208c9f2d833c3",
+    "install/small_point_lio/lib/small_point_lio/small_point_lio_node": "95069c504360f5864b701e3e47fcc6bfb2c1c9b1d76e99596bcc16673d968933",
+    "install/xxu_chassis_controller/lib/xxu_chassis_controller/chassis_controller": "861ae7102cd374c118276505afcde05e662b04f8e3da3d3772a7dc07f6730e3d"
+  }
+}

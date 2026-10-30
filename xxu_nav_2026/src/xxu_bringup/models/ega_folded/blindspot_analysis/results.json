@@ -1,0 +1,462 @@
+{
+  "date": "2026-10-19",
+  "kind": "offline_geometric_estimate_not_real_vehicle_test",
+  "configuration": {
+    "active_lidar_count": 1,
+    "cover_mode": "removed",
+    "optical_origin_above_floor_m": [
+      0.13917788102930553,
+      -0.08456666086335882,
+      0.22994278480337305
+    ],
+    "sensor_rpy_degrees": [
+      22.00000000000013,
+      -3.81666561775622e-14,
+      58.71647887008368
+    ],
+    "official_fov_degrees": [
+      -7,
+      52
+    ],
+    "lidar_min_range_m": 0.1,
+    "scan_height_band_m": [
+      0.1,
+      0.28626616071877936
+    ],
+    "navigation_center_exclusion_radius_m": 0.533
+  },
+  "method": {
+    "triangles": 3614137,
+    "azimuth_step_degrees": 1,
+    "radial_step_m": 0.02,
+    "vertical_step_m": 0.005,
+    "radial_centers_m": [
+      0.54,
+      6.0
+    ],
+    "threshold_accuracy": "Discrete samples; narrow angular gaps can be missed; no beam/reflectivity probability model.",
+    "obstacle": "Opaque vertical face covering heights from ground to H, evaluated at a radial column; any unblocked eligible height counts as geometrically detectable.",
+    "independent_checks": "Known-distance cube and 12 seeded rays compared with trimesh rtree, passed.",
+    "omissions": "Sensor housing link excluded as in RGL; no ground slope, environment occlusion, rolling motion, sunlight, reflectivity, finite per-frame sampling or scan/detection persistence modeled.",
+    "incomplete_mesh_counts": {
+      "references": 1318,
+      "placed": 710,
+      "no_cached_mesh": 332,
+      "suppressed": 143
+    }
+  },
+  "near_field": {
+    "center_excluded_disk_area_m2": 0.8924919153656709,
+    "convex_projected_body_envelope_area_m2": 0.3520382225967655,
+    "excluded_area_outside_convex_body_envelope_m2": 0.5404536927689054,
+    "straight_axis_gap_from_body_bounds_m": {
+      "front": 0.24100009369850162,
+      "rear": 0.08834577369689944,
+      "left": 0.24100235867500308,
+      "right": 0.24100438523292544
+    }
+  },
+  "obstacle_summaries": [
+    {
+      "obstacle_height_m": 0.05,
+      "rings": [
+        {
+          "radius_from_base_center_m": 0.54,
+          "physical_blind_percent": 99.72222222222223,
+          "navigation_blind_percent": 100.0,
+          "fov_only_navigation_blind_percent": 100.0
+        },
+        {
+          "radius_from_base_center_m": 0.76,
+          "physical_blind_percent": 85.27777777777777,
+          "navigation_blind_percent": 100.0,
+          "fov_only_navigation_blind_percent": 100.0
+        },
+        {
+          "radius_from_base_center_m": 1.0,
+          "physical_blind_percent": 65.83333333333333,
+          "navigation_blind_percent": 100.0,
+          "fov_only_navigation_blind_percent": 100.0
+        },
+        {
+          "radius_from_base_center_m": 2.0,
+          "physical_blind_percent": 64.72222222222223,
+          "navigation_blind_percent": 100.0,
+          "fov_only_navigation_blind_percent": 100.0
+        },
+        {
+          "radius_from_base_center_m": 3.0,
+          "physical_blind_percent": 64.16666666666667,
+          "navigation_blind_percent": 100.0,
+          "fov_only_navigation_blind_percent": 100.0
+        },
+        {
+          "radius_from_base_center_m": 5.0,
+          "physical_blind_percent": 63.61111111111111,
+          "navigation_blind_percent": 100.0,
+          "fov_only_navigation_blind_percent": 100.0
+        },
+        {
+          "radius_from_base_center_m": 6.0,
+          "physical_blind_percent": 63.33333333333333,
+          "navigation_blind_percent": 100.0,
+          "fov_only_navigation_blind_percent": 100.0
+        }
+      ],
+      "blind_area_fraction_053_to_301m": 1.0
+    },
+    {
+      "obstacle_height_m": 0.1,
+      "rings": [
+        {
+          "radius_from_base_center_m": 0.54,
+          "physical_blind_percent": 88.05555555555556,
+          "navigation_blind_percent": 88.05555555555556,
+          "fov_only_navigation_blind_percent": 70.83333333333334
+        },
+        {
+          "radius_from_base_center_m": 0.76,
+          "physical_blind_percent": 67.5,
+          "navigation_blind_percent": 68.88888888888889,
+          "fov_only_navigation_blind_percent": 60.55555555555555
+        },
+        {
+          "radius_from_base_center_m": 1.0,
+          "physical_blind_percent": 65.83333333333333,
+          "navigation_blind_percent": 67.5,
+          "fov_only_navigation_blind_percent": 55.00000000000001
+        },
+        {
+          "radius_from_base_center_m": 2.0,
+          "physical_blind_percent": 64.72222222222223,
+          "navigation_blind_percent": 64.72222222222223,
+          "fov_only_navigation_blind_percent": 47.22222222222222
+        },
+        {
+          "radius_from_base_center_m": 3.0,
+          "physical_blind_percent": 64.16666666666667,
+          "navigation_blind_percent": 64.16666666666667,
+          "fov_only_navigation_blind_percent": 44.72222222222222
+        },
+        {
+          "radius_from_base_center_m": 5.0,
+          "physical_blind_percent": 63.61111111111111,
+          "navigation_blind_percent": 63.61111111111111,
+          "fov_only_navigation_blind_percent": 42.5
+        },
+        {
+          "radius_from_base_center_m": 6.0,
+          "physical_blind_percent": 63.33333333333333,
+          "navigation_blind_percent": 63.33333333333333,
+          "fov_only_navigation_blind_percent": 41.94444444444444
+        }
+      ],
+      "blind_area_fraction_053_to_301m": 0.6546724075086571
+    },
+    {
+      "obstacle_height_m": 0.15,
+      "rings": [
+        {
+          "radius_from_base_center_m": 0.54,
+          "physical_blind_percent": 70.27777777777777,
+          "navigation_blind_percent": 70.27777777777777,
+          "fov_only_navigation_blind_percent": 61.66666666666667
+        },
+        {
+          "radius_from_base_center_m": 0.76,
+          "physical_blind_percent": 67.5,
+          "navigation_blind_percent": 68.88888888888889,
+          "fov_only_navigation_blind_percent": 54.72222222222223
+        },
+        {
+          "radius_from_base_center_m": 1.0,
+          "physical_blind_percent": 65.83333333333333,
+          "navigation_blind_percent": 67.5,
+          "fov_only_navigation_blind_percent": 51.11111111111111
+        },
+        {
+          "radius_from_base_center_m": 2.0,
+          "physical_blind_percent": 64.72222222222223,
+          "navigation_blind_percent": 64.72222222222223,
+          "fov_only_navigation_blind_percent": 45.27777777777778
+        },
+        {
+          "radius_from_base_center_m": 3.0,
+          "physical_blind_percent": 64.16666666666667,
+          "navigation_blind_percent": 64.16666666666667,
+          "fov_only_navigation_blind_percent": 43.333333333333336
+        },
+        {
+          "radius_from_base_center_m": 5.0,
+          "physical_blind_percent": 63.61111111111111,
+          "navigation_blind_percent": 63.61111111111111,
+          "fov_only_navigation_blind_percent": 41.66666666666667
+        },
+        {
+          "radius_from_base_center_m": 6.0,
+          "physical_blind_percent": 63.33333333333333,
+          "navigation_blind_percent": 63.33333333333333,
+          "fov_only_navigation_blind_percent": 41.388888888888886
+        }
+      ],
+      "blind_area_fraction_053_to_301m": 0.6520153696616248
+    },
+    {
+      "obstacle_height_m": 0.2,
+      "rings": [
+        {
+          "radius_from_base_center_m": 0.54,
+          "physical_blind_percent": 70.27777777777777,
+          "navigation_blind_percent": 70.27777777777777,
+          "fov_only_navigation_blind_percent": 53.333333333333336
+        },
+        {
+          "radius_from_base_center_m": 0.76,
+          "physical_blind_percent": 67.5,
+          "navigation_blind_percent": 68.88888888888889,
+          "fov_only_navigation_blind_percent": 49.166666666666664
+        },
+        {
+          "radius_from_base_center_m": 1.0,
+          "physical_blind_percent": 65.83333333333333,
+          "navigation_blind_percent": 67.5,
+          "fov_only_navigation_blind_percent": 46.94444444444444
+        },
+        {
+          "radius_from_base_center_m": 2.0,
+          "physical_blind_percent": 64.72222222222223,
+          "navigation_blind_percent": 64.72222222222223,
+          "fov_only_navigation_blind_percent": 43.05555555555556
+        },
+        {
+          "radius_from_base_center_m": 3.0,
+          "physical_blind_percent": 64.16666666666667,
+          "navigation_blind_percent": 64.16666666666667,
+          "fov_only_navigation_blind_percent": 41.94444444444444
+        },
+        {
+          "radius_from_base_center_m": 5.0,
+          "physical_blind_percent": 63.61111111111111,
+          "navigation_blind_percent": 63.61111111111111,
+          "fov_only_navigation_blind_percent": 40.833333333333336
+        },
+        {
+          "radius_from_base_center_m": 6.0,
+          "physical_blind_percent": 63.33333333333333,
+          "navigation_blind_percent": 63.33333333333333,
+          "fov_only_navigation_blind_percent": 40.55555555555556
+        }
+      ],
+      "blind_area_fraction_053_to_301m": 0.6520153696616248
+    },
+    {
+      "obstacle_height_m": 0.26626616071877934,
+      "rings": [
+        {
+          "radius_from_base_center_m": 0.54,
+          "physical_blind_percent": 66.94444444444444,
+          "navigation_blind_percent": 66.94444444444444,
+          "fov_only_navigation_blind_percent": 42.77777777777778
+        },
+        {
+          "radius_from_base_center_m": 0.76,
+          "physical_blind_percent": 65.55555555555556,
+          "navigation_blind_percent": 66.94444444444444,
+          "fov_only_navigation_blind_percent": 41.94444444444444
+        },
+        {
+          "radius_from_base_center_m": 1.0,
+          "physical_blind_percent": 64.44444444444444,
+          "navigation_blind_percent": 66.11111111111111,
+          "fov_only_navigation_blind_percent": 41.388888888888886
+        },
+        {
+          "radius_from_base_center_m": 2.0,
+          "physical_blind_percent": 63.888888888888886,
+          "navigation_blind_percent": 63.888888888888886,
+          "fov_only_navigation_blind_percent": 40.27777777777778
+        },
+        {
+          "radius_from_base_center_m": 3.0,
+          "physical_blind_percent": 63.61111111111111,
+          "navigation_blind_percent": 63.61111111111111,
+          "fov_only_navigation_blind_percent": 40.0
+        },
+        {
+          "radius_from_base_center_m": 5.0,
+          "physical_blind_percent": 63.33333333333333,
+          "navigation_blind_percent": 63.33333333333333,
+          "fov_only_navigation_blind_percent": 39.72222222222222
+        },
+        {
+          "radius_from_base_center_m": 6.0,
+          "physical_blind_percent": 63.05555555555556,
+          "navigation_blind_percent": 63.05555555555556,
+          "fov_only_navigation_blind_percent": 39.72222222222222
+        }
+      ],
+      "blind_area_fraction_053_to_301m": 0.643242866978515
+    },
+    {
+      "obstacle_height_m": 0.5,
+      "rings": [
+        {
+          "radius_from_base_center_m": 0.54,
+          "physical_blind_percent": 0.0,
+          "navigation_blind_percent": 65.27777777777779,
+          "fov_only_navigation_blind_percent": 39.44444444444444
+        },
+        {
+          "radius_from_base_center_m": 0.76,
+          "physical_blind_percent": 5.555555555555555,
+          "navigation_blind_percent": 65.27777777777779,
+          "fov_only_navigation_blind_percent": 39.44444444444444
+        },
+        {
+          "radius_from_base_center_m": 1.0,
+          "physical_blind_percent": 48.333333333333336,
+          "navigation_blind_percent": 65.0,
+          "fov_only_navigation_blind_percent": 39.44444444444444
+        },
+        {
+          "radius_from_base_center_m": 2.0,
+          "physical_blind_percent": 58.611111111111114,
+          "navigation_blind_percent": 63.33333333333333,
+          "fov_only_navigation_blind_percent": 39.44444444444444
+        },
+        {
+          "radius_from_base_center_m": 3.0,
+          "physical_blind_percent": 60.27777777777777,
+          "navigation_blind_percent": 63.33333333333333,
+          "fov_only_navigation_blind_percent": 39.44444444444444
+        },
+        {
+          "radius_from_base_center_m": 5.0,
+          "physical_blind_percent": 61.38888888888889,
+          "navigation_blind_percent": 63.05555555555556,
+          "fov_only_navigation_blind_percent": 39.44444444444444
+        },
+        {
+          "radius_from_base_center_m": 6.0,
+          "physical_blind_percent": 61.38888888888889,
+          "navigation_blind_percent": 62.77777777777778,
+          "fov_only_navigation_blind_percent": 39.44444444444444
+        }
+      ],
+      "blind_area_fraction_053_to_301m": 0.6370256464775328
+    }
+  ],
+  "cardinal_directions": [
+    {
+      "direction": "front",
+      "angle_degrees": 0,
+      "heights": {
+        "0.15": {
+          "first_visible_center_distance_m": 0.54,
+          "blind_rings_at_or_beyond_1m": 0
+        },
+        "0.2": {
+          "first_visible_center_distance_m": 0.54,
+          "blind_rings_at_or_beyond_1m": 0
+        },
+        "0.26626616071877934": {
+          "first_visible_center_distance_m": 0.54,
+          "blind_rings_at_or_beyond_1m": 0
+        }
+      }
+    },
+    {
+      "direction": "left",
+      "angle_degrees": 90,
+      "heights": {
+        "0.15": {
+          "first_visible_center_distance_m": null,
+          "blind_rings_at_or_beyond_1m": 251
+        },
+        "0.2": {
+          "first_visible_center_distance_m": null,
+          "blind_rings_at_or_beyond_1m": 251
+        },
+        "0.26626616071877934": {
+          "first_visible_center_distance_m": null,
+          "blind_rings_at_or_beyond_1m": 251
+        }
+      }
+    },
+    {
+      "direction": "rear",
+      "angle_degrees": 180,
+      "heights": {
+        "0.15": {
+          "first_visible_center_distance_m": null,
+          "blind_rings_at_or_beyond_1m": 251
+        },
+        "0.2": {
+          "first_visible_center_distance_m": null,
+          "blind_rings_at_or_beyond_1m": 251
+        },
+        "0.26626616071877934": {
+          "first_visible_center_distance_m": null,
+          "blind_rings_at_or_beyond_1m": 251
+        }
+      }
+    },
+    {
+      "direction": "right",
+      "angle_degrees": 270,
+      "heights": {
+        "0.15": {
+          "first_visible_center_distance_m": 0.68,
+          "blind_rings_at_or_beyond_1m": 0
+        },
+        "0.2": {
+          "first_visible_center_distance_m": 0.68,
+          "blind_rings_at_or_beyond_1m": 0
+        },
+        "0.26626616071877934": {
+          "first_visible_center_distance_m": 0.66,
+          "blind_rings_at_or_beyond_1m": 0
+        }
+      }
+    }
+  ],
+  "simulation_pattern": {
+    "ray_count": 800000,
+    "alternating_frames": 40,
+    "cycle_sim_seconds": 4.0,
+    "sensor_elevation_degrees": [
+      -8.219999958964886,
+      54.36000270402594
+    ],
+    "outside_official_vertical_fov_percent": 1.3245,
+    "body_intercepted_percent": 20.275625,
+    "caveat": "Offline mesh intersections; does not verify Gazebo fixed-joint entity-ignore behavior or sensor-link optics."
+  },
+  "passive_live_observation": {
+    "topic": "/rm_sim/lidar/points",
+    "frame": "livox_lidar",
+    "point_count": 75088,
+    "sim_stamp_start": 3368.881,
+    "sim_stamp_end": 3370.781,
+    "frames": 20,
+    "mesh_tolerance_m": 0.005,
+    "returns_beyond_first_vehicle_surface_count": 1,
+    "returns_beyond_first_vehicle_surface_percent": 0.0013317707223524397,
+    "returns_matching_vehicle_surface_count": 23673,
+    "explanation": "Passive snapshot. Returns beyond an opaque CAD surface reveal a simulation/model visibility mismatch; do not interpret environment-dependent empty scan bins as blind angles.",
+    "snapshot_file": "raw_points_snapshot.npz",
+    "snapshot_sha256": "c2deec4e32f0eddba39b78163e035669d0e3ee225199084732adaab9dd745af4"
+  },
+  "sources_sha256": {
+    "src/xxu_bringup/models/ega_folded/geometry.json": "1f6be41cf3efc05e7766177d46a0235be7f80a82cc6824685d90d41e30043531",
+    "src/xxu_bringup/models/ega_folded/model.sdf": "99830772e9bde4701fceb1ffe1335f97b799b5e99f67cf6c7fa7c33b1a8f1732",
+    "src/xxu_bringup/models/ega_folded/physical_properties.json": "317c3a942d240595837ef179071a5c42a2eb32532ba1854599d686445c6735b8",
+    "src/xxu_bringup/models/ega_folded/meshes/base_link.glb": "83da0c45b3ed23b417f6fe0f9c56fbb4a547ecb6a6edc8fe4d11a6c7635842e3",
+    "src/xxu_bringup/models/ega_folded/meshes/wheel_rr.glb": "436e3acf8adf4b149ce69ac02123e19a424a5e1bf96bbdb91e451a1406d0c173",
+    "src/xxu_bringup/models/ega_folded/meshes/wheel_fr.glb": "21d9f1f3ab2fe3bdbc31e18760474740c1dba0458e304eb3c4f00a8a59384d5c",
+    "src/xxu_bringup/models/ega_folded/meshes/wheel_fl.glb": "436e3acf8adf4b149ce69ac02123e19a424a5e1bf96bbdb91e451a1406d0c173",
+    "src/xxu_bringup/models/ega_folded/meshes/wheel_rl.glb": "21d9f1f3ab2fe3bdbc31e18760474740c1dba0458e304eb3c4f00a8a59384d5c",
+    "src/rm_sim_26/external/RGLGazeboPlugin/lidar_patterns/LivoxMid360.mat3x4f": "d7b3322f303f9a83268180931e730b5f361592ef1ab6f1d56c166aadf47153fd"
+  },
+  "official_source": "https://www.livoxtech.com/jp/mid-360/specs"
+}

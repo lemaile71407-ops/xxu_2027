@@ -1,0 +1,23 @@
+{
+  "expected_backend": "ivox",
+  "parameters": {
+    "map_backend": "ivox",
+    "moment_map_resolution": 0.5,
+    "laser_point_cov": 0.001,
+    "extrinsic_est_en": false,
+    "planar_constraint_en": true,
+    "defer_map_insertion_by_scan": true,
+    "dynamic_init_en": false
+  },
+  "counts": {
+    "truth": 3840,
+    "odom": 363,
+    "clock": 38701
+  },
+  "pid": 162153,
+  "loaded_library": {
+    "sha256": "71c86b51d420af2f577bcc1af68934d67d141bb80875779142db12ae56c46119",
+    "from_temporary_install": true
+  },
+  "duration_wall_s": 45.66301518899854
+}

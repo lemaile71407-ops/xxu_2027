@@ -74,8 +74,18 @@ endif()
 configure_file(include/param_deliver.h.in include/param_deliver.h @ONLY)
 
 file(GLOB_RECURSE SOURCE src/*.cpp 3rdparty/*.c 3rdparty/*.cpp)
+list(FILTER SOURCE EXCLUDE REGEX "/3rdparty/zlio_map/")
+option(SMALL_POINT_LIO_ZLIO_MAP "Build the optional GPL-2.0 z-localization map backend" OFF)
 
 ament_auto_add_library(${PROJECT_NAME} SHARED ${SOURCE})
+if(SMALL_POINT_LIO_ZLIO_MAP)
+    target_sources(${PROJECT_NAME} PRIVATE
+        3rdparty/zlio_map/src/map.cpp 3rdparty/zlio_map/src/plane.cpp 3rdparty/zlio_map/src/state.cpp)
+    target_include_directories(${PROJECT_NAME} PRIVATE 3rdparty/zlio_map/include)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE SMALL_POINT_LIO_HAS_MOMENT_MAP)
+    install(FILES 3rdparty/zlio_map/LICENSE 3rdparty/zlio_map/UPSTREAM.json 3rdparty/zlio_map/README.md
+        DESTINATION share/${PROJECT_NAME}/zlio_map)
+endif()
 target_precompile_headers(${PROJECT_NAME} PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/include/pch.h>")
 target_include_directories(${PROJECT_NAME} PUBLIC
     include
@@ -123,6 +133,40 @@ install(TARGETS ${PROJECT_NAME}
 #############
 ## Install ##
 #############
+
+if(BUILD_TESTING)
+    enable_testing()
+    add_executable(test_dynamic_initializer
+        test/test_dynamic_initializer.cpp
+        src/small_point_lio/dynamic_initializer.cpp
+    )
+    target_include_directories(test_dynamic_initializer PRIVATE src)
+    target_link_libraries(test_dynamic_initializer Eigen3::Eigen)
+    add_test(NAME dynamic_initializer COMMAND test_dynamic_initializer)
+    add_executable(test_dynamic_initialization_frontend test/test_dynamic_initialization_frontend.cpp)
+    target_include_directories(test_dynamic_initialization_frontend PRIVATE
+        src include 3rdparty ${CMAKE_CURRENT_BINARY_DIR}/include)
+    target_link_libraries(test_dynamic_initialization_frontend ${PROJECT_NAME} Eigen3::Eigen)
+    ament_target_dependencies(test_dynamic_initialization_frontend rclcpp)
+    add_test(NAME dynamic_initialization_frontend COMMAND test_dynamic_initialization_frontend)
+    add_executable(test_moment_map_frontend test/test_moment_map_frontend.cpp)
+    target_include_directories(test_moment_map_frontend PRIVATE
+        src include 3rdparty ${CMAKE_CURRENT_BINARY_DIR}/include)
+    target_link_libraries(test_moment_map_frontend ${PROJECT_NAME} Eigen3::Eigen)
+    ament_target_dependencies(test_moment_map_frontend rclcpp)
+    add_test(NAME moment_map_frontend COMMAND test_moment_map_frontend)
+    set_tests_properties(moment_map_frontend PROPERTIES
+        ENVIRONMENT "ROS_DOMAIN_ID=194;ROS_LOCALHOST_ONLY=1" TIMEOUT 60)
+    set_tests_properties(dynamic_initialization_frontend PROPERTIES
+        ENVIRONMENT "ROS_DOMAIN_ID=194;ROS_LOCALHOST_ONLY=1" TIMEOUT 60)
+    set_tests_properties(dynamic_initializer PROPERTIES TIMEOUT 60)
+    # Manual, paced A/B benchmark; not part of the fast regression suite.
+    add_executable(benchmark_initialization test/benchmark_initialization.cpp)
+    target_include_directories(benchmark_initialization PRIVATE
+        src include 3rdparty ${CMAKE_CURRENT_BINARY_DIR}/include)
+    target_link_libraries(benchmark_initialization ${PROJECT_NAME} Eigen3::Eigen)
+    ament_target_dependencies(benchmark_initialization rclcpp)
+endif()
 
 ament_auto_package(
     USE_SCOPED_HEADER_INSTALL_DIR

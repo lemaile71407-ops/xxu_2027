@@ -1,0 +1,395 @@
+<?xml version='1.0' encoding='utf-8'?>
+<sdf version="1.9">
+  <model name="ega_folded">
+    <self_collide>false</self_collide>
+    <link name="base_link">
+      <pose>0 0 0.0697382371348 0 0 0</pose>
+      <inertial>
+        <mass>16.13308096243147</mass>
+        <pose>-0.00224583227919 -0.00404203623016 0.0627842107338 0 0 0</pose>
+        <inertia>
+          <ixx>0.4430118114753515</ixx>
+          <iyy>0.4050586950765404</iyy>
+          <izz>0.71361750367395</izz>
+          <ixy>-0.04607137814053494</ixy>
+          <ixz>0.014474811647184786</ixz>
+          <iyz>0.0033988755073585796</iyz>
+        </inertia>
+      </inertial>
+      <visual name="base_link_visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/base_link.glb</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="body_collision_0">
+        <geometry>
+          <mesh>
+            <uri>meshes/collision_0.stl</uri>
+          </mesh>
+        </geometry>
+      </collision>
+      <collision name="body_collision_1">
+        <geometry>
+          <mesh>
+            <uri>meshes/collision_1.stl</uri>
+          </mesh>
+        </geometry>
+      </collision>
+      <collision name="body_collision_2">
+        <geometry>
+          <mesh>
+            <uri>meshes/collision_2.stl</uri>
+          </mesh>
+        </geometry>
+      </collision>
+      <collision name="body_collision_3">
+        <geometry>
+          <mesh>
+            <uri>meshes/collision_3.stl</uri>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+    <link name="wheel_rr">
+      <pose relative_to="base_link">-0.192154801537 -0.190491976826 0.00524539063435 2.35619449019 1.57079632679 0</pose>
+      <inertial>
+        <mass>0.3364682470067961</mass>
+        <pose>0 0 0 0 0 0</pose>
+        <inertia>
+          <ixx>0.0006346924293739</ixx>
+          <iyy>0.0006357917552116</iyy>
+          <izz>0.0012057497617211</izz>
+          <ixy>0.0</ixy>
+          <ixz>0.0</ixz>
+          <iyz>0.0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="wheel_rr_contact">
+        <geometry>
+          <cylinder>
+            <radius>0.07498362776914277</radius>
+            <length>0.038993762526194686</length>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.05</mu>
+              <mu2>2.0</mu2>
+              <fdir1>0 0 1</fdir1>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name="wheel_rr_visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/wheel_rr.glb</uri>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+    <joint name="wheel_rr_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>wheel_rr</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e16</lower>
+          <upper>1e16</upper>
+          <effort>5</effort>
+          <velocity>30</velocity>
+        </limit>
+        <dynamics>
+          <damping>0.001</damping>
+        </dynamics>
+      </axis>
+    </joint>
+    <plugin filename="gz-sim-joint-controller-system" name="gz::sim::systems::JointController">
+      <joint_name>wheel_rr_joint</joint_name>
+      <topic>/wheel_rr/cmd_vel</topic>
+    </plugin>
+    <link name="wheel_fr">
+      <pose relative_to="base_link">0.192154801537 -0.190491976826 0.00524539063435 0.785398163397 1.57079632679 0</pose>
+      <inertial>
+        <mass>0.3364682470067961</mass>
+        <pose>0 0 0 0 0 0</pose>
+        <inertia>
+          <ixx>0.0006346924293739</ixx>
+          <iyy>0.0006357917552116</iyy>
+          <izz>0.0012057497617211</izz>
+          <ixy>0.0</ixy>
+          <ixz>0.0</ixz>
+          <iyz>0.0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="wheel_fr_contact">
+        <geometry>
+          <cylinder>
+            <radius>0.07498362550038348</radius>
+            <length>0.038993773315787794</length>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.05</mu>
+              <mu2>2.0</mu2>
+              <fdir1>0 0 1</fdir1>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name="wheel_fr_visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/wheel_fr.glb</uri>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+    <joint name="wheel_fr_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>wheel_fr</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e16</lower>
+          <upper>1e16</upper>
+          <effort>5</effort>
+          <velocity>30</velocity>
+        </limit>
+        <dynamics>
+          <damping>0.001</damping>
+        </dynamics>
+      </axis>
+    </joint>
+    <plugin filename="gz-sim-joint-controller-system" name="gz::sim::systems::JointController">
+      <joint_name>wheel_fr_joint</joint_name>
+      <topic>/wheel_fr/cmd_vel</topic>
+    </plugin>
+    <link name="wheel_fl">
+      <pose relative_to="base_link">0.192154801537 0.190491976826 0.00524539063435 -0.785398163397 1.57079632679 0</pose>
+      <inertial>
+        <mass>0.3364682470067961</mass>
+        <pose>0 0 0 0 0 0</pose>
+        <inertia>
+          <ixx>0.0006346924293739</ixx>
+          <iyy>0.0006357917552116</iyy>
+          <izz>0.0012057497617211</izz>
+          <ixy>0.0</ixy>
+          <ixz>0.0</ixz>
+          <iyz>0.0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="wheel_fl_contact">
+        <geometry>
+          <cylinder>
+            <radius>0.07498362776914412</radius>
+            <length>0.03899376252619453</length>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.05</mu>
+              <mu2>2.0</mu2>
+              <fdir1>0 0 1</fdir1>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name="wheel_fl_visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/wheel_fl.glb</uri>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+    <joint name="wheel_fl_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>wheel_fl</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e16</lower>
+          <upper>1e16</upper>
+          <effort>5</effort>
+          <velocity>30</velocity>
+        </limit>
+        <dynamics>
+          <damping>0.001</damping>
+        </dynamics>
+      </axis>
+    </joint>
+    <plugin filename="gz-sim-joint-controller-system" name="gz::sim::systems::JointController">
+      <joint_name>wheel_fl_joint</joint_name>
+      <topic>/wheel_fl/cmd_vel</topic>
+    </plugin>
+    <link name="wheel_rl">
+      <pose relative_to="base_link">-0.192154801537 0.190491976826 0.00524539063435 -2.35619449019 1.57079632679 0</pose>
+      <inertial>
+        <mass>0.3364682470067961</mass>
+        <pose>0 0 0 0 0 0</pose>
+        <inertia>
+          <ixx>0.0006346924293739</ixx>
+          <iyy>0.0006357917552116</iyy>
+          <izz>0.0012057497617211</izz>
+          <ixy>0.0</ixy>
+          <ixz>0.0</ixz>
+          <iyz>0.0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="wheel_rl_contact">
+        <geometry>
+          <cylinder>
+            <radius>0.07498362550038398</radius>
+            <length>0.03899377331578774</length>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>0.05</mu>
+              <mu2>2.0</mu2>
+              <fdir1>0 0 1</fdir1>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name="wheel_rl_visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/wheel_rl.glb</uri>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+    <joint name="wheel_rl_joint" type="revolute">
+      <parent>base_link</parent>
+      <child>wheel_rl</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-1e16</lower>
+          <upper>1e16</upper>
+          <effort>5</effort>
+          <velocity>30</velocity>
+        </limit>
+        <dynamics>
+          <damping>0.001</damping>
+        </dynamics>
+      </axis>
+    </joint>
+    <plugin filename="gz-sim-joint-controller-system" name="gz::sim::systems::JointController">
+      <joint_name>wheel_rl_joint</joint_name>
+      <topic>/wheel_rl/cmd_vel</topic>
+    </plugin>
+    <link name="livox_lidar_housing">
+      <pose relative_to="base_link">0.132428364065 -0.0804655486182 0.140656829272 -0.383972435439 8.881784197e-16 -2.11679677213</pose>
+      <inertial>
+        <mass>0.265</mass>
+        <pose>0.000199692215419 6.178629349e-06 -0.00388541939821 0 0 0</pose>
+        <inertia>
+          <ixx>0.00017280208333333335</ixx>
+          <iyy>0.00017280208333333335</iyy>
+          <izz>0.00018660416666666668</izz>
+          <ixy>0.0</ixy>
+          <ixz>0.0</ixz>
+          <iyz>0.0</iyz>
+        </inertia>
+      </inertial>
+      <sensor name="RGLLidar_livox_lidar_housing" type="custom">
+        <plugin filename="RGLServerPluginInstance" name="rgl::RGLServerPluginInstance">
+          <range>
+            <min>0.1</min>
+            <max>40</max>
+          </range>
+          <update_rate>10</update_rate>
+          <update_on_paused_sim>false</update_on_paused_sim>
+          <topic>/rm_sim/lidar/points</topic>
+          <frame>livox_lidar</frame>
+          <pattern_preset>Livox Mid360</pattern_preset>
+        </plugin>
+        <pose>0 0 0.0210828934311 0 0 3.14159265359</pose>
+      </sensor>
+      <sensor name="livox_lidar_housing_imu" type="imu">
+        <update_rate>100</update_rate>
+        <always_on>true</always_on>
+        <topic>/livox/imu</topic>
+        <frame>livox_lidar_imu</frame>
+        <imu>
+          <angular_velocity>
+            <x>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>2e-4</stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>2e-4</stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>2e-4</stddev>
+              </noise>
+            </z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>1.7e-2</stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>1.7e-2</stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>1.7e-2</stddev>
+              </noise>
+            </z>
+          </linear_acceleration>
+        </imu>
+        <pose>-0.011 -0.02329 -0.0230371065689 0 0 3.14159265359</pose>
+        <gz_frame_id>livox_lidar_imu</gz_frame_id>
+      </sensor>
+      <visual name="livox_lidar_housing_visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/livox_lidar_housing.glb</uri>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+    <joint name="livox_lidar_housing_joint" type="fixed">
+      <parent>base_link</parent>
+      <child>livox_lidar_housing</child>
+    </joint>
+    <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
+      <topic>joint_states</topic>
+      <joint_name>wheel_rr_joint</joint_name>
+      <joint_name>wheel_fr_joint</joint_name>
+      <joint_name>wheel_fl_joint</joint_name>
+      <joint_name>wheel_rl_joint</joint_name>
+    </plugin>
+    <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+      <publish_link_pose>true</publish_link_pose>
+      <publish_model_pose>true</publish_model_pose>
+      <use_pose_vector_msg>true</use_pose_vector_msg>
+      <update_frequency>100</update_frequency>
+    </plugin>
+  </model>
+</sdf>

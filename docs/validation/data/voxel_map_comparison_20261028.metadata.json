@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-28",
+  "scope": "isolated synthetic map microbenchmark; not full LIO or navigation",
+  "upstream_commit": "76e126328b670adc92981d9b4900cc059a6f2343",
+  "upstream_remote": "https://github.com/mozihe/z-localization",
+  "upstream_dirty": false,
+  "compiler": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "platform": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "command_flags": [
+    "-std=c++17",
+    "-O3",
+    "-DNDEBUG",
+    "-DEIGEN_DONT_PARALLELIZE"
+  ],
+  "input_std_m": 0.003,
+  "query_std_m": 0.003,
+  "query_covariance_diagonal_m2": 9e-06,
+  "batch_size": 1024,
+  "passes": "three independent point/noise streams, seed+1000*pass; identical across methods",
+  "seeds": [
+    20261028,
+    20261029,
+    20261030
+  ],
+  "isolated_process_per_row": true,
+  "memory": "mallinfo2 uordblks+hblkhd delta after input/scratch allocation; includes container/node overhead; allocator-dependent",
+  "matching": "native policies differ; good means <=5 deg normal error and <=0.02 m signed residual error against analytic surface",
+  "upstream_map_tests": "6/6 passed; see upstream_map_test.log",
+  "sha256": {
+    "small_point_lio/test/map_benchmark/benchmark_maps.cpp": "68ab53bbb11ae5d34a828535f66416bbed5bae33113d78163f3af9be2e3bb6c1",
+    "small_point_lio/test/map_benchmark/pch.h": "c6d429b6378ceb090f64bdb18bf2fafbaed74e4ccfda0912cceccaa55ea2048a",
+    "small_point_lio/test/map_benchmark/run_benchmark.py": "5f4500c7c46693165b3e52a6d69ea728d7b7d73a16d2efbe81b82005092a9fb8",
+    "small_point_lio/src/small_point_lio/small_ivox.h": "946c2beca7563ffe56d1e2c9c57507d0e6c21edfc8914f0a54db8484e564c81c",
+    "build/benchmark_maps": "fe2750c1f36203ddd7487d7e1747eb5a5d61b2d95cfecdc431c4c30094274b21",
+    "build/upstream_map_test": "7b1ed7fc45f064003dbc0409f99e372d4064d5a81432aabbfb033bdc7d3c3e1d",
+    "upstream/src/frontend/src/map.cpp": "a9d6f0c62a4065bb453d521ff6ea76b3f7bf9c990db062792ed2fd4ecface4a8",
+    "upstream/src/frontend/src/plane.cpp": "09981b8d906e6ec13ed5b98c0a46120b20a2d232c8c735c5823da33bb29d2662",
+    "upstream/src/frontend/src/state.cpp": "d16ee0a2198eff5b67ce8a98bca60564a2a2417ac204317c9979c23d8041adfe",
+    "upstream/src/frontend/src/storage.hpp": "ab6a27cf7002b2329b75cd8c174fb96f9e0cdfe7193f444097026ca7f59ef0a7",
+    "upstream/src/frontend/src/moments.hpp": "d1df19bb156a56feecfb89ee6f8f7f1e2a470f989f2d9c6ea4522a3ddef33d53",
+    "upstream/src/frontend/include/zlio/map.hpp": "acecce44de7a86eed57b345a455b8a493dfc75688886c764825f06f4c328dd18",
+    "upstream/src/frontend/include/zlio/config.hpp": "8172d9d638b2330aae7ee7b81a0279b5676bcdcb207590b8becdd50406545633",
+    "upstream/src/frontend/test/integration/map_test.cpp": "ca1e507726b6e769704c544417111d2e5db7647ea3f4cbc9ce105cf923e2710e",
+    "results/voxel_map_comparison_20261028.csv": "a0f14396eeaeb0839f2dca0397957af655ef42b7ce6b4009fcccb3ac4c3029ab",
+    "small_point_lio/src/small_point_lio/estimator.cpp": "ef454d7b90fee0931d313d6e13f9e432b3778e4dc458b2164207f0c7ab381ce9",
+    "build/upstream_map_test.log": "2f93927b9096afc20d96362816fa157dc68452cf823bd94c25dc5efa343fb42f"
+  },
+  "cpu_model": "Intel(R) Core(TM) i7-14650HX",
+  "working_tree": "Uncommitted changes; production mapping code and defaults unchanged by this benchmark."
+}

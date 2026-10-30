@@ -36,6 +36,12 @@ rclcpp_components_register_node(${PROJECT_NAME}
 ## Install ##
 #############
 
+install(
+  PROGRAMS
+    scripts/cmd_vel_watchdog.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_auto_package(
   INSTALL_TO_SHARE
   launch

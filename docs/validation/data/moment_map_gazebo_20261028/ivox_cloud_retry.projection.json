@@ -1,0 +1,11 @@
+{
+  "input_frames": 45,
+  "paired_frames": 45,
+  "paired_points": 24716,
+  "xy_point_rmse_m": 0.04391287563185561,
+  "xy_point_p95_m": 0.10163944775005068,
+  "frame_rmse_median_m": 0.020754826871551613,
+  "frame_rmse_max_m": 0.10096338189109332,
+  "max_truth_gap_s": 0.05,
+  "max_odom_gap_s": 0.15
+}

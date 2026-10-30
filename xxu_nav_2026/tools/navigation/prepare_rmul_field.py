@@ -18,6 +18,7 @@ import numpy as np
 import yaml
 
 from generate_rmuc_map import clip_height
+from recolor_rmul_field import apply_materials
 
 
 STL_DTYPE = np.dtype([
@@ -103,6 +104,7 @@ def prepare(source, output, collision_top=0.50):
         'map_type': 'conservative geometry projection, not measured SLAM',
     }
     (output / 'conversion.json').write_text(json.dumps(result, indent=2) + '\n')
+    apply_materials(output)
     print(json.dumps(result, indent=2))
 
 

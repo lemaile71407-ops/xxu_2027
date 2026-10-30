@@ -1,0 +1,6 @@
+# EGA simulator navigation profile; physical acceptance remains 0.12 m.
+# Verification scope and remaining limitations are in runtime_validation.json.
+navigation:
+  minimum_inflation_radius: 0.85
+  translation_velocity_limit: 0.5  # Per XY component, metres per second.
+  goal_xy_tolerance: 0.06        # Reserve margin for localization error.

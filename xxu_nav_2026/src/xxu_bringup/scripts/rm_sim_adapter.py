@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Adapt safe stamped velocity and ground-yaw hold to rm_sim_26 interfaces."""
+"""Forward safe velocity and stabilize the upstream simulator gimbal."""
 
 import math
 import time
+from xxu_bringup.interfaces import interfaces
 
 import rclpy
 from nav_msgs.msg import Odometry
@@ -24,9 +25,10 @@ def velocity_is_valid(message, now, received_at, monotonic_now):
 class RmSimAdapter(Node):
     def __init__(self):
         super().__init__('rm_sim_adapter')
-        self.publisher = self.create_publisher(Float64, '/gimbal/big_yaw/cmd_pos', 10)
-        self.velocity_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
-        self.create_subscription(TwistStamped, '/rm_sim/cmd_vel_safe',
+        contract = interfaces()
+        self.publisher = self.create_publisher(Float64, contract.topic('simulation.gimbal_big_yaw'), 10)
+        self.velocity_publisher = self.create_publisher(Twist, contract.topic('navigation.chassis_input'), 10)
+        self.create_subscription(TwistStamped, contract.topic('simulation.safe_velocity'),
                                  self.velocity, 10)
         self.command = None
         self.received_at = 0.0
@@ -35,8 +37,8 @@ class RmSimAdapter(Node):
         self.position = None
         self.last_yaw = None
         self.target = None
-        self.create_subscription(JointState, '/joint_states', self.joints, 20)
-        self.create_subscription(Odometry, '/odom', self.odometry, 20)
+        self.create_subscription(JointState, contract.topic('gimbal.joint_states'), self.joints, 20)
+        self.create_subscription(Odometry, contract.topic('localization.odometry'), self.odometry, 20)
 
     def velocity(self, message):
         self.command = message

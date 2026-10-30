@@ -30,9 +30,24 @@ namespace small_point_lio {
         if (!std::isfinite(max_imu_sample_gap) || max_imu_sample_gap <= 0.0) {
             throw std::invalid_argument("max_imu_sample_gap must be finite and positive");
         }
+        dynamic_init_en = node.declare_parameter<bool>("dynamic_init_en", false);
+        dynamic_init_duration = node.declare_parameter<double>("dynamic_init_duration", 2.0);
+        if (!std::isfinite(dynamic_init_duration) || dynamic_init_duration < 1.0 || dynamic_init_duration > 5.0) {
+            throw std::invalid_argument("dynamic_init_duration must be within [1, 5] seconds");
+        }
+        if (dynamic_init_en && (!gravity.allFinite() || gravity.norm() < 1e-3 ||
+                               !std::isfinite(acc_norm) || acc_norm <= 0.0)) {
+            throw std::invalid_argument("dynamic initialization requires finite gravity and positive acc_norm");
+        }
 
         // 地图
         map_resolution = node.declare_parameter<float>("map_resolution");
+        map_backend = node.declare_parameter<std::string>("map_backend", "ivox");
+        moment_map_resolution = node.declare_parameter<double>("moment_map_resolution", 0.5);
+        if ((map_backend != "ivox" && map_backend != "moment") ||
+            !std::isfinite(moment_map_resolution) || moment_map_resolution < 0.05 || moment_map_resolution > 5.0) {
+            throw std::invalid_argument("map_backend must be ivox or moment; moment_map_resolution must be in [0.05, 5] m");
+        }
         init_map_size = static_cast<size_t>(node.declare_parameter<long>("init_map_size"));
         defer_map_insertion_by_scan = node.declare_parameter<bool>(
                 "defer_map_insertion_by_scan", false);
@@ -40,6 +55,11 @@ namespace small_point_lio {
         planar_z = node.declare_parameter<double>("planar_z", 0.0);
         planar_preserve_initial_tilt = node.declare_parameter<bool>(
                 "planar_preserve_initial_tilt", true);
+        if (dynamic_init_en && planar_constraint_en && !planar_preserve_initial_tilt) {
+            throw std::invalid_argument(
+                    "dynamic_init_en requires planar_constraint_en=false when planar_preserve_initial_tilt=false; "
+                    "hard level projection is not part of the batch initialization model");
+        }
 
         // 雷达与IMU相对位姿
         extrinsic_est_en = node.declare_parameter<bool>("extrinsic_est_en");
@@ -52,8 +72,17 @@ namespace small_point_lio {
 
         // 滤波器参数
         laser_point_cov = node.declare_parameter<double>("laser_point_cov");
+        if (map_backend == "moment" && (extrinsic_est_en || !std::isfinite(laser_point_cov) || laser_point_cov <= 0.0)) {
+            throw std::invalid_argument("moment map requires fixed extrinsics and finite positive laser_point_cov");
+        }
         imu_meas_acc_cov = node.declare_parameter<double>("imu_meas_acc_cov");
         imu_meas_omg_cov = node.declare_parameter<double>("imu_meas_omg_cov");
+        if (dynamic_init_en && (!std::isfinite(imu_meas_acc_cov) || imu_meas_acc_cov <= 0 ||
+                               !std::isfinite(imu_meas_omg_cov) || imu_meas_omg_cov <= 0 ||
+                               !std::isfinite(satu_acc) || satu_acc <= 0 ||
+                               !std::isfinite(satu_gyro) || satu_gyro <= 0)) {
+            throw std::invalid_argument("dynamic initialization requires positive IMU covariance and saturation limits");
+        }
         velocity_cov = node.declare_parameter<double>("velocity_cov");
         acceleration_cov = node.declare_parameter<double>("acceleration_cov");
         omg_cov = node.declare_parameter<double>("omg_cov");

@@ -1,0 +1,175 @@
+# Platform calibration and preprocessing defaults; endpoints reference robot_interfaces.yaml.
+gazebo:
+  pointcloud:
+    executable: pointcloud_frame_republisher.py
+    name: pointcloud_motion_compensator
+    parameters:
+      expected_source_frame: '@frame:gazebo_lidar'
+      tf_lookup_timeout: 0.0
+      use_point_timestamps: true
+      joint_name: gimbal_joint
+      joint_axis:
+      - 0.0
+      - 0.0
+      - 1.0
+      sensor_offset:
+      - 0.0
+      - 0.08637
+      - 0.0
+      sensor_rpy:
+      - -0.2967059728
+      - 0.0
+      - 0.0
+      joint_position_offset: 0.0
+      max_joint_sample_gap: 0.05
+      time_reset_threshold: 0.5
+      pending_timeout: 0.25
+      pending_queue_size: 3
+      target_frame: '@frame:lidar_compensated'
+    remappings:
+      points_in: '@topic:simulation.lidar_shaped'
+      points_out: '@topic:simulation.lidar_compensated'
+      joint_states: '@topic:gimbal.joint_states'
+  imu:
+    executable: gimbal_imu_compensator.py
+    name: gimbal_imu_compensator
+    parameters:
+      target_frame: '@frame:lidar_compensated'
+      joint_name: gimbal_joint
+      joint_axis:
+      - 0.0
+      - 0.0
+      - 1.0
+      sensor_offset:
+      - 0.0
+      - 0.08637
+      - 0.0
+      sensor_rpy:
+      - -0.2967059728
+      - 0.0
+      - 0.0
+      joint_position_offset: 0.0
+      input_acceleration_scale: 1.0
+      angular_acceleration_time_constant: 0.05
+      joint_acceleration_time_constant: 0.05
+      max_joint_acceleration: 100.0
+      max_joint_sample_gap: 0.05
+      time_reset_threshold: 0.5
+    remappings:
+      imu_in: '@topic:simulation.imu'
+      imu_out: '@topic:simulation.imu_compensated'
+      joint_states: '@topic:gimbal.joint_states'
+  imu_frame:
+    executable: imu_frame_republisher.py
+    name: imu_frame_republisher
+    parameters:
+      target_frame: '@frame:gazebo_lidar'
+    remappings:
+      imu_in: '@topic:simulation.imu_raw'
+      imu_out: '@topic:simulation.imu'
+  raw_pointcloud:
+    executable: pointcloud_frame_republisher.py
+    name: pointcloud_frame_republisher
+    parameters:
+      target_frame: '@frame:gazebo_lidar'
+      tf_lookup_timeout: 0.1
+    remappings:
+      points_in: '@topic:simulation.lidar_raw'
+      points_out: '@topic:simulation.lidar_lio'
+real:
+  pointcloud:
+    executable: pointcloud_frame_republisher.py
+    name: pointcloud_motion_compensator
+    parameters:
+      target_frame: '@frame:lidar_compensated'
+      expected_source_frame: '@frame:lidar'
+      use_point_timestamps: true
+      use_joint_interpolation: true
+      joint_name: gimbal_joint
+      joint_axis:
+      - 0.0
+      - 0.0
+      - 1.0
+      sensor_offset:
+      - 0.0
+      - 0.08637
+      - 0.0
+      sensor_rpy:
+      - -0.2967059728
+      - 0.0
+      - 0.0
+      max_joint_sample_gap: 0.05
+      time_reset_threshold: 0.5
+      pending_timeout: 0.25
+      pending_queue_size: 3
+    remappings:
+      points_out: '@topic:radar.pointcloud_compensated'
+  imu:
+    executable: gimbal_imu_compensator.py
+    name: gimbal_imu_compensator
+    parameters:
+      target_frame: '@frame:lidar_compensated'
+      joint_name: gimbal_joint
+      joint_axis:
+      - 0.0
+      - 0.0
+      - 1.0
+      sensor_offset:
+      - 0.011
+      - 0.0957429
+      - -0.0490015
+      sensor_rpy:
+      - -0.2967059728
+      - 0.0
+      - 0.0
+      angular_acceleration_time_constant: 0.05
+      joint_acceleration_time_constant: 0.05
+      max_joint_acceleration: 100.0
+      max_joint_sample_gap: 0.05
+      time_reset_threshold: 0.5
+    remappings:
+      imu_out: '@topic:radar.imu_compensated'
+rm_sim:
+  pointcloud:
+    executable: pointcloud_frame_republisher.py
+    name: pointcloud_motion_compensator
+    parameters:
+      target_frame: '@frame:lidar_compensated'
+      joint_name: big_yaw_joint
+      joint_axis: &id001
+      - 0.0
+      - 0.0
+      - 1.0
+      sensor_offset: &id002
+      - -0.1963
+      - -0.088
+      - 0.2516
+      sensor_rpy: &id003
+      - 1.0472
+      - 0.0
+      - -1.3521
+      max_joint_sample_gap: 0.05
+      time_reset_threshold: 0.5
+      expected_source_frame: '@frame:rm_lidar'
+      tf_lookup_timeout: 0.0
+      use_point_timestamps: true
+      use_joint_interpolation: true
+      pending_timeout: 0.25
+      pending_queue_size: 3
+    remappings:
+      points_in: '@topic:simulation.lidar_shaped'
+      points_out: '@topic:simulation.lidar_compensated'
+  imu:
+    executable: gimbal_imu_compensator.py
+    name: gimbal_imu_compensator
+    parameters:
+      target_frame: '@frame:lidar_compensated'
+      joint_name: big_yaw_joint
+      joint_axis: *id001
+      sensor_offset: *id002
+      sensor_rpy: *id003
+      max_joint_sample_gap: 0.05
+      time_reset_threshold: 0.5
+    remappings:
+      imu_in: '@topic:radar.imu'
+      imu_out: '@topic:simulation.imu_compensated'

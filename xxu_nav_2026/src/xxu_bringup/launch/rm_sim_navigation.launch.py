@@ -1,11 +1,13 @@
 """rm_sim_26 sentry and RMUC 2025 field, with existing LIO / AMCL / Nav2."""
 
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.substitutions import FindPackageShare
 from nav2_common.launch import RewrittenYaml
+from xxu_bringup.robot_profiles import RobotGeometryFile
 
 
 def generate_launch_description():
@@ -26,6 +28,8 @@ def generate_launch_description():
         'scan_self_filter_radius': '0.42', 'scan_min_height': '0.10',
         'lidar_mode': 'rgl', 'rgl_plugin_dir': '',
         'field_model': '',
+        'robot_model': 'upstream',
+        'robot_geometry_file': RobotGeometryFile(LaunchConfiguration('robot_model'), share),
     }
     # Exact simulated spawn and the tilted GPU scan have different uncertainty
     # and beam coverage from the old field. Keep controller/safety parameters

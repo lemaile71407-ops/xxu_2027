@@ -1,0 +1,19 @@
+{
+  "name": "ivox_cloud",
+  "command": [
+    "ros2",
+    "launch",
+    "xxu_bringup",
+    "rmul_navigation.launch.py",
+    "gazebo_gui:=false",
+    "rviz:=false"
+  ],
+  "domain": 73,
+  "gz_partition": "xxu_vehicle_check_cloud_ivox_20261028",
+  "goals": [],
+  "physical_xy_tolerance_m": 0.12,
+  "expected_goal_count": 1,
+  "lio_profile_sha256": "ec7d4306a132bad0ef6f63d75fc6c467cff13a530f79aba8b028d59f7defb7b6",
+  "ready": false,
+  "error": "RuntimeError('navigation failed to become ready')"
+}

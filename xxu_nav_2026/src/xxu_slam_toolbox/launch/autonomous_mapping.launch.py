@@ -1,9 +1,7 @@
 """Launch SLAM Toolbox, Nav2, and explore_lite for autonomous mapping."""
 
-import os
 
 from ament_index_python.packages import get_package_share_directory
-from xxu_description.launch_helpers import nav2_parameters
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
@@ -13,9 +11,13 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from nav2_common.launch import RewrittenYaml
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from xxu_bringup.interfaces import interfaces
+from xxu_bringup.map_paths import default_map_save_path
+from xxu_bringup.navigation_parameters import nav2_parameters
 
 
 def generate_launch_description():
+    contract = interfaces()
     pkg_share = FindPackageShare("xxu_slam_toolbox")
     bringup_share = FindPackageShare("xxu_bringup")
 
@@ -31,13 +33,12 @@ def generate_launch_description():
     default_rviz_config_file = PathJoinSubstitution(
         [pkg_share, "rviz", "autonomous_mapping.rviz"]
     )
-    default_map_save_path = os.path.join(
-        os.getcwd(), "src", "xxu_bringup", "maps", "auto_map"
-    )
+    map_save_default = default_map_save_path()
 
     use_sim_time = LaunchConfiguration("use_sim_time")
     slam_params_file = LaunchConfiguration("slam_params_file")
     nav2_params_file = LaunchConfiguration("nav2_params_file")
+    robot_geometry_file = LaunchConfiguration("robot_geometry_file")
     explore_params_file = LaunchConfiguration("explore_params_file")
     enable_explore = LaunchConfiguration("enable_explore")
     auto_save_map = LaunchConfiguration("auto_save_map")
@@ -48,6 +49,7 @@ def generate_launch_description():
     _, selected_nav_params, nav2_base_frame = nav2_parameters(
         nav2_params_file, use_sim_time, use_fake_frame,
         get_package_share_directory("xxu_bringup"), mode="exploration",
+        robot_geometry_file=robot_geometry_file,
     )
 
     configured_explore_params = RewrittenYaml(
@@ -79,6 +81,11 @@ def generate_launch_description():
         default_value=default_explore_params_file,
         description="Full path to the explore_lite parameters file",
     )
+    declare_robot_geometry_file = DeclareLaunchArgument(
+        "robot_geometry_file",
+        default_value="",
+        description="Optional vehicle geometry.json path for the Nav2 envelope and stop zone",
+    )
     declare_enable_explore = DeclareLaunchArgument(
         "enable_explore",
         default_value="true",
@@ -91,7 +98,7 @@ def generate_launch_description():
     )
     declare_map_save_path = DeclareLaunchArgument(
         "map_save_path",
-        default_value=default_map_save_path,
+        default_value=map_save_default,
         description="Output path without .yaml/.pgm suffix for automatic map saving",
     )
     declare_use_fake_frame = DeclareLaunchArgument(
@@ -131,7 +138,7 @@ def generate_launch_description():
             executable="controller_server",
             output="screen",
             parameters=[selected_nav_params],
-            remappings=[("/tf", "tf"), ("/tf_static", "tf_static"), ("cmd_vel", "cmd_vel_nav")],
+            remappings=[(contract.topic('system.tf'), "tf"), (contract.topic('system.tf_static'), "tf_static"), ("cmd_vel", contract.topic("navigation.controller_output", relative=True))],
         ),
         Node(
             package="nav2_smoother",
@@ -139,7 +146,7 @@ def generate_launch_description():
             name="smoother_server",
             output="screen",
             parameters=[selected_nav_params],
-            remappings=[("/tf", "tf"), ("/tf_static", "tf_static")],
+            remappings=[(contract.topic('system.tf'), "tf"), (contract.topic('system.tf_static'), "tf_static")],
         ),
         Node(
             package="nav2_planner",
@@ -147,7 +154,7 @@ def generate_launch_description():
             name="planner_server",
             output="screen",
             parameters=[selected_nav_params],
-            remappings=[("/tf", "tf"), ("/tf_static", "tf_static")],
+            remappings=[(contract.topic('system.tf'), "tf"), (contract.topic('system.tf_static'), "tf_static")],
         ),
         Node(
             package="nav2_behaviors",
@@ -155,7 +162,7 @@ def generate_launch_description():
             name="behavior_server",
             output="screen",
             parameters=[selected_nav_params],
-            remappings=[("/tf", "tf"), ("/tf_static", "tf_static"), ("cmd_vel", "cmd_vel_nav")],
+            remappings=[(contract.topic('system.tf'), "tf"), (contract.topic('system.tf_static'), "tf_static"), ("cmd_vel", contract.topic("navigation.controller_output", relative=True))],
         ),
         Node(
             package="nav2_bt_navigator",
@@ -163,7 +170,7 @@ def generate_launch_description():
             name="bt_navigator",
             output="screen",
             parameters=[selected_nav_params],
-            remappings=[("/tf", "tf"), ("/tf_static", "tf_static")],
+            remappings=[(contract.topic('system.tf'), "tf"), (contract.topic('system.tf_static'), "tf_static")],
         ),
         Node(
             package="nav2_velocity_smoother",
@@ -171,7 +178,7 @@ def generate_launch_description():
             name="velocity_smoother",
             output="screen",
             parameters=[selected_nav_params],
-            remappings=[("/tf", "tf"), ("/tf_static", "tf_static"), ("cmd_vel", "cmd_vel_nav")],
+            remappings=[(contract.topic('system.tf'), "tf"), (contract.topic('system.tf_static'), "tf_static"), ("cmd_vel", contract.topic("navigation.controller_output", relative=True))],
         ),
         Node(
             package="nav2_collision_monitor",
@@ -179,7 +186,7 @@ def generate_launch_description():
             name="collision_monitor",
             output="screen",
             parameters=[selected_nav_params],
-            remappings=[("/tf", "tf"), ("/tf_static", "tf_static")],
+            remappings=[(contract.topic('system.tf'), "tf"), (contract.topic('system.tf_static'), "tf_static")],
         ),
         Node(
             package="nav2_lifecycle_manager",
@@ -209,7 +216,7 @@ def generate_launch_description():
         output="screen",
         condition=IfCondition(enable_explore),
         parameters=[configured_explore_params, {"use_sim_time": use_sim_time}],
-        remappings=[("/tf", "tf"), ("/tf_static", "tf_static")],
+        remappings=[(contract.topic('system.tf'), "tf"), (contract.topic('system.tf_static'), "tf_static")],
     )
 
     rviz_node = Node(
@@ -237,6 +244,7 @@ def generate_launch_description():
         declare_use_sim_time,
         declare_slam_params_file,
         declare_nav2_params_file,
+        declare_robot_geometry_file,
         declare_explore_params_file,
         declare_enable_explore,
         declare_auto_save_map,

@@ -18,9 +18,8 @@ ament_auto_find_build_dependencies()
 ament_auto_add_library(${PROJECT_NAME} SHARED
   src/omni_pid_pursuit_controller.cpp
   src/pid.cpp
+  src/goal_approach_controller.cpp
 )
-
-# 代码检查与格式化（仅在测试构建时启用）
 
 # 导出插件描述文件，使 Nav2 能通过 pluginlib 发现并加载本控制器
 pluginlib_export_plugin_description_file(nav2_core pb_omni_pid_pursuit_controller.xml)

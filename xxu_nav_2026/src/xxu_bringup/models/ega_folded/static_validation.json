@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-18",
+  "result": "passed",
+  "scope": "Generated folded SDF/URDF and envelope; not a real-vehicle calibration",
+  "sdf_urdf_link_pose_agreement": true,
+  "sensor_optical_imu_frame_agreement": true,
+  "active_lidar_count": 1,
+  "secondary_model_frames_and_meshes_removed": true,
+  "total_mass_kg": 17.743953950458657,
+  "com_error_m": 3.434658714542728e-14,
+  "inertia_error_kg_m2": 4.237732878087749e-13,
+  "positive_physical_link_inertias": true,
+  "navigation_radius_m": 0.533,
+  "collision_hulls": 4
+}

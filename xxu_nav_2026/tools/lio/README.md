@@ -14,7 +14,7 @@ Small Point-LIO。这是旋转云台仿真的正常运行链路。原始未补�
 隔离测试：
 
 ```bash
-ros2 launch xxu_description gazebo.launch.py \
+ros2 launch xxu_bringup gazebo.launch.py \
   gimbal_mode:=spin gimbal_spin_rate:=1.0 \
   compensate_gimbal_for_lio:=false
 ```
@@ -24,8 +24,14 @@ MID360 原生仿真插件的射线请求和命中结果都必须使用其挂载�
 
 ```bash
 colcon build --symlink-install \
-  --packages-select xxu_livox_sim xxu_description small_point_lio
+  --packages-select xxu_livox_sim xxu_description small_point_lio xxu_bringup
 ```
+
+## 预处理工具归属
+
+点云运动补偿、云台 IMU 补偿和 IMU 坐标重发布节点安装在 `xxu_bringup`。三套平台链由 [launch_helpers.py](../../src/xxu_bringup/xxu_bringup/launch_helpers.py) 构造，平台校准值集中在 [sensor_chain.yaml](../../src/xxu_bringup/config/sensor_chain.yaml)，话题及坐标系默认值来自 [robot_interfaces.yaml](../../src/xxu_bringup/config/robot_interfaces.yaml)。实车的话题、编码器零位和加速度单位仍支持启动参数覆盖。
+
+折叠车显式启用已有的两项扩展：`fixed_sensor=true` 关闭 IMU 云台关节插值，保留安装旋转和杆臂修正；`self_filter_geometry_file` 在几何声明的坐标系内过滤车身凸包和车轮回波，保留整条点记录及时间戳。这两项此前已存在，本次仅迁移归属，脚本内容未改；默认均关闭。模型与标定限制见 [CAD 说明](../navigation/cad/README.md)。
 
 ## 启动补偿版 LIO
 
@@ -33,7 +39,7 @@ colcon build --symlink-install \
 
 ```bash
 source install/setup.bash
-ros2 launch xxu_description mid360_lio.launch.py
+ros2 launch xxu_bringup mid360_lio.launch.py
 ```
 
 该启动链将 `/livox/lidar` 按每个点的绝对时间插值云台角度，将
@@ -41,12 +47,12 @@ ros2 launch xxu_description mid360_lio.launch.py
 `lio_base_sensor` 后交给 Small Point-LIO。已有 robot_state_publisher 时使用：
 
 ```bash
-ros2 launch xxu_description mid360_lio.launch.py \
+ros2 launch xxu_bringup mid360_lio.launch.py \
   start_robot_state_publisher:=false
 ```
 
 云台关节名必须为 `gimbal_joint`，其时间基准须与 Livox 点时间一致。实机安装尺寸或
-Livox 标定外参变化后，应同步更新启动文件中的 `sensor_offset` 和 `sensor_rpy`。
+Livox 标定外参变化后，应更新 [sensor_chain.yaml](../../src/xxu_bringup/config/sensor_chain.yaml) 的 `real` 节中的 `sensor_offset` 和 `sensor_rpy`。
 若二次封装的 Livox 驱动已经输出 m/s²，须加 `input_acceleration_scale:=1.0`；编码器
 零位与机械零位存在偏差时，可用 `joint_position_offset:=<rad>` 同时校正点云和 IMU。
 
@@ -149,9 +155,9 @@ python3 tools/lio/analyze_velocity_noise.py bags/velocity_noise
 
 ```bash
 source /opt/ros/jazzy/setup.bash
-colcon build --packages-select xxu_livox_sim xxu_description small_point_lio --symlink-install
+colcon build --packages-select xxu_livox_sim xxu_description small_point_lio xxu_bringup --symlink-install
 source install/setup.bash
-ros2 launch xxu_description gazebo.launch.py \
+ros2 launch xxu_bringup gazebo.launch.py \
   gimbal_mode:=hold lio_motion_diagnostics:=true \
   2>&1 | tee /tmp/lio_locked_diagnostics.log
 ```

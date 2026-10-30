@@ -9,6 +9,8 @@
 - 将稳定参考系的导航平移指令转为 `base_link` 指令，移动时叠加 `spin_speed`。
 - 真实的 `base_link → gimbal_link → 雷达` TF 保持独立，供传感器补偿与定位使用。
 
+`cmd_vel_watchdog.py` 也在本包安装，负责最终速度出口的命令、里程计、扫描、关节和 TF 新鲜度检查；它在普通坐标系模式下同样运行。命令同时检查单调时钟接收年龄和 ROS 源时间戳年龄，过期、未来或格式异常的源时间戳会关闭输出。输出消息使用副本，刷新输出时间戳不会续期缓存的源指令。共享启动定义位于 `xxu_bringup`，按平台参数调用本包的 watchdog。
+
 | 参数 | 默认值 | 说明 |
 |---|---|---|
 | `odom_topic` | `Odometry` | 原始底盘里程计；项目 launch 设置为 `/odom` |
@@ -39,8 +41,3 @@
 没有速度死区；低速运动不被强制置零。滤波协方差保持原有保守值，未经实测标定。
 
 0.3 秒窗口在约 9 Hz 里程计上通常平均 3 条消息，带来约 0.1 秒量级的速度反馈延迟。
-
-
-```bash
-python3 tools/navigation/validate_gyro_navigation.py --nav-velocity-window 0.3
-```

@@ -1,0 +1,6 @@
+# Overlay after the complete platform LIO configuration. Requires
+# SMALL_POINT_LIO_ZLIO_MAP=ON and extrinsic_est_en=false in that configuration.
+small_point_lio:
+  ros__parameters:
+    map_backend: moment
+    moment_map_resolution: 0.5

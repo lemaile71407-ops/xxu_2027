@@ -1,0 +1,17 @@
+{
+  "date": "2026-10-18",
+  "topic": "/rm_sim/lidar/points",
+  "frames": 20,
+  "point_count": 75088,
+  "frame_ids": [
+    "livox_lidar"
+  ],
+  "stamp_start": 3368.881,
+  "stamp_end": 3370.781,
+  "live_scan_parameters": {
+    "robot_self_filter_radius": 0.533,
+    "min_height": 0.1,
+    "max_height": 0.28626616071877936
+  },
+  "live_scan_parameter_verification": "Read through ROS parameter services; values agree with model and launch source."
+}

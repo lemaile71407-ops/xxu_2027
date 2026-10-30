@@ -5,9 +5,21 @@
 缺少 RGL 库时启动会报错，需要完成构建或选择已有后端。
 
 RMUC 地图由 [generate_rmuc_map.py](generate_rmuc_map.py) 根据固定场地碰撞几何生成。
-用户 RMUL 场地入口为 `rmul_navigation.launch.py`，使用随包模型和地图，仍搭配上游原车。
-重新转换场地使用 [prepare_rmul_field.py](prepare_rmul_field.py)；EGA CAD 读取与折叠姿态要求见 [CAD 说明](cad/README.md)。
-RGL 当前按 link 规则忽略承载雷达的云台视觉几何，尚未实现逐零件本体遮挡。
+用户 RMUL 场地入口为 `rmul_navigation.launch.py`，使用随包地图和 EGA 固定折叠车模，仅保留原导航位置的一台 MID360。
+重新转换场地使用 [prepare_rmul_field.py](prepare_rmul_field.py)；车模、物理近似、雷达保护罩运行假设与验证见 [CAD 说明](cad/README.md)。
+上游车模的 RGL 仍按 link 规则忽略云台；折叠车模仅忽略雷达自身壳体所在 link，其余车身参与遮挡，进入 LIO 前按模型过滤自身回波。
+
+RMUL 场地外观使用 [recolor_rmul_field.py](recolor_rmul_field.py) 生成的 COLLADA 与纹理：
+哑光 PVC 地面/平台、红蓝区域、白色边界及原有图案、中央黄色标记和深灰板件。
+这是按现有几何分区的赛场风格参考配色，未使用官方印刷贴图；地面新增 5 cm 宽视觉边界线。
+原 STL 继续用于碰撞，导航 PGM/YAML 保持原值，未标定材料的摩擦系数或激光回波响应。
+重新转换场地会自动保留此材质流程；单独重生成外观可执行：
+
+```bash
+python3 tools/navigation/recolor_rmul_field.py src/xxu_bringup/models/rmul_2027
+```
+
+调色板在脚本 `PALETTE`；生成分组和原网格哈希见模型的 `materials/appearance.json`。
 
 仿真、实车、独立导航和自主探索入口的 `use_fake_frame` 默认均为 `true`。
 分开启动时若需要普通底盘坐标系，必须在两端均设置 `use_fake_frame:=false`。
@@ -31,10 +43,37 @@ RGL 当前按 link 规则忽略承载雷达的云台视觉几何，尚未实现�
 
 - [nav2_navigation.yaml](../../src/xxu_bringup/config/nav2_navigation.yaml) 与 [nav2_exploration.yaml](../../src/xxu_bringup/config/nav2_exploration.yaml)保存各自基础参数，non-fake 模式直接使用基础行为。
 - [nav2_fake_profile.yaml](../../src/xxu_bringup/config/nav2_fake_profile.yaml)是 fake 模式覆盖值的唯一来源：`common` 为导航/探索共有的 15 项；`navigation` 为地图导航专用 PathFollow 三项；`exploration` 当前不增加覆盖，保留探索基础值。此文件是覆盖表，不能作为独立 Nav2 参数文件启动。调节 fake 模式时先确认目标值是否在此表中。
-- [launch_helpers.py](../../src/xxu_description/xxu_description/launch_helpers.py)统一构造 Nav2 参数和速度链。仿真时间、坐标系、命令话题和规划容差由启动参数决定；行为树文件名在覆盖表中保存，路径按当前安装位置展开。
-- 实车、旧 Gazebo、rm_sim 共用速度转换器和 watchdog 的定义。调用处仅指定平台差异：输入/输出话题、关节话题、自旋值与滤波窗口。rm_sim 最终安全输出仍是 `/rm_sim/cmd_vel_safe`，其底盘适配不变。
+- 共享启动实现按职责划分： [navigation_parameters.py](../../src/xxu_bringup/xxu_bringup/navigation_parameters.py) 构造 Nav2 参数，[velocity_launch.py](../../src/xxu_bringup/xxu_bringup/velocity_launch.py) 构造速度链，[sensor_launch.py](../../src/xxu_bringup/xxu_bringup/sensor_launch.py) 构造 LIO 预处理链，[robot_profiles.py](../../src/xxu_bringup/xxu_bringup/robot_profiles.py) 处理车型参数，[map_paths.py](../../src/xxu_bringup/xxu_bringup/map_paths.py) 解析建图保存位置。原 [launch_helpers.py](../../src/xxu_bringup/xxu_bringup/launch_helpers.py) 保留兼容导出；新调用按需导入对应模块。仿真时间、坐标系、命令话题和规划容差由启动参数决定；行为树文件名在覆盖表中保存，路径按当前安装位置展开。
+- 实车、旧 Gazebo、rm_sim 共用速度转换器和 watchdog 的定义。调用处仅指定平台差异：输入/输出话题、关节话题、自旋值与滤波窗口。rm_sim 最终安全输出仍是 `/rm_sim/cmd_vel_safe`；CAD 车型交给 `xxu_chassis_controller` 发布逐轮指令，上游车型保留速度/云台适配器。
 
-共享代码安装在既有 `xxu_description` 包内，没有增加运行节点。修改后需重新构建并加载工作空间；各平台的底盘、传感器和启用条件仍由各自入口负责。
+共享代码安装在既有 `xxu_bringup` 包内。[interfaces.py](../../src/xxu_bringup/xxu_bringup/interfaces.py) 单独提供接口数据读取，运行节点可直接使用，无需导入 Nav2 启动代码。`xxu_description` 只安装模型、显示和 ros2_control 资源；修改集成代码或新增 Python 模块后需重新构建并加载工作空间。
+
+[sensor_chain.yaml](../../src/xxu_bringup/config/sensor_chain.yaml) 保存 `gazebo`、`rm_sim`、`real` 的校准及补偿默认参数，话题/坐标系使用 [robot_interfaces.yaml](../../src/xxu_bringup/config/robot_interfaces.yaml) 的语义引用。CAD 车型按 `models/<robot_model>/geometry.json` 选择，模型目录须同时提供 `model.sdf` 和 `robot.urdf`；当前 CAD 接口约定为固定传感器、四个独立驱动轮和 RGL。
+
+车型可在同目录提供 `navigation_profile.yaml`，按 `navigation` / `exploration` 分支配置避障缓冲、平移分量限速和更严格的到点阈值；只应用明确配置的分支。`rm_sim` 的 CAD 车型还可提供 `lio_profile.yaml`，叠加在基础 LIO YAML 之后、调用处显式参数之前。EGA 的参数、回归入口和限制见 [CAD 说明](cad/README.md#导航适配回归)。未提供车型配置时保留原有行为。
+
+单独启动自主探索时，通过 `robot_geometry_file` 显式指定与仿真相同的车型几何；该入口默认值为空，不会从另一个 launch 进程继承车型选择。例如，在加载重建后的工作空间后使用 EGA：
+
+```bash
+ros2 launch xxu_slam_toolbox autonomous_mapping.launch.py \
+  robot_geometry_file:=$(ros2 pkg prefix --share xxu_bringup)/models/ega_folded/geometry.json
+```
+
+该参数为探索的局部/全局 costmap 和停车检测区域应用车型几何；可选配置仅使用 `exploration` 分支。对应离线回归为 `python3 tools/navigation/test_vehicle_parameters.py`，覆盖真实探索启动描述的参数展开，不启动节点。
+
+启动文件读取接口契约，Nav2、探索、LIO、RViz 和 CAD 车型 SDF/URDF 通过以下离线检查维护一致性（只需 Python 与 PyYAML）：
+
+```bash
+python3 tools/navigation/check_interfaces.py
+```
+
+检查会比较消费者的具体语义，例如 `/scan` 被误填为契约中已有的 `/odom` 也会报错；CAD 模型还检查四轮控制、RGL、IMU、关节话题和关键 URDF 坐标系。它不动态改写静态文件；调整接口默认值时必须同步相关静态消费者并重新检查。实车驱动边界的话题启动参数覆盖继续有效。
+
+审查修复的回归检查保存在 [test_review_repairs.py](test_review_repairs.py)。加载 ROS Jazzy 与重建后的工作空间，执行 `python3 tools/navigation/test_review_repairs.py` 可检查命令时间戳、清理范围、模型契约和停车判定，不启动 ROS 节点。设置 `XXU_REVIEW_CHASSIS_EXECUTABLE` 为重建后的底盘可执行文件路径，还会在隔离域 193 和专用话题中验证异常输入停车及恢复；该选项启动测试节点，不接入机器人驱动。构建与实测范围见[审查修复核验](../../../docs/validation/review_repairs_20261027.md)。
+
+建图的 `map_save_path` 仍可显式指定。默认先取绝对路径环境变量 `XXU_MAP_DIR`，否则通过已安装 `maps/auto_map.yaml` 的有效软链接定位可写源码目录；复制安装或无可写源码时回退到 `~/.ros/xxu_maps/auto_map` 并提示。地图路径不再依赖启动目录。
+
+CAD 底盘共用原控制器：`wheel_radii` 可选逐轮半径，`wheel_command_topics` 可选四个 Float64 出口，`max_wheel_acceleration` 默认 0（不限制），`require_fresh_stamp` 默认 false。CAD 仿真显式设置 80 rad/s²、100 Hz 和双重超时检查；零指令及超时绕过斜坡直接停车。新参数取默认值时，实车和旧 Gazebo 仍使用原 Float64MultiArray 输出。
 
 ## 只有一个 fake 坐标系
 
@@ -72,8 +111,9 @@ MPPI → /cmd_vel_nav → 平滑 → /cmd_vel_smoothed
 检查 XY，不要求真实底盘或云台转到目标姿态。恢复行为树移除 Spin，保留清图、等待
 和后退。关闭 fake 模式时保留原 YAML 的普通导航设置。
 
-fake 模式的碰撞轮廓使用半径 0.42 m 的圆形旋转包络（包括模型中的突出车轮），
+常规 fake 模式的碰撞轮廓使用半径 0.42 m 的圆形旋转包络（包括模型中的突出车轮），
 近场停车区改为各方向对称的八边形。实车外形改变时必须按实际旋转包络更新。
+折叠 EGA 车型通过自身 `geometry.json` 在共享配置合并后覆盖包络和停车区，并显式保留原 `StoppedGoalChecker`、0.12 m XY 容差和 π 朝向容差（目标朝向不参与成功判定）。本次结构调整未改变这些值。
 
 ## 上位机控制小陀螺
 

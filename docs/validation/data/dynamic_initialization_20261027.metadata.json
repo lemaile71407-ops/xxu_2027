@@ -1,0 +1,107 @@
+{
+  "verification_date": "2026-10-27",
+  "timezone": "Asia/Shanghai",
+  "scope": "Synthetic sensor data replayed directly through SmallPointLio callbacks at wall-clock speed; not rosbag, Gazebo, DDS, TF, navigation, or real-robot acceptance.",
+  "git_head": "21b7837c4918c8aed711f55d53b45bed4c457ad4",
+  "working_tree": "Uncommitted changes; use hashes for tested source and binary identity.",
+  "cpu_model": "Intel(R) Core(TM) i7-14650HX",
+  "logical_cpus": "24",
+  "compiler": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "kernel": "7.0.0-38-generic",
+  "ros_distro": "jazzy",
+  "primary_environment": {
+    "OMP_NUM_THREADS": "1",
+    "ROS_DOMAIN_ID": "194",
+    "ROS_AUTOMATIC_DISCOVERY_RANGE": "LOCALHOST"
+  },
+  "replay_speed": 1.0,
+  "duration_s": 6.0,
+  "repeats": 3,
+  "seeds": [
+    20261027,
+    20261028,
+    20261029
+  ],
+  "imu_hz": 200,
+  "lidar_hz": 10,
+  "scan_duration_s": 0.1,
+  "points_per_scan_room": 243,
+  "points_per_scan_plane": 81,
+  "noise_std": {
+    "point_m": 0.003,
+    "gyro_radps": 0.002,
+    "accelerometer_mps2": 0.02
+  },
+  "bias": {
+    "gyro_radps": [
+      0.01,
+      -0.015,
+      0.02
+    ],
+    "accelerometer_mps2": [
+      0.08,
+      -0.05,
+      0.1
+    ]
+  },
+  "gravity_mps2": [
+    0,
+    0,
+    -9.81
+  ],
+  "online_extrinsics": false,
+  "extrinsic_rotation": "identity",
+  "extrinsic_translation_m": [
+    0,
+    0,
+    0
+  ],
+  "planar_constraint_en": false,
+  "space_downsample": false,
+  "dynamic_init_duration_s": 2.0,
+  "order": "static/dynamic on first seed, dynamic/static on second, static/dynamic on third",
+  "startup_definition": "First initialization pose-history callback within 6 seconds. This is an output event, not an accuracy acceptance.",
+  "alignment": "Yaw and translation fixed using first output pose; no roll/pitch alignment or full-trajectory fitting.",
+  "post_metrics": "Position error at +2 s and RMSE at +0.1 ... +2.0 s (20 samples) after initial pose timestamp; blank when horizon unavailable.",
+  "cpu_definition": "Process CPU seconds including foreground, worker threads and joining/discarding pending work after replay; not CPU percent.",
+  "hashes_sha256": {
+    "xxu_nav_2026/src/small_point_lio/test/benchmark_initialization.cpp": "924f6f821c01f12c8cb3757d22b5c8ff9951c8116eba34ab94b16c563f8ff1fd",
+    "xxu_nav_2026/src/small_point_lio/test/frontend_initialization_options.h": "35e446f11f014fccb2e243d50a49534e173f67b4e99165051cbe213dbb221da6",
+    "xxu_nav_2026/src/small_point_lio/test/dynamic_initialization_fixture.h": "41e848db7fa0467e7134de90a8d83dd2a36b5376a5b1ada6e3f5830d5f461986",
+    "xxu_nav_2026/src/small_point_lio/src/small_point_lio/small_point_lio.cpp": "d4ca364a3338cc0f39abca58d725385386a1161fbbc394fff0ea9909e9b30279",
+    "xxu_nav_2026/src/small_point_lio/src/small_point_lio/dynamic_initializer.cpp": "eb2cd78bfa8a4b9cc0677e7f53e29b48a6755e1a97a9f7165cf368cc69541a87",
+    "xxu_nav_2026/src/small_point_lio/src/small_point_lio/dynamic_initializer.h": "38724dbc9bbda4d5122deae3f3515cea72839cdb7bd2bb33810ea13c29093d55",
+    "xxu_nav_2026/src/small_point_lio/src/small_point_lio/parameters.cpp": "537645114e02c9da123c51c2ef580e23e8a949cfd9fe10571a21c11e168efbb0",
+    "xxu_nav_2026/src/small_point_lio/src/small_point_lio/eskf.h": "e718e1a138619aacbc3fc683ec1c76361c4cc30018b31589bc7fd8ab02f4ba65",
+    "xxu_nav_2026/src/small_point_lio/src/small_point_lio/estimator.cpp": "ef454d7b90fee0931d313d6e13f9e432b3778e4dc458b2164207f0c7ab381ce9",
+    "xxu_nav_2026/src/small_point_lio/src/small_point_lio/preprocess.cpp": "2024f4128a19632506d90258f0333071a9ab93b51e829c592925257ac18ffe23",
+    "xxu_nav_2026/build/small_point_lio/benchmark_initialization": "9014ff8cd3233786e15c91c2ca30ba6501cf157493a255ffefc1317320c06059",
+    "xxu_nav_2026/build/small_point_lio/libsmall_point_lio.so": "c5d0beb18bcf5ae92a04d1865284fd547f916d6e822202be07a817dbf5be919e",
+    "xxu_nav_2026/src/small_point_lio/CMakeLists.txt": "42b14a68950c99fc82d4eccb7a735d3047ca5307ed6333284ee6853c8e250eba",
+    "xxu_nav_2026/src/small_point_lio/test/test_dynamic_initializer.cpp": "2d2eb2bb704188d782a7b03c70c20f35ec2fe1d5616a66ec7161e1a5480208bc",
+    "xxu_nav_2026/src/small_point_lio/test/test_dynamic_initialization_frontend.cpp": "e59015b8f894e558141dd724ca96baf346cfda7cb8bd69e6dc083263a26ebf75"
+  },
+  "supplemental_environment": {
+    "OMP_NUM_THREADS": "unset",
+    "default_openmp_max_threads": 24,
+    "scenario": "yaw_room",
+    "duration_s": 6.0,
+    "repeats": 3,
+    "seeds": [
+      20261027,
+      20261028,
+      20261029
+    ]
+  },
+  "result_hashes_sha256": {
+    "data/dynamic_initialization_20261027.csv": "e3ca794ce23577195b506bbdaebbb6ac7c7ac5857012a890e4ba1d7289c8c089",
+    "data/dynamic_initialization_default_threads_20261027.csv": "aaa3bb47a6ae72a828395b35bf0f5744eebd60c8894698798ebfebf993087917"
+  },
+  "related_regression": {
+    "date": "2026-10-27",
+    "command": "OMP_NUM_THREADS=1 ctest --test-dir build/small_point_lio --output-on-failure",
+    "passed": 2,
+    "failed": 0,
+    "scope": "existing solver and frontend initialization tests; not navigation or real-robot regression"
+  }
+}

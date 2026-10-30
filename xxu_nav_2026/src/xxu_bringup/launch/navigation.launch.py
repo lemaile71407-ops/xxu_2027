@@ -1,17 +1,20 @@
 """Start Nav2 localization and navigation for the XXU robot."""
 
+
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, LogInfo
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from ament_index_python.packages import get_package_share_directory
-from xxu_description.launch_helpers import nav2_parameters
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
+from xxu_bringup.interfaces import interfaces
+from xxu_bringup.navigation_parameters import nav2_parameters
 
 
 def generate_launch_description():
+    contract = interfaces()
     bringup_share = FindPackageShare("xxu_bringup")
     gicp_share = FindPackageShare("xxu_gicp_localization")
 
@@ -52,10 +55,11 @@ def generate_launch_description():
         "collision_monitor",
     ]
 
-    nav2_common_remaps = [("/tf", "tf"), ("/tf_static", "tf_static")]
+    nav2_common_remaps = [(contract.topic('system.tf'), "tf"), (contract.topic('system.tf_static'), "tf_static")]
     configured_params, selected_nav_params, _ = nav2_parameters(
         params_file, use_sim_time, use_fake_frame,
         get_package_share_directory("xxu_bringup"), mode="navigation",
+        robot_geometry_file=LaunchConfiguration('robot_geometry_file'),
         extra_rewrites={
             "collision_monitor.ros__parameters.cmd_vel_in_topic": cmd_vel_in_topic,
             "collision_monitor.ros__parameters.cmd_vel_out_topic": cmd_vel_out_topic,
@@ -64,6 +68,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument('robot_geometry_file', default_value=''),
         DeclareLaunchArgument(
             "enable_localization",
             default_value="false",
@@ -117,12 +122,12 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "cmd_vel_in_topic",
-            default_value="cmd_vel_smoothed",
+            default_value=contract.topic("navigation.smoothed_output", relative=True),
             description="Velocity input consumed by collision_monitor",
         ),
         DeclareLaunchArgument(
             "cmd_vel_out_topic",
-            default_value="/cmd_vel_collision",
+            default_value=contract.topic('navigation.collision_output'),
             description="Collision-monitored velocity output",
         ),
         DeclareLaunchArgument(
@@ -170,7 +175,7 @@ def generate_launch_description():
                     executable="controller_server",
                     output="screen",
                     parameters=[selected_nav_params],
-                    remappings=nav2_common_remaps + [("cmd_vel", "cmd_vel_nav")],
+                    remappings=nav2_common_remaps + [("cmd_vel", contract.topic("navigation.controller_output", relative=True))],
                 ),
                 Node(
                     package="nav2_smoother",
@@ -194,7 +199,7 @@ def generate_launch_description():
                     name="behavior_server",
                     output="screen",
                     parameters=[selected_nav_params],
-                    remappings=nav2_common_remaps + [("cmd_vel", "cmd_vel_nav")],
+                    remappings=nav2_common_remaps + [("cmd_vel", contract.topic("navigation.controller_output", relative=True))],
                 ),
                 Node(
                     package="nav2_bt_navigator",
@@ -218,7 +223,7 @@ def generate_launch_description():
                     name="velocity_smoother",
                     output="screen",
                     parameters=[selected_nav_params],
-                    remappings=nav2_common_remaps + [("cmd_vel", "cmd_vel_nav")],
+                    remappings=nav2_common_remaps + [("cmd_vel", contract.topic("navigation.controller_output", relative=True))],
                 ),
                 Node(
                     package="nav2_collision_monitor",

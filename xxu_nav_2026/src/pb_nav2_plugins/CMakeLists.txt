@@ -14,14 +14,11 @@ find_package(ament_cmake REQUIRED)
 
 set(dependencies
   geometry_msgs
-  laser_geometry
-  message_filters
   nav2_behaviors
   nav2_core
   nav2_costmap_2d
   nav2_msgs
   nav2_util
-  nav2_voxel_grid
   nav_msgs
   pluginlib
   rclcpp
@@ -47,18 +44,7 @@ target_include_directories(pb_back_up_free_space_behavior PUBLIC
 )
 ament_target_dependencies(pb_back_up_free_space_behavior ${dependencies})
 
-add_library(pb_intensity_voxel_layer SHARED
-  src/layers/intensity_voxel_layer.cpp
-)
-target_include_directories(pb_intensity_voxel_layer PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>
-)
-ament_target_dependencies(pb_intensity_voxel_layer ${dependencies})
-
-
 pluginlib_export_plugin_description_file(nav2_core behavior_plugin.xml)
-pluginlib_export_plugin_description_file(nav2_costmap_2d costmap_plugins.xml)
 
 install(
   DIRECTORY include/
@@ -68,7 +54,6 @@ install(
 install(
   TARGETS
     pb_back_up_free_space_behavior
-    pb_intensity_voxel_layer
   EXPORT export_${PROJECT_NAME}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -76,12 +61,12 @@ install(
 )
 
 install(
-  FILES behavior_plugin.xml costmap_plugins.xml
+  FILES behavior_plugin.xml
   DESTINATION share/${PROJECT_NAME}
 )
 
 ament_export_include_directories(include)
-ament_export_libraries(pb_back_up_free_space_behavior pb_intensity_voxel_layer)
+ament_export_libraries(pb_back_up_free_space_behavior)
 ament_export_dependencies(${dependencies})
 
 ament_package()

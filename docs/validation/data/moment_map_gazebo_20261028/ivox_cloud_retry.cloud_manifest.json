@@ -1,0 +1,11 @@
+{
+  "raw_cloud_messages_attempted": 45,
+  "recorded_frames": 45,
+  "cloud_frames": [
+    "base_footprint"
+  ],
+  "truth_messages": 2717,
+  "odom_messages": 273,
+  "source_interval_min_s": 0.4,
+  "max_points_per_scan": 2500
+}

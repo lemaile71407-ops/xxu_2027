@@ -1,0 +1,48 @@
+enabled build
+
+Starting >>> small_point_lio
+Finished <<< small_point_lio [0.63s]
+
+Summary: 1 package finished [0.73s]
+
+
+enabled tests
+
+Internal ctest changing into directory: /tmp/xxu_moment_integration_20261028/build/small_point_lio
+Test project /tmp/xxu_moment_integration_20261028/build/small_point_lio
+    Start 1: dynamic_initializer
+1/3 Test #1: dynamic_initializer ...............   Passed    2.03 sec
+    Start 2: dynamic_initialization_frontend
+2/3 Test #2: dynamic_initialization_frontend ...   Passed    0.64 sec
+    Start 3: moment_map_frontend
+3/3 Test #3: moment_map_frontend ...............   Passed    0.71 sec
+
+100% tests passed, 0 tests failed out of 3
+
+Total Test time (real) =   3.38 sec
+
+
+disabled build
+
+Starting >>> small_point_lio
+[Processing: small_point_lio]
+Finished <<< small_point_lio [34.6s]
+
+Summary: 1 package finished [34.7s]
+
+
+disabled tests
+
+Internal ctest changing into directory: /tmp/xxu_moment_integration_20261028/ivox_build/small_point_lio
+Test project /tmp/xxu_moment_integration_20261028/ivox_build/small_point_lio
+    Start 1: dynamic_initializer
+1/3 Test #1: dynamic_initializer ...............   Passed    3.19 sec
+    Start 2: dynamic_initialization_frontend
+2/3 Test #2: dynamic_initialization_frontend ...   Passed    0.62 sec
+    Start 3: moment_map_frontend
+3/3 Test #3: moment_map_frontend ...............   Passed    0.13 sec
+
+100% tests passed, 0 tests failed out of 3
+
+Total Test time (real) =   3.94 sec
+

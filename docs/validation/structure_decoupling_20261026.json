@@ -1,0 +1,212 @@
+{
+  "verified_on": "2026-10-26",
+  "base_head": "21b7837c",
+  "baseline_includes_existing_uncommitted_changes": true,
+  "build": {
+    "profile": "Release / symlink-install",
+    "workspace_packages_passed": 16,
+    "stderr": "3 existing ament_auto_package include-directory notices; no build failures",
+    "final_integration_rebuild_packages_passed": 2
+  },
+  "launch_comparison": {
+    "cases": 18,
+    "unexpected_differences": 0,
+    "planned_replacements": [
+      {
+        "case": "rmul",
+        "from": "xxu_bringup/rm_sim_adapter.py",
+        "to": "xxu_chassis_controller/chassis_controller"
+      },
+      {
+        "case": "rmul_plain",
+        "from": "xxu_bringup/rm_sim_adapter.py",
+        "to": "xxu_chassis_controller/chassis_controller"
+      }
+    ]
+  },
+  "static": {
+    "preprocessing_scripts_byte_identical": true,
+    "python_syntax_files": 24,
+    "description_local_algorithm_dependencies": [],
+    "cad_formula_random_twists": 1000,
+    "cad_formula_max_abs_error": 8.526512829121202e-14,
+    "map_path_checks": 5,
+    "interface_bindings": 144,
+    "interface_known_wrong_topic_detected": true
+  },
+  "chassis_runtime": {
+    "default_output_reference_vectors": 64,
+    "cad_compiled_output_reference_vectors": 64,
+    "ramp_safety_checks": [
+      "common ramp factor",
+      "zero bypasses ramp",
+      "expired stamp",
+      "future stamp",
+      "receive timeout"
+    ],
+    "paused_sim_clock_stops_on_wall_timeout": true
+  },
+  "legacy_gazebo": {
+    "date": "2026-10-26",
+    "domain": 218,
+    "controllers": {
+      "gimbal_velocity_controller": "active",
+      "joint_state_broadcaster": "active",
+      "wheel_velocity_controller": "active"
+    },
+    "result": "passed",
+    "message_counts": {
+      "/imu": 310,
+      "/imu_lio_compensated": 281,
+      "/mid360/livox_points_compensated": 24,
+      "/odom": 7,
+      "/scan": 6
+    },
+    "nodes": [
+      "chassis_controller",
+      "fake_vel_transform",
+      "bridge_clock",
+      "cmd_vel_watchdog",
+      "gimbal_imu_compensator",
+      "bridge_imu",
+      "robot_state_publisher",
+      "imu_frame_republisher",
+      "pointcloud_to_laserscan",
+      "transform_listener_impl_5900a46b9c10",
+      "gimbal_stabilizer",
+      "small_point_lio",
+      "transform_listener_impl_60ed08ec0750",
+      "legacy_smoke_observer",
+      "pointcloud_motion_compensator",
+      "gz_ros_control",
+      "controller_manager",
+      "wheel_velocity_controller",
+      "joint_state_broadcaster",
+      "gimbal_velocity_controller",
+      "bridge_livox_native"
+    ]
+  },
+  "rmul_navigation": {
+    "date": "2026-10-26",
+    "domain": 219,
+    "goals": [
+      {
+        "target": [
+          3.0,
+          2.0
+        ],
+        "status": 4,
+        "truth_xy": [
+          3.1791217109999934,
+          2.09512361161336
+        ],
+        "truth_endpoint_error_m": 0.20281294050906742,
+        "safe_command": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "wheel_max_abs_velocity": 0.0,
+        "watchdog_healthy": true,
+        "map_estimate_xy": [
+          3.1986658236161416,
+          2.1328498066321147
+        ]
+      },
+      {
+        "target": [
+          2.0,
+          3.0
+        ],
+        "status": 4,
+        "truth_xy": [
+          2.0530124241732173,
+          3.022612557923039
+        ],
+        "truth_endpoint_error_m": 0.05763371315943389,
+        "safe_command": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "wheel_max_abs_velocity": 0.0,
+        "watchdog_healthy": true,
+        "map_estimate_xy": [
+          2.067439561373775,
+          2.971591430173898
+        ]
+      },
+      {
+        "target": [
+          2.0,
+          2.0
+        ],
+        "status": 4,
+        "truth_xy": [
+          2.0455731611058376,
+          1.9286506109185957
+        ],
+        "truth_endpoint_error_m": 0.08466196510516544,
+        "safe_command": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "wheel_max_abs_velocity": 0.0,
+        "watchdog_healthy": true,
+        "map_estimate_xy": [
+          1.9506203463846215,
+          1.8337863682109923
+        ]
+      }
+    ],
+    "lifecycle": {
+      "map_server": "active",
+      "amcl": "active",
+      "controller_server": "active",
+      "smoother_server": "active",
+      "planner_server": "active",
+      "behavior_server": "active",
+      "bt_navigator": "active",
+      "velocity_smoother": "active",
+      "collision_monitor": "active"
+    },
+    "stationary_truth_displacement_m": 0.0,
+    "navigation_xy_tolerance_m": 0.12,
+    "navigation_endpoint_check_passed": false,
+    "result": "completed",
+    "message_counts": {
+      "cloud": 411,
+      "deskewed": 388,
+      "odom": 388,
+      "scan": 388
+    },
+    "real_time_factor": 0.886453687331329,
+    "safe_command_at_stop": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "wheel_velocity_at_stop": {
+      "wheel_rr": -0.0,
+      "wheel_fl": -0.0,
+      "wheel_rl": 0.0,
+      "wheel_fr": -0.0
+    },
+    "truth_frames": [
+      "sentry_bot/livox_lidar_housing",
+      "sentry_bot/wheel_rl",
+      "sentry_bot/wheel_fr",
+      "sentry_bot/wheel_rr",
+      "sentry_bot/base_link",
+      "sentry_bot/wheel_fl",
+      "sentry_bot"
+    ]
+  },
+  "legacy_service_query_note": "Mixed-RMW observer timed out querying list_controllers; retry with the launch-matching CycloneDDS passed. No product change for this diagnostic.",
+  "preprocessing_sha256": {
+    "imu_frame_republisher.py": "9e0ae4163d7049802c17e0e9625194e9bc8923e3aa72b86b41f831e5377056e2",
+    "pointcloud_frame_republisher.py": "1404375d5d6f135b793fd1430c094b6b7218a5f6d859da1410b8340bbf591a93",
+    "gimbal_imu_compensator.py": "3bb0c09c73558242c7783737498b62b4f9833dacf960e5df553090ea614eb34b"
+  }
+}

@@ -1,7 +1,6 @@
-# XXU hardware boundary.  Keep this file in sync with real_robot.launch.py
-# and replace only the topic names when a vendor driver uses a namespace.
+# Authoritative launch topic/frame defaults. Vendor launch arguments may override boundary topics.
+# Static Nav2/LIO/SLAM/RViz consumers are checked by tools/navigation/check_interfaces.py.
 version: 1
-
 frames:
   odom: odom
   navigation_base: base_link
@@ -10,7 +9,10 @@ frames:
   lidar: livox_frame
   lidar_compensated: lio_base_sensor
   fake_navigation_base: gimbal_yaw_fake
-
+  map: map
+  gazebo_lidar: mid360_link
+  rm_lidar: livox_lidar
+  gpu_lidar: xxu/gimbal_link/mid360_lidar
 topics:
   radar:
     pointcloud:
@@ -28,6 +30,12 @@ topics:
       type: sensor_msgs/msg/Imu
       frame_id: livox_frame
       linear_acceleration_unit: g
+    pointcloud_compensated:
+      name: /livox/lidar_compensated
+      type: sensor_msgs/msg/PointCloud2
+    imu_compensated:
+      name: /livox/imu_lio_compensated
+      type: sensor_msgs/msg/Imu
   gimbal:
     joint_states:
       name: /joint_states
@@ -47,6 +55,12 @@ topics:
       type: sensor_msgs/msg/LaserScan
       frame_id: base_footprint
       owner: pointcloud_to_laserscan_or_hardware_adapter
+    deskewed_cloud:
+      name: /cloud_deskewed
+      type: sensor_msgs/msg/PointCloud2
+    navigation_cloud:
+      name: /mid360/points_navigation
+      type: sensor_msgs/msg/PointCloud2
   navigation:
     odometry:
       name: /odom_nav
@@ -70,36 +84,168 @@ topics:
       name: /cmd_vel
       type: geometry_msgs/msg/TwistStamped
       frame_id: base_link
+    transformed_output:
+      name: /cmd_vel_transformed
+      type: geometry_msgs/msg/TwistStamped
   chassis:
     wheel_command:
       name: /wheel_velocity_controller/commands
       type: std_msgs/msg/Float64MultiArray
-      data_order: [front_left, front_right, rear_left, rear_right]
+      data_order:
+      - front_left
+      - front_right
+      - rear_left
+      - rear_right
       unit: rad/s
       length: 4
-
+  simulation:
+    imu:
+      name: /imu
+      type: sensor_msgs/msg/Imu
+    imu_raw:
+      name: /imu_raw
+      type: sensor_msgs/msg/Imu
+    imu_compensated:
+      name: /imu_lio_compensated
+      type: sensor_msgs/msg/Imu
+    lidar_raw:
+      name: /mid360/points_raw
+      type: sensor_msgs/msg/PointCloud2
+    lidar_gpu:
+      name: /mid360/points
+      type: sensor_msgs/msg/PointCloud2
+    lidar_native:
+      name: /mid360/livox_points_gz
+      type: sensor_msgs/msg/PointCloud2
+    lidar_lio:
+      name: /mid360/points_lio
+      type: sensor_msgs/msg/PointCloud2
+    lidar_shaped:
+      name: /mid360/livox_points
+      type: sensor_msgs/msg/PointCloud2
+    lidar_compensated:
+      name: /mid360/livox_points_compensated
+      type: sensor_msgs/msg/PointCloud2
+    rm_lidar:
+      name: /rm_sim/lidar/points
+      type: sensor_msgs/msg/PointCloud2
+    safe_velocity:
+      name: /rm_sim/cmd_vel_safe
+      type: geometry_msgs/msg/TwistStamped
+    truth:
+      name: /rm_sim/ground_truth
+      type: tf2_msgs/msg/TFMessage
+    model_pose:
+      name: /model/sentry_bot/pose
+      type: tf2_msgs/msg/TFMessage
+    gimbal_velocity:
+      name: /gimbal_velocity_controller/commands
+      type: std_msgs/msg/Float64MultiArray
+    gimbal_big_yaw:
+      name: /gimbal/big_yaw/cmd_pos
+      type: std_msgs/msg/Float64
+    gimbal_small_yaw:
+      name: /gimbal/small_yaw/cmd_pos
+      type: std_msgs/msg/Float64
+    gimbal_pitch:
+      name: /gimbal/pitch/cmd_pos
+      type: std_msgs/msg/Float64
+    wheel_command:
+      name: /{wheel}/cmd_vel
+      type: std_msgs/msg/Float64
+      unit: rad/s
+  system:
+    tf:
+      name: /tf
+      type: tf2_msgs/msg/TFMessage
+    tf_static:
+      name: /tf_static
+      type: tf2_msgs/msg/TFMessage
+    clock:
+      name: /clock
+      type: rosgraph_msgs/msg/Clock
+    map:
+      name: /map
+      type: nav_msgs/msg/OccupancyGrid
+    map_updates:
+      name: /map_updates
+      type: map_msgs/msg/OccupancyGridUpdate
+    healthy:
+      name: /cmd_vel_watchdog/healthy
+      type: std_msgs/msg/Bool
+    robot_description:
+      name: /robot_description
+      type: std_msgs/msg/String
+  nav2:
+    local_costmap:
+      name: /local_costmap/costmap
+      type: nav_msgs/msg/OccupancyGrid
+    global_costmap:
+      name: /global_costmap/costmap
+      type: nav_msgs/msg/OccupancyGrid
+    local_costmap_raw:
+      name: /local_costmap/costmap_raw
+      type: nav2_msgs/msg/Costmap
+    global_costmap_raw:
+      name: /global_costmap/costmap_raw
+      type: nav2_msgs/msg/Costmap
+    local_costmap_updates:
+      name: /local_costmap/costmap_updates
+      type: map_msgs/msg/OccupancyGridUpdate
+    global_costmap_updates:
+      name: /global_costmap/costmap_updates
+      type: map_msgs/msg/OccupancyGridUpdate
+    local_footprint:
+      name: /local_costmap/published_footprint
+      type: geometry_msgs/msg/PolygonStamped
+    global_footprint:
+      name: /global_costmap/published_footprint
+      type: geometry_msgs/msg/PolygonStamped
+    collision_state:
+      name: /collision_monitor_state
+      type: nav2_msgs/msg/CollisionMonitorState
+    emergency_stop:
+      name: /collision_monitor/emergency_stop
+      type: geometry_msgs/msg/PolygonStamped
+    particle_cloud:
+      name: /particle_cloud
+      type: nav2_msgs/msg/ParticleCloud
+    plan:
+      name: /plan
+      type: nav_msgs/msg/Path
+    local_plan:
+      name: /local_plan
+      type: nav_msgs/msg/Path
+    lookahead:
+      name: /lookahead_point
+      type: geometry_msgs/msg/PointStamped
+    initialpose:
+      name: /initialpose
+      type: geometry_msgs/msg/PoseWithCovarianceStamped
+    frontiers:
+      name: /explore/frontiers
+      type: visualization_msgs/msg/MarkerArray
 tf_contract:
   static_or_dynamic:
-    - parent: base_footprint
-      child: base_link
-    - parent: base_link
-      child: lio_base_sensor
-    - parent: base_link
-      child: gimbal_link
-    - parent: gimbal_link
-      child: livox_frame
+  - parent: base_footprint
+    child: base_link
+  - parent: base_link
+    child: lio_base_sensor
+  - parent: base_link
+    child: gimbal_link
+  - parent: gimbal_link
+    child: livox_frame
   dynamic:
-    - parent: base_footprint
-      child: gimbal_yaw_fake
-    - parent: odom
-      child: base_footprint
-    - parent: base_link
-      child: gimbal_link
-
+  - parent: base_footprint
+    child: gimbal_yaw_fake
+  - parent: odom
+    child: base_footprint
+  - parent: base_link
+    child: gimbal_link
 safety:
   final_gate: /cmd_vel_watchdog
   health_topic: /cmd_vel_watchdog/healthy
-  zero_command: "TwistStamped with all twist fields = 0"
+  zero_command: TwistStamped with all twist fields = 0
   stale_timeouts_seconds:
     command: 0.3
     odom: 0.5

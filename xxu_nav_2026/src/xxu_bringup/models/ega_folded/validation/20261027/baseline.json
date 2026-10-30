@@ -1,0 +1,81 @@
+{
+  "name": "baseline",
+  "domain": 73,
+  "gz_partition": "xxu_vehicle_check_baseline_repeat_20261027",
+  "goals": [
+    {
+      "target": [
+        6.59,
+        4.44
+      ],
+      "start_truth": [
+        1.9999999999999925,
+        2.000000000000002
+      ],
+      "emergency_samples": 60,
+      "safe_peak": 0.8464894602089359,
+      "wheel_peak": 16.008580581536986,
+      "scan_min": 0.5330091714859009,
+      "stalled": true,
+      "wall_seconds": 18.091838887999984,
+      "simulation_seconds": 17.886,
+      "truth_at_result": [
+        4.125359058030095,
+        2.925053171075173
+      ],
+      "truth_error_m": 2.893012075208759,
+      "map_at_result": [
+        4.11363034938712,
+        2.8617501698116214
+      ],
+      "settled_truth": [
+        4.125359058030095,
+        2.925053171075173
+      ],
+      "settled_error_m": 2.893012075208759,
+      "safe_after_stop": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "odom_after_stop": [
+        0.027938039491791664,
+        0.00456260867453142,
+        -0.004167193299537088
+      ],
+      "wheel_after_stop": 1.2898352459506298e-17
+    }
+  ],
+  "ready": true,
+  "parameters": {
+    "/local_costmap/local_costmap": {
+      "robot_radius": 0.533,
+      "inflation_layer.inflation_radius": 0.55
+    },
+    "/controller_server": {
+      "goal_checker.xy_goal_tolerance": 0.12,
+      "FollowPath.vx_max": 1.6
+    },
+    "/collision_monitor": {
+      "EmergencyStop.points": "[[0.60939, 0.0], [0.4309, 0.4309], [0.0, 0.60939], [-0.4309, 0.4309], [-0.60939, 0.0], [-0.4309, -0.4309], [-0.0, -0.60939], [0.4309, -0.4309]]"
+    }
+  },
+  "counts": {
+    "/rm_sim/cmd_vel_safe": 3289,
+    "/cmd_vel_watchdog/healthy": 3289,
+    "/clock": 29708,
+    "/rm_sim/ground_truth": 2874,
+    "/joint_states": 28733,
+    "/odom": 264,
+    "/scan": 264,
+    "/cmd_vel_nav": 116,
+    "/collision_monitor_state": 1
+  },
+  "real_time_factor": 0.8456912166570992,
+  "scope": "Isolated RMUL 2027 / ega_folded simulator; observer-only ground truth",
+  "expected_goal_count": 1,
+  "physical_xy_tolerance_m": 0.12,
+  "passed": false,
+  "progress_recovery_error_count": 0,
+  "retained_log_scope": "Only aggregate recovery count retained; full process log omitted"
+}

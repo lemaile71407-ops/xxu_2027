@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/mozihe/z-localization",
+  "commit": "76e126328b670adc92981d9b4900cc059a6f2343",
+  "source_subdirectory": "src/frontend",
+  "sha256": {
+    "src/map.cpp": "a9d6f0c62a4065bb453d521ff6ea76b3f7bf9c990db062792ed2fd4ecface4a8",
+    "src/plane.cpp": "09981b8d906e6ec13ed5b98c0a46120b20a2d232c8c735c5823da33bb29d2662",
+    "src/state.cpp": "d16ee0a2198eff5b67ce8a98bca60564a2a2417ac204317c9979c23d8041adfe",
+    "src/storage.hpp": "ab6a27cf7002b2329b75cd8c174fb96f9e0cdfe7193f444097026ca7f59ef0a7",
+    "src/moments.hpp": "d1df19bb156a56feecfb89ee6f8f7f1e2a470f989f2d9c6ea4522a3ddef33d53",
+    "include/zlio/map.hpp": "acecce44de7a86eed57b345a455b8a493dfc75688886c764825f06f4c328dd18",
+    "include/zlio/plane.hpp": "b6a8d77383ea9d0eb87c011c9a1fcc5ceb584566d9e468b562d3c7e246e4f47b",
+    "include/zlio/state.hpp": "2122e4535f6a0c7fe48877fcdc8c609802e6c5d52bcdbdb2c6f889ed940c2dd8",
+    "include/zlio/types.hpp": "2f5a3b8b01e478166b3add719424c5c5157a440546519fd343f4cb6101dd8ef5",
+    "include/zlio/config.hpp": "8172d9d638b2330aae7ee7b81a0279b5676bcdcb207590b8becdd50406545633",
+    "include/zlio/voxel.hpp": "048022cfe6cb90e8bd7e8f2a69352d64d9801b4410341eb8d3ef5b8320c9af1a"
+  }
+}

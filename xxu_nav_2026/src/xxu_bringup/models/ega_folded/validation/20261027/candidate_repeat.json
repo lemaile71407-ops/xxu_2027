@@ -1,0 +1,81 @@
+{
+  "name": "candidate_repeat",
+  "domain": 73,
+  "gz_partition": "xxu_vehicle_check_candidate_repeat_20261027",
+  "goals": [
+    {
+      "target": [
+        6.59,
+        4.44
+      ],
+      "start_truth": [
+        1.9999999999999925,
+        2.000000000000002
+      ],
+      "emergency_samples": 64,
+      "safe_peak": 0.8088658182460037,
+      "wheel_peak": 16.140508143836893,
+      "scan_min": 0.5330011248588562,
+      "stalled": true,
+      "wall_seconds": 19.07764607199988,
+      "simulation_seconds": 18.113999999999997,
+      "truth_at_result": [
+        4.215238184013154,
+        2.818832200534235
+      ],
+      "truth_error_m": 2.8753571459374943,
+      "map_at_result": [
+        4.214264053674517,
+        2.756418724764318
+      ],
+      "settled_truth": [
+        4.215238184013154,
+        2.818832200534235
+      ],
+      "settled_error_m": 2.8753571459374943,
+      "safe_after_stop": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "odom_after_stop": [
+        0.037836245743911194,
+        0.023233234514505985,
+        -0.000639656423300278
+      ],
+      "wheel_after_stop": 1.8122774941311718e-17
+    }
+  ],
+  "ready": true,
+  "parameters": {
+    "/local_costmap/local_costmap": {
+      "robot_radius": 0.533,
+      "inflation_layer.inflation_radius": 0.663
+    },
+    "/controller_server": {
+      "goal_checker.xy_goal_tolerance": 0.12,
+      "FollowPath.vx_max": 1.6
+    },
+    "/collision_monitor": {
+      "EmergencyStop.points": "[[0.60939, 0.0], [0.4309, 0.4309], [0.0, 0.60939], [-0.4309, 0.4309], [-0.60939, 0.0], [-0.4309, -0.4309], [-0.0, -0.60939], [0.4309, -0.4309]]"
+    }
+  },
+  "counts": {
+    "/rm_sim/cmd_vel_safe": 3621,
+    "/cmd_vel_watchdog/healthy": 3621,
+    "/clock": 29275,
+    "/rm_sim/ground_truth": 2924,
+    "/joint_states": 29227,
+    "/odom": 269,
+    "/scan": 269,
+    "/cmd_vel_nav": 273,
+    "/collision_monitor_state": 1
+  },
+  "real_time_factor": 0.8022042525370403,
+  "scope": "Isolated RMUL 2027 / ega_folded simulator; observer-only ground truth",
+  "expected_goal_count": 5,
+  "physical_xy_tolerance_m": 0.12,
+  "passed": false,
+  "progress_recovery_error_count": 0,
+  "retained_log_scope": "Only aggregate recovery count retained; full process log omitted"
+}

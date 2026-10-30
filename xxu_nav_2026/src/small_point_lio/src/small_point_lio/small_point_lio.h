@@ -11,13 +11,16 @@
 #include "parameters.h"
 #include "preprocess.h"
 #include "imu_time_guard.h"
+#include "dynamic_initializer.h"
 #include <pch.h>
 #include <deque>
+#include <future>
 
 namespace small_point_lio {
 
     class SmallPointLio {
     private:
+        friend struct SmallPointLioTestAccess;
         using DeskewScanCallback = std::function<void(const std::vector<common::Point> &pointcloud)>;
         using PoseHistoryCallback = std::function<void(const common::Odometry &odometry)>;
 
@@ -31,6 +34,10 @@ namespace small_point_lio {
         PoseHistoryCallback pose_history_callback;
         std::function<void(const common::Odometry &odometry)> odometry_callback;
         bool is_init = false;
+        double last_dynamic_init_attempt = -std::numeric_limits<double>::infinity();
+        double last_static_init_attempt = -std::numeric_limits<double>::infinity();
+        initialization::Method selected_initialization = initialization::Method::None;
+        std::future<initialization::Result> dynamic_init_future;
         ImuTimeGuard imu_time_guard{0.25};
         std::uint64_t active_map_scan_id = 0;
         std::vector<Eigen::Vector3f> pending_scan_map_points;
@@ -52,6 +59,7 @@ namespace small_point_lio {
         void handle_once();
 
         [[nodiscard]] bool has_imu_time_fault() const { return imu_time_guard.faulted(); }
+        [[nodiscard]] initialization::Method initialization_method() const { return selected_initialization; }
 
         void set_deskew_scan_callback(const DeskewScanCallback &callback);
 
@@ -60,6 +68,9 @@ namespace small_point_lio {
         void set_odometry_callback(const std::function<void(const common::Odometry &odometry)> &odometry_callback);
 
     private:
+        bool try_dynamic_initialize();
+        bool accept_dynamic_initialization(const initialization::Result &result);
+
         void predict_state_with_diagnostics(double timestamp);
 
         void log_motion_diagnostics();

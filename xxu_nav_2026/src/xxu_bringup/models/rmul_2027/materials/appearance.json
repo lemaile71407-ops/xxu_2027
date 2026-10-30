@@ -1,0 +1,23 @@
+{
+  "style": "matte PVC / painted panels / red-blue zones / existing raised markings",
+  "official_artwork": false,
+  "source_mesh_sha256": "ea75dd77f7c43696240bfd34268a73e88e8210eabf78e17c8a87f80cb9486358",
+  "visual_triangles": 3811,
+  "groups": {
+    "base_dark": 554,
+    "paint_white": 122,
+    "paint_yellow": 32,
+    "panel_graphite": 2539,
+    "pvc_blue": 87,
+    "pvc_control": 48,
+    "pvc_floor": 266,
+    "pvc_platform": 68,
+    "pvc_red": 87,
+    "ramp_grip": 8
+  },
+  "collision_mesh": "meshes/rmul_2027_m_zup.stl",
+  "navigation_map_modified": false,
+  "contact_friction_modified": false,
+  "lidar_material_response_calibrated": false,
+  "floor_boundary_width_m": 0.05
+}

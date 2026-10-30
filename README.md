@@ -52,8 +52,8 @@ ros2 launch xxu_bringup rm_sim_navigation.launch.py \
 雷达对地航向保持；出生点与地图初始位姿默认 `(3.4, 9.5, 0)`。
 
 用户提供的 RMUL 场地入口为 `ros2 launch xxu_bringup rmul_navigation.launch.py`，
-出生点 `(2,2,0)`，目前仍使用上游原车。EGA 折叠车模正在转换，当前 GLB 为展开草稿；
-折叠模型需在 SolidWorks 中切换配合后导出整车 STEP，操作边界见[CAD 说明](xxu_nav_2026/tools/navigation/cad/README.md)。
+出生点 `(2,2,0)`，使用用户确认的 EGA 固定折叠车模，仅保留一台 MID360 接现有导航。
+该车型使用 RGL；物理初值、雷达保护罩运行假设及核验范围见[CAD 说明](xxu_nav_2026/tools/navigation/cad/README.md)。
 
 ### 3. 检查地图显示
 
@@ -73,7 +73,7 @@ RViz 中应满足：
 ```bash
 cd ~/xxu_2026/xxu_nav_2026
 source install/setup.zsh
-src/xxu_description/scripts/kill_simulation.sh
+src/xxu_bringup/scripts/kill_simulation.sh
 ros2 launch xxu_bringup simulation.launch.py \
   start_navigation:=true \
   enable_localization:=true \
@@ -166,7 +166,7 @@ ros2 launch xxu_bringup real_robot.launch.py
 ```bash
 cd ~/xxu_2026/xxu_nav_2026
 source install/setup.zsh
-src/xxu_description/scripts/kill_simulation.sh
+src/xxu_bringup/scripts/kill_simulation.sh
 ros2 launch xxu_bringup simulation.launch.py \
   start_navigation:=false \
   rviz:=false \
@@ -210,23 +210,23 @@ ros2 run key_controll wasd_keyboard_teleop.py --ros-args \
   -p gyro_angular_speed:=1.8
 ```
 
+Gazebo 和实车 LIO 的直接入口现均属于 `xxu_bringup`：`ros2 launch xxu_bringup gazebo.launch.py`、`ros2 launch xxu_bringup mid360_lio.launch.py`。预处理与校准说明见 [LIO 工具](xxu_nav_2026/tools/lio/README.md)，共享配置和接口检查见 [导航工具](xxu_nav_2026/tools/navigation/README.md#共享启动与参数来源)。
+
 ## 源码结构
 
 ```text
 xxu_nav_2026/src/
-├── xxu_bringup/                    # 主启动包、地图、Nav2 参数、RViz 配置
-├── xxu_description/                # URDF/Xacro、Gazebo 世界和仿真辅助节点
+├── xxu_bringup/                    # 平台集成、传感器预处理、共享启动、Nav2/地图配置
+├── xxu_description/                # URDF/Xacro、网格、世界、显示与 ros2_control 配置
 ├── xxu_chassis_controller/         # 全向底盘 Twist 到四轮角速度转换
 ├── xxu_livox_sim/                  # Livox Mid-360 激光雷达仿真
-├── xxu_pointcloud_processing/      # 点云预处理
-├── small_point_lio/                # Small Point-LIO 里程计
+├── small_point_lio/                # Small Point-LIO 里程计算法
 ├── xxu_slam_toolbox/               # SLAM 和自主探索入口
 ├── pointcloud_to_laserscan/        # PointCloud2 转 LaserScan
-├── fake_vel_transform/             # 虚拟速度和参考坐标变换
+├── fake_vel_transform/             # 导航速度变换与 watchdog 保护
 ├── key_controll/                   # WASD 键盘遥控
-├── pb_nav2_plugins/                # 自定义 Nav2 行为和 costmap 插件
-├── pb_omni_pid_pursuit_controller/ # 全向 PID 路径追踪控制器
-├── goal_approach_controller/       # 目标接近控制器
+├── pb_nav2_plugins/                # 自定义 Nav2 后退行为
+├── pb_omni_pid_pursuit_controller/ # 备用 PID 控制器与目标接近包装插件
 └── m-explore-ros2/                 # explore_lite / map_merge 子模块
 ```
 
@@ -235,7 +235,6 @@ xxu_nav_2026/src/
 `pb_nav2_plugins` 当前包含：
 
 - `pb_nav2_behaviors::BackUpFreeSpace`：根据局部 costmap 选择较宽的自由空间执行备份。
-- `pb_nav2_costmap_2d::IntensityVoxelLayer`：按点云强度范围标记体素障碍。
 
 相关配置：
 
@@ -266,7 +265,7 @@ ros2 run tf2_tools view_frames
 如果 Gazebo 或 RViz 窗口消失，先确认启动终端没有被 `Ctrl-C` 终止；重新启动前运行：
 
 ```bash
-src/xxu_description/scripts/kill_simulation.sh
+src/xxu_bringup/scripts/kill_simulation.sh
 ```
 
-不要把清理脚本和包含 `ros2 launch` 的命令写在同一条 shell 命令中，以免清理脚本匹配并终止正在启动的命令。
+可先加 `--dry-run` 查看目标 PID。清理仅选择启动工作目录位于本工作空间内的 XXU 仿真/建图白名单启动树，先请求正常退出以便保存地图，再对未退出进程逐级结束；实车入口和其他工作空间不在选择范围内。从其他目录启动或已脱离启动树的进程需在原终端退出。

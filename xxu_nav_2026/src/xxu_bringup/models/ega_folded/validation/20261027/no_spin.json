@@ -1,0 +1,81 @@
+{
+  "name": "no_spin",
+  "domain": 73,
+  "gz_partition": "xxu_vehicle_check_no_spin_20261027",
+  "goals": [
+    {
+      "target": [
+        6.59,
+        4.44
+      ],
+      "start_truth": [
+        1.9999999999999925,
+        2.000000000000002
+      ],
+      "emergency_samples": 0,
+      "safe_peak": 1.1087650287266424,
+      "wheel_peak": 13.241080996049524,
+      "scan_min": 0.8811048269271851,
+      "stalled": true,
+      "wall_seconds": 24.46162022199951,
+      "simulation_seconds": 23.908,
+      "truth_at_result": [
+        6.736861901814682,
+        4.860688731028847
+      ],
+      "truth_error_m": 0.4455866095601241,
+      "map_at_result": [
+        6.880345553881218,
+        4.732841623660619
+      ],
+      "settled_truth": [
+        6.736861901814682,
+        4.860688731028847
+      ],
+      "settled_error_m": 0.4455866095601241,
+      "safe_after_stop": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "odom_after_stop": [
+        0.04627337257358821,
+        0.02996063011582923,
+        0.007160385430078748
+      ],
+      "wheel_after_stop": 7.880803995101226e-18
+    }
+  ],
+  "ready": true,
+  "parameters": {
+    "/local_costmap/local_costmap": {
+      "robot_radius": 0.533,
+      "inflation_layer.inflation_radius": 0.663
+    },
+    "/controller_server": {
+      "goal_checker.xy_goal_tolerance": 0.12,
+      "FollowPath.vx_max": 1.6
+    },
+    "/collision_monitor": {
+      "EmergencyStop.points": "[[0.60939, 0.0], [0.4309, 0.4309], [0.0, 0.60939], [-0.4309, 0.4309], [-0.60939, 0.0], [-0.4309, -0.4309], [-0.0, -0.60939], [0.4309, -0.4309]]"
+    }
+  },
+  "counts": {
+    "/rm_sim/cmd_vel_safe": 4089,
+    "/cmd_vel_watchdog/healthy": 4089,
+    "/clock": 34976,
+    "/rm_sim/ground_truth": 3490,
+    "/joint_states": 34895,
+    "/odom": 326,
+    "/scan": 326,
+    "/plan": 23,
+    "/cmd_vel_nav": 353
+  },
+  "real_time_factor": 0.8550156379952476,
+  "scope": "Isolated RMUL 2027 / ega_folded simulator; observer-only ground truth",
+  "expected_goal_count": 1,
+  "physical_xy_tolerance_m": 0.12,
+  "passed": false,
+  "progress_recovery_error_count": 0,
+  "retained_log_scope": "Only aggregate recovery count retained; full process log omitted"
+}

@@ -5,6 +5,7 @@
  */
 
 #include "small_point_lio.h"
+#include "dynamic_initializer.h"
 
 namespace small_point_lio {
 
@@ -32,6 +33,12 @@ namespace small_point_lio {
         estimator.reset();
         estimator.diagnostics = {};
         is_init = false;
+        last_dynamic_init_attempt = -std::numeric_limits<double>::infinity();
+        last_static_init_attempt = -std::numeric_limits<double>::infinity();
+        selected_initialization = initialization::Method::None;
+        // The worker owns a snapshot only. Discard its result on reset and wait
+        // for its bounded solve before destroying its future.
+        dynamic_init_future = {};
         imu_time_guard.reset();
         active_map_scan_id = 0;
         pending_scan_map_points.clear();
@@ -73,6 +80,30 @@ namespace small_point_lio {
         if (has_imu_time_fault()) { return; }
         // we need to init small point lio
         if (!is_init) {
+            if (parameters.dynamic_init_en) {
+                try_dynamic_initialize();
+                return;
+            }
+            // Static startup must not keep an entire moving trajectory. Only
+            // clouds covered by the latest calibration window may seed a map.
+            auto &points = preprocess.point_deque;
+            auto &dense = preprocess.dense_point_deque;
+            auto &imus = preprocess.imu_deque;
+            constexpr std::size_t init_imu_samples = 200;
+            while (imus.size() > init_imu_samples) { imus.pop_front(); }
+            const double latest = std::max(points.empty() ? -std::numeric_limits<double>::infinity() : points.back().timestamp,
+                                           imus.empty() ? -std::numeric_limits<double>::infinity() : imus.back().timestamp);
+            double cutoff = latest - 5.0;
+            if (parameters.fix_gravity_direction && imus.size() == init_imu_samples) {
+                cutoff = std::max(cutoff, imus.front().timestamp);
+            }
+            while (!points.empty() && (points.front().timestamp < cutoff || points.size() > 100000)) { points.pop_front(); }
+            while (!dense.empty() && (dense.front().timestamp < cutoff || dense.size() > 300000)) { dense.pop_front(); }
+            if (points.empty()) { return; }
+            const double frontier = imus.empty() ? points.back().timestamp : std::min(points.back().timestamp, imus.back().timestamp);
+            const auto map_end = std::upper_bound(points.begin(), points.end(), frontier,
+                    [](double time, const common::Point &point) { return time < point.timestamp; });
+            if (static_cast<std::size_t>(std::distance(points.begin(), map_end)) < parameters.init_map_size) { return; }
             if ((!preprocess.point_deque.empty() || !preprocess.imu_deque.empty()) &&
                 preprocess.point_deque.size() >= parameters.init_map_size &&
                 (!parameters.fix_gravity_direction || preprocess.imu_deque.size() >= 200)) {
@@ -81,8 +112,11 @@ namespace small_point_lio {
                 // gimbal-mounted IMU can later contain large angular/centripetal
                 // motion. Neither is a valid gravity calibration interval.
                 if (parameters.fix_gravity_direction) {
-                    constexpr std::size_t init_imu_samples = 200;
                     const auto imu_begin = preprocess.imu_deque.end() - init_imu_samples;
+                    for (auto it = std::next(imu_begin); it != imus.end(); ++it) {
+                        const double gap = it->timestamp - std::prev(it)->timestamp;
+                        if (gap <= 0.0 || gap > parameters.max_imu_sample_gap) { return; }
+                    }
                     Eigen::Matrix<state::value_type, 3, 1> avg_acc = Eigen::Matrix<state::value_type, 3, 1>::Zero();
                     for (auto it = imu_begin; it != preprocess.imu_deque.end(); ++it) {
                         const auto &imu_msg = *it;
@@ -123,23 +157,19 @@ namespace small_point_lio {
                 apply_planar_constraint();
 
                 // init map: transform sparse measurement points to the LIO world frame.
-                for (const auto &point: preprocess.point_deque) {
+                for (auto it = points.begin(); it != map_end; ++it) {
+                    const auto &point = *it;
                     Eigen::Matrix<state::value_type, 3, 1> point_imu_frame;
                     if (parameters.extrinsic_est_en) {
                         point_imu_frame = estimator.kf.x.offset_R_L_I * point.position.cast<state::value_type>() + estimator.kf.x.offset_T_L_I;
                     } else {
                         point_imu_frame = estimator.Lidar_R_wrt_IMU * point.position.cast<state::value_type>() + estimator.Lidar_T_wrt_IMU;
                     }
-                    estimator.ivox->add_point((estimator.kf.x.rotation * point_imu_frame + estimator.kf.x.position).cast<float>());
+                    estimator.add_map_point((estimator.kf.x.rotation * point_imu_frame + estimator.kf.x.position).cast<float>(), bool(estimator.moment_map));
                 }
+                if (estimator.moment_map) { estimator.moment_map->flush(); }
                 // init time
-                if (preprocess.point_deque.empty()) {
-                    time_current = preprocess.imu_deque.back().timestamp;
-                } else if (preprocess.imu_deque.empty()) {
-                    time_current = preprocess.point_deque.back().timestamp;
-                } else {
-                    time_current = std::max(preprocess.point_deque.back().timestamp, preprocess.imu_deque.back().timestamp);
-                }
+                time_current = frontier;
                 estimator.kf.init_timestamp(time_current);
                 // Startup may wait for gravity calibration. Start gap checks
                 // from the newest IMU only after the estimator is initialized.
@@ -150,10 +180,11 @@ namespace small_point_lio {
                 estimator.diagnostics.start = time_current;
                 estimator.diagnostics.position_start = estimator.kf.x.position;
                 // clear data
-                preprocess.point_deque.clear();
-                preprocess.dense_point_deque.clear();
-                preprocess.imu_deque.clear();
+                while (!points.empty() && points.front().timestamp <= time_current) { points.pop_front(); }
+                while (!dense.empty() && dense.front().timestamp <= time_current) { dense.pop_front(); }
+                while (!imus.empty() && imus.front().timestamp <= time_current) { imus.pop_front(); }
                 is_init = true;
+                selected_initialization = initialization::Method::Static;
                 record_pose_history(time_current);
             }
             return;
@@ -212,8 +243,9 @@ namespace small_point_lio {
                 // map incremental
                 if (parameters.defer_map_insertion_by_scan) {
                     pending_scan_map_points.push_back(estimator.point_odom_frame);
+                    estimator.add_map_point(estimator.point_odom_frame, true);
                 } else {
-                    estimator.ivox->add_point(estimator.point_odom_frame);
+                    estimator.add_map_point(estimator.point_odom_frame);
                 }
 
                 preprocess.point_deque.pop_front();
@@ -284,10 +316,217 @@ namespace small_point_lio {
     }
 
     void SmallPointLio::flush_pending_map_points() {
-        for (const auto &point: pending_scan_map_points) {
-            estimator.ivox->add_point(point);
+        if (estimator.moment_map) {
+            estimator.moment_map->flush();
+        } else {
+            for (const auto &point: pending_scan_map_points) {
+                estimator.add_map_point(point);
+            }
         }
         pending_scan_map_points.clear();
+    }
+
+    bool SmallPointLio::try_dynamic_initialize() {
+        auto &points = preprocess.point_deque;
+        auto &dense = preprocess.dense_point_deque;
+        auto &imus = preprocess.imu_deque;
+        if (points.empty() && imus.empty()) { return false; }
+        const double latest = std::max(points.empty() ? -std::numeric_limits<double>::infinity() : points.back().timestamp,
+                                       imus.empty() ? -std::numeric_limits<double>::infinity() : imus.back().timestamp);
+        const double cutoff = latest - parameters.dynamic_init_duration - 0.75;
+        // Bound all startup queues even if a sensor stalls or no solution is
+        // observable. Keep one IMU before the interval for interpolation.
+        while (!points.empty() && (points.front().timestamp < cutoff || points.size() > 100000)) { points.pop_front(); }
+        while (!dense.empty() && (dense.front().timestamp < cutoff || dense.size() > 300000)) { dense.pop_front(); }
+        while (imus.size() > 1 && (imus[1].timestamp < cutoff || imus.size() > 20000)) { imus.pop_front(); }
+        if (dynamic_init_future.valid()) {
+            if (dynamic_init_future.wait_for(std::chrono::seconds(0)) != std::future_status::ready) { return false; }
+            initialization::Result result;
+            try {
+                result = dynamic_init_future.get();
+            } catch (const std::exception &error) {
+                RCLCPP_ERROR(logger, "DYNAMIC_INIT_WAIT reason=worker_exception detail=%s", error.what());
+                return false;
+            }
+            return accept_dynamic_initialization(result);
+        }
+        if (points.empty() || imus.size() < 10) { return false; }
+        const double frontier = std::min(points.back().timestamp, imus.back().timestamp);
+        struct ScanRange { std::size_t begin, end; };
+        std::vector<ScanRange> ranges;
+        for (std::size_t begin = 0; begin < points.size();) {
+            std::size_t end = begin + 1;
+            while (end < points.size() && points[end].scan_id == points[begin].scan_id) { ++end; }
+            if (points[begin].timestamp >= imus.front().timestamp && points[end - 1].timestamp <= frontier && end - begin >= 40) {
+                ranges.push_back({begin, end});
+            }
+            begin = end;
+        }
+        if (ranges.empty()) { return false; }
+        const bool motion_ready = ranges.size() >= 5 &&
+                points[ranges.back().end - 1].timestamp - points[ranges.front().end - 1].timestamp + 1e-9 >= parameters.dynamic_init_duration &&
+                frontier - last_dynamic_init_attempt >= 0.5;
+        // This cheap IMU gate only selects whether a lidar stationarity check
+        // is worth doing. It is NEVER sufficient evidence to install a state.
+        bool imu_quiet = false;
+        std::vector<ScanRange> stationary_ranges;
+        if (imus.size() >= 200) {
+            const auto start = imus.end() - 200;
+            Eigen::Vector3d mean = Eigen::Vector3d::Zero();
+            double max_gyro = 0, variance = 0;
+            for (auto it = start; it != imus.end(); ++it) {
+                mean += it->linear_acceleration * estimator.imu_acceleration_scale;
+                max_gyro = std::max(max_gyro, it->angular_velocity.norm());
+            }
+            mean /= 200.0;
+            for (auto it = start; it != imus.end(); ++it) {
+                variance += (it->linear_acceleration * estimator.imu_acceleration_scale - mean).squaredNorm();
+            }
+            imu_quiet = max_gyro <= 0.05 && std::sqrt(variance / 200.0) <= 0.15;
+            if (imu_quiet) {
+                for (const auto &range : ranges) {
+                    if (points[range.begin].timestamp >= start->timestamp) { stationary_ranges.push_back(range); }
+                }
+            }
+        }
+        const bool static_ready = stationary_ranges.size() >= 3 &&
+                points[stationary_ranges.back().end - 1].timestamp -
+                points[stationary_ranges.front().end - 1].timestamp + 1e-9 >= 0.6 &&
+                frontier - last_static_init_attempt >= 0.1;
+        if (!static_ready && !motion_ready) { return false; }
+        struct Input {
+            std::vector<initialization::Scan> scans;
+            std::vector<initialization::Imu> imu;
+        };
+        const auto snapshot = [&](const std::vector<ScanRange> &selected_ranges, std::size_t max_frames) {
+            Input input;
+            const std::size_t count = std::min(max_frames, selected_ranges.size());
+            for (std::size_t i = 0; i < count; ++i) {
+                const auto &range = selected_ranges[i * (selected_ranges.size() - 1) / (count - 1)];
+                initialization::Scan scan;
+                scan.time = points[range.end - 1].timestamp;
+                const std::size_t selected = std::min(std::size_t(160), range.end - range.begin);
+                for (std::size_t j = 0; j < selected; ++j) {
+                    const auto &point = points[range.begin + j * (range.end - range.begin - 1) / (selected - 1)];
+                    const Eigen::Vector3d body = parameters.extrinsic_R * point.position.cast<double>() + parameters.extrinsic_T;
+                    scan.points.push_back({point.timestamp, body});
+                }
+                input.scans.push_back(std::move(scan));
+            }
+            auto first = std::upper_bound(imus.begin(), imus.end(), input.scans.front().points.front().time,
+                    [](double time, const common::ImuMsg &imu) { return time < imu.timestamp; });
+            if (first != imus.begin()) { --first; }
+            auto last = std::lower_bound(first, imus.end(), input.scans.back().time,
+                    [](const common::ImuMsg &imu, double time) { return imu.timestamp < time; });
+            if (last != imus.end()) { ++last; }
+            for (auto it = first; it != last; ++it) {
+                input.imu.push_back({it->timestamp, it->angular_velocity,
+                                     it->linear_acceleration * estimator.imu_acceleration_scale});
+            }
+            return input;
+        };
+        Input stationary, motion;
+        if (static_ready) {
+            stationary = snapshot(stationary_ranges, 5);
+            last_static_init_attempt = frontier;
+        }
+        if (motion_ready) {
+            motion = snapshot(ranges, 12);
+            last_dynamic_init_attempt = frontier;
+        }
+        initialization::Options options;
+        options.min_duration = parameters.dynamic_init_duration;
+        options.max_imu_gap = parameters.max_imu_sample_gap;
+        options.gravity = parameters.gravity.norm();
+        options.max_gyro = parameters.satu_gyro;
+        options.max_force = parameters.satu_acc * estimator.imu_acceleration_scale;
+        options.gyro_measurement_variance = parameters.imu_meas_omg_cov;
+        options.accel_measurement_variance = parameters.imu_meas_acc_cov;
+        dynamic_init_future = std::async(std::launch::async,
+                [stationary = std::move(stationary), motion = std::move(motion), options,
+                 gravity = parameters.gravity]() {
+#ifdef _OPENMP
+                    // OpenMP's thread-count ICV is local to this worker. Keep
+                    // small window products from spawning a CPU-wide team.
+                    omp_set_num_threads(1);
+#endif
+                    initialization::Result result;
+                    if (!stationary.scans.empty()) {
+                        result = initialization::initialize_stationary(stationary.scans, stationary.imu, options, gravity);
+                        if (result.success) { return result; }
+                    }
+                    if (!motion.scans.empty()) {
+                        return initialization::initialize(motion.scans, motion.imu, options, gravity);
+                    }
+                    return result;
+                });
+        return false;
+    }
+
+    bool SmallPointLio::accept_dynamic_initialization(const initialization::Result &result) {
+        if (!result.success) {
+            RCLCPP_INFO(logger, "INIT_WAIT reason=%s plane_rms=%.5f imu_rms=%.3f information=%.3g",
+                        result.reason.c_str(), result.plane_rms, result.imu_rms, result.information_ratio);
+            return false;
+        }
+        auto &points = preprocess.point_deque;
+        auto &dense = preprocess.dense_point_deque;
+        auto &imus = preprocess.imu_deque;
+        if (imus.empty() || imus.front().timestamp > result.time) {
+            RCLCPP_WARN(logger, "DYNAMIC_INIT_WAIT reason=solution_outside_retained_window");
+            return false;
+        }
+        ImuTimeGuard pending_guard(parameters.max_imu_sample_gap);
+        pending_guard.reset(result.time);
+        for (const auto &imu : imus) {
+            if (imu.timestamp <= result.time) { continue; }
+            if (pending_guard.observe(imu.timestamp) != ImuTimeGuard::Result::Accepted) {
+                RCLCPP_WARN(logger, "DYNAMIC_INIT_WAIT reason=handoff_imu_discontinuity");
+                return false;
+            }
+        }
+        auto &x = estimator.kf.x;
+        x.position = result.position;
+        x.rotation = result.rotation;
+        x.velocity = result.velocity;
+        x.omg = result.omega;
+        x.acceleration = result.force;
+        x.gravity = result.gravity;
+        x.bg = result.gyro_bias;
+        x.ba = result.accel_bias;
+        if (parameters.extrinsic_est_en) {
+            x.offset_R_L_I = parameters.extrinsic_R;
+            x.offset_T_L_I = parameters.extrinsic_T;
+        }
+        const auto extrinsic_covariance = estimator.kf.P.block<6, 6>(6, 6).eval();
+        estimator.kf.P = result.covariance;
+        estimator.kf.P.block<6, 6>(6, 6) = extrinsic_covariance;
+        apply_planar_constraint();
+        // The supported preserve-tilt constraint only shifts the origin in z.
+        // Hard level projection is rejected during parameter loading because
+        // it would alter the recovered attitude/gravity/velocity relationship.
+        const Eigen::Vector3d map_translation = x.position - result.position;
+        for (const auto &point : result.map) {
+            estimator.add_map_point((point.cast<double>() + map_translation).cast<float>(), bool(estimator.moment_map));
+        }
+        if (estimator.moment_map) { estimator.moment_map->flush(); }
+        time_current = result.time;
+        estimator.kf.init_timestamp(time_current);
+        estimator.diagnostics = {};
+        estimator.diagnostics.start = time_current;
+        estimator.diagnostics.position_start = x.position;
+        // Retain measurements after the terminal knot for normal processing;
+        // in particular, do not silently lose the newest IMU or following scan.
+        while (!points.empty() && points.front().timestamp <= time_current) { points.pop_front(); }
+        while (!dense.empty() && dense.front().timestamp <= time_current) { dense.pop_front(); }
+        while (!imus.empty() && imus.front().timestamp <= time_current) { imus.pop_front(); }
+        imu_time_guard = pending_guard;
+        is_init = true;
+        selected_initialization = result.method;
+        record_pose_history(time_current);
+        RCLCPP_INFO(logger, "INIT_OK path=%s frames=%zu map_points=%zu plane_rms=%.5f imu_rms=%.3f bg_norm=%.5f ba_norm=%.5f",
+                    result.method == initialization::Method::Static ? "static" : "motion", result.frame_count, result.map.size(), result.plane_rms, result.imu_rms, x.bg.norm(), x.ba.norm());
+        return true;
     }
 
     void SmallPointLio::record_pose_history(double timestamp) {

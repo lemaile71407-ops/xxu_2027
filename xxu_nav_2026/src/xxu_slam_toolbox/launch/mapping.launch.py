@@ -1,6 +1,5 @@
 """Launch SLAM Toolbox mapping for the XXU robot."""
 
-import os
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
@@ -9,6 +8,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from xxu_bringup.map_paths import default_map_save_path
 
 
 def generate_launch_description():
@@ -20,9 +20,7 @@ def generate_launch_description():
     default_rviz_config_file = PathJoinSubstitution(
         [pkg_share, "rviz", "mapping.rviz"]
     )
-    default_map_save_path = os.path.join(
-        os.getcwd(), "src", "xxu_bringup", "maps", "auto_map"
-    )
+    map_save_default = default_map_save_path()
 
     use_sim_time = LaunchConfiguration("use_sim_time")
     slam_params_file = LaunchConfiguration("slam_params_file")
@@ -53,7 +51,7 @@ def generate_launch_description():
     )
     declare_map_save_path = DeclareLaunchArgument(
         "map_save_path",
-        default_value=default_map_save_path,
+        default_value=map_save_default,
         description="Output path without .yaml/.pgm suffix for automatic map saving",
     )
     declare_rviz_config = DeclareLaunchArgument(

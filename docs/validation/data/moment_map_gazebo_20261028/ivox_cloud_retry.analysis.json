@@ -1,0 +1,59 @@
+{
+  "ready": true,
+  "navigation_passed": false,
+  "error": null,
+  "goals": [
+    {
+      "target": [
+        6.59,
+        4.44
+      ],
+      "status": 4,
+      "stalled": false,
+      "truth_error_m": 0.10030682474423756,
+      "settled_error_m": 0.10092442721556177,
+      "parking_passed": false,
+      "parking_odom_translation_mps": 0.057945097139537945,
+      "parking_odom_rotation_rps": 0.016714696832431156
+    }
+  ],
+  "sample_counts": {
+    "recorded": 227,
+    "unique_truth": 195,
+    "unique_odom": 181,
+    "warm_paired": 39,
+    "moving_paired": 113,
+    "resource": 219
+  },
+  "warmup": {
+    "observed_sim_seconds": 7.499999999999998,
+    "truth_max_translation_m": 0.0,
+    "truth_max_yaw_change_rad": 0.0,
+    "odom_max_translation_m": 0.02219009237901242,
+    "odom_velocity_xy_rms_mps": 0.10514760572028778,
+    "odom_angular_rms_radps": 0.017373306527534785
+  },
+  "moving": {
+    "xy_rmse_m": 0.04290822498475302,
+    "xy_p95_m": 0.08793965587011045,
+    "yaw_abs_p95_rad": 0.013629280342620382,
+    "truth_speed_peak_mps": 0.6081608005183683,
+    "truth_yaw_rate_peak_radps": 1.5696287173581003
+  },
+  "resources": {
+    "mean_process_cpu_percent_one_core": 7.029326396535489,
+    "sampled_peak_process_rss_bytes": 51458048
+  },
+  "alignment": {
+    "method": "yaw and translation from median stationary last 2s; truth interpolated to odom timestamps, max truth gap 0.5s",
+    "yaw_rad": -0.003019997335767965,
+    "translation_xy_m": [
+      2.0131005191346683,
+      1.9709663637923533
+    ]
+  },
+  "timing": {
+    "real_time_factor": 0.8859710930809949,
+    "warmup_sim_seconds": 8.058
+  }
+}

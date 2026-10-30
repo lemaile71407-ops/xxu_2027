@@ -1,0 +1,128 @@
+{
+  "verified_at": "2026-10-18T22:51:33",
+  "robot": "ega_folded",
+  "lidar_cover_configuration": "removed; provisional operating assumption, real cover handling pending user confirmation",
+  "parameters": {
+    "/robot_state_publisher": {
+      "robot_name": "ega_folded",
+      "links": 10,
+      "secondary_frames": []
+    },
+    "/controller_server": {
+      "FollowPath.plugin": "nav2_mppi_controller::MPPIController",
+      "FollowPath.motion_model": "Omni",
+      "goal_checker.xy_goal_tolerance": 0.12,
+      "goal_checker.plugin": "nav2_controller::StoppedGoalChecker",
+      "goal_checker.stateful": false,
+      "goal_checker.trans_stopped_velocity": 0.05
+    },
+    "/fake_vel_transform": {
+      "spin_speed": 1.5
+    },
+    "/local_costmap/local_costmap": {
+      "robot_radius": 0.533
+    },
+    "/pointcloud_to_laserscan": {
+      "max_height": 0.28626616071877936,
+      "robot_self_filter_radius": 0.533
+    },
+    "/gimbal_imu_compensator": {
+      "fixed_sensor": true,
+      "sensor_offset": [
+        0.11231072291232723,
+        -0.055370359566467034,
+        0.12802178356574812
+      ]
+    },
+    "/cmd_vel_watchdog": {
+      "required_tf_pairs": [
+        "odom->base_footprint"
+      ],
+      "tf_source_frame": "livox_lidar"
+    }
+  },
+  "lifecycle": {
+    "/amcl": "active",
+    "/map_server": "active",
+    "/controller_server": "active",
+    "/bt_navigator": "active",
+    "/collision_monitor": "active"
+  },
+  "received_messages": {
+    "/clock": 3787,
+    "/joint_states": 3787,
+    "/rm_sim/cmd_vel_safe": 502,
+    "/rm_sim/ground_truth": 379,
+    "/rm_sim/lidar/points": 38,
+    "/odom": 38,
+    "/odom_nav": 38,
+    "/scan": 38
+  },
+  "real_time_factor": 0.757100695341522,
+  "stationary_truth_displacement_m": 0.0,
+  "wheel_max_abs_velocity_at_stop": 2.473172453296695e-17,
+  "safe_command_at_stop": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "ground_truth_consumers_excluding_observer": [],
+  "navigation_goals": [
+    {
+      "target": [
+        3.0,
+        2.0
+      ],
+      "status": 4,
+      "truth_xy": [
+        3.1771799397715124,
+        2.1058215094486483
+      ],
+      "truth_endpoint_error_m": 0.2063756839344866,
+      "map_estimate_xy": [
+        3.1983612522377567,
+        2.1318113476362557
+      ],
+      "peak_lio_yaw_rate_rad_s": 1.5879231089191235
+    },
+    {
+      "target": [
+        2.0,
+        3.0
+      ],
+      "status": 4,
+      "truth_xy": [
+        2.0210121281743745,
+        2.979138050655175
+      ],
+      "truth_endpoint_error_m": 0.02960963459555666,
+      "map_estimate_xy": [
+        2.042550643476472,
+        2.9234484214747996
+      ],
+      "peak_lio_yaw_rate_rad_s": 1.6332759431791357
+    },
+    {
+      "target": [
+        2.0,
+        2.0
+      ],
+      "status": 4,
+      "truth_xy": [
+        2.121984864630639,
+        2.0679483062917163
+      ],
+      "truth_endpoint_error_m": 0.13963265924155496,
+      "map_estimate_xy": [
+        2.0684749222242553,
+        2.160004398901262
+      ],
+      "peak_lio_yaw_rate_rad_s": 1.6240376049376726
+    }
+  ],
+  "navigation_xy_tolerance_m": 0.12,
+  "navigation_endpoint_check_passed": false,
+  "secondary_topics": [],
+  "active_lidar_count": 1,
+  "result": "single_lidar_integration_passed_navigation_endpoint_check_failed"
+}

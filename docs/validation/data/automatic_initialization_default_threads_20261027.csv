@@ -1,0 +1,7 @@
+scenario,seed,method,duration_s,initialized,imu_fault,invalid_state,initial_pose_stamp_s,first_delivery_s,wall_ready_s,initial_tilt_error_deg,initial_velocity_error_mps,drift_2s_m,position_rmse_2s_m,final_position_error_m,post_duration_s,cpu_s,max_callback_ms,max_schedule_lag_ms,selected_path
+yaw_room,20261027,static,6,0,0,0,,,,,,,,,,0.022842,0.040547,0.751517,none
+yaw_room,20261027,auto,6,1,0,0,2.1,2.235,2.235220055,0.06847468102,0.001865600533,0.0008467469721,0.001288958616,0.001199454042,3.9,0.176424,1.143573,0.996937,motion
+yaw_room,20261028,auto,6,1,0,0,2.1,2.235,2.23520171,0.1158034436,0.003027376457,0.001291100972,0.001063207235,0.0009559257326,3.9,0.1734,0.814174,0.7562,motion
+yaw_room,20261028,static,6,0,0,0,,,,,,,,,,0.022838,0.047872,0.746243,none
+yaw_room,20261029,static,6,0,0,0,,,,,,,,,,0.022392,0.033,0.745978,none
+yaw_room,20261029,auto,6,1,0,0,2.1,2.245,2.245293894,0.1400896008,0.00733117482,0.0004794385753,0.001272207169,0.0008568952249,3.9,0.186249,0.70198,0.661629,motion

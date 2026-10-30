@@ -1,0 +1,254 @@
+{
+  "name": "installed",
+  "domain": 73,
+  "gz_partition": "xxu_vehicle_check_installed_20261027",
+  "goals": [
+    {
+      "target": [
+        6.59,
+        4.44
+      ],
+      "start_truth": [
+        1.9999999999999925,
+        2.000000000000002
+      ],
+      "emergency_samples": 0,
+      "safe_peak": 0.6301293699362419,
+      "wheel_peak": 13.560478415628335,
+      "scan_min": 0.7121437191963196,
+      "stalled": false,
+      "status": 4,
+      "wall_seconds": 15.719939982999676,
+      "simulation_seconds": 14.63,
+      "truth_at_result": [
+        6.590426738509477,
+        4.557618723706205
+      ],
+      "truth_error_m": 0.11761949783956717,
+      "map_at_result": [
+        6.621417235154416,
+        4.504344208502358
+      ],
+      "settled_truth": [
+        6.589184045713404,
+        4.558998165236974
+      ],
+      "settled_error_m": 0.11900096264805565,
+      "safe_after_stop": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "odom_after_stop": [
+        0.04126961218562193,
+        0.012489010988147862,
+        0.011002098912769683
+      ],
+      "wheel_after_stop": 3.647653951492653e-17
+    },
+    {
+      "target": [
+        2,
+        2
+      ],
+      "start_truth": [
+        6.589184045713404,
+        4.558998165236974
+      ],
+      "emergency_samples": 0,
+      "safe_peak": 0.6509306308879552,
+      "wheel_peak": 13.835673080512478,
+      "scan_min": 1.1560791730880737,
+      "stalled": false,
+      "status": 4,
+      "wall_seconds": 44.09818032300063,
+      "simulation_seconds": 40.956999999999994,
+      "truth_at_result": [
+        2.0782882769726854,
+        2.061382960191482
+      ],
+      "truth_error_m": 0.0994832755452943,
+      "map_at_result": [
+        2.1029843405920965,
+        2.006718467776775
+      ],
+      "settled_truth": [
+        2.0726210185882437,
+        2.067659070901777
+      ],
+      "settled_error_m": 0.09925503622530038,
+      "safe_after_stop": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "odom_after_stop": [
+        -0.014422269901732598,
+        -0.006424154054407365,
+        0.0002061308169080975
+      ],
+      "wheel_after_stop": 7.305092702468252e-18
+    },
+    {
+      "target": [
+        3,
+        2
+      ],
+      "start_truth": [
+        2.0726210185882437,
+        2.067659070901777
+      ],
+      "emergency_samples": 0,
+      "safe_peak": 0.42655326462009563,
+      "wheel_peak": 10.791995206087542,
+      "scan_min": 1.0537865161895752,
+      "stalled": false,
+      "status": 4,
+      "wall_seconds": 9.915913014999205,
+      "simulation_seconds": 9.528999999999996,
+      "truth_at_result": [
+        3.0143603532862757,
+        1.9706078266440572
+      ],
+      "truth_error_m": 0.03271268257255041,
+      "map_at_result": [
+        2.973449520474845,
+        2.0481658373562825
+      ],
+      "settled_truth": [
+        3.0143271311524877,
+        1.9615405558273935
+      ],
+      "settled_error_m": 0.04104138805067904,
+      "safe_after_stop": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "odom_after_stop": [
+        -0.0878645202557775,
+        -0.08974232761412179,
+        0.004379236230357671
+      ],
+      "wheel_after_stop": 1.2768089566861182e-17
+    },
+    {
+      "target": [
+        2,
+        3
+      ],
+      "start_truth": [
+        3.0143271311524877,
+        1.9615405558273935
+      ],
+      "emergency_samples": 0,
+      "safe_peak": 0.4966514376862219,
+      "wheel_peak": 11.995912630906401,
+      "scan_min": 0.7333216667175293,
+      "stalled": false,
+      "status": 4,
+      "wall_seconds": 11.135505092999665,
+      "simulation_seconds": 10.462999999999994,
+      "truth_at_result": [
+        2.1105294689363325,
+        3.0897234563165816
+      ],
+      "truth_error_m": 0.14236243225212622,
+      "map_at_result": [
+        2.1112801878992493,
+        3.023594239392283
+      ],
+      "settled_truth": [
+        2.1106129077338647,
+        3.08780620052228
+      ],
+      "settled_error_m": 0.1412272785530449,
+      "safe_after_stop": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "odom_after_stop": [
+        0.07561933033074673,
+        -0.0381541625668068,
+        -0.0037132550496179213
+      ],
+      "wheel_after_stop": 8.847870278803003e-18
+    },
+    {
+      "target": [
+        2,
+        2
+      ],
+      "start_truth": [
+        2.1106129077338647,
+        3.08780620052228
+      ],
+      "emergency_samples": 0,
+      "safe_peak": 0.49985323266649756,
+      "wheel_peak": 12.016499888525486,
+      "scan_min": 1.3716493844985962,
+      "stalled": false,
+      "status": 4,
+      "wall_seconds": 12.294075433000216,
+      "simulation_seconds": 11.292000000000002,
+      "truth_at_result": [
+        2.0646460281968007,
+        2.0027262941670747
+      ],
+      "truth_error_m": 0.06470349018025975,
+      "map_at_result": [
+        1.9460713900371025,
+        1.91823764717021
+      ],
+      "settled_truth": [
+        2.065166588598548,
+        2.001000401046276
+      ],
+      "settled_error_m": 0.06517426694505908,
+      "safe_after_stop": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "odom_after_stop": [
+        -0.05670335625056922,
+        0.08816299874568437,
+        -0.0046680310528740354
+      ],
+      "wheel_after_stop": 1.0200222551498044e-17
+    }
+  ],
+  "physical_xy_tolerance_m": 0.12,
+  "expected_goal_count": 5,
+  "ready": true,
+  "parameters": {
+    "/local_costmap/local_costmap": {
+      "robot_radius": 0.533,
+      "inflation_layer.inflation_radius": 0.85
+    },
+    "/controller_server": {
+      "goal_checker.xy_goal_tolerance": 0.06,
+      "FollowPath.vx_max": 0.5
+    },
+    "/collision_monitor": {
+      "EmergencyStop.points": "[[0.60939, 0.0], [0.4309, 0.4309], [0.0, 0.60939], [-0.4309, 0.4309], [-0.60939, 0.0], [-0.4309, -0.4309], [-0.0, -0.60939], [0.4309, -0.4309]]"
+    }
+  },
+  "counts": {
+    "/rm_sim/cmd_vel_safe": 11596,
+    "/cmd_vel_watchdog/healthy": 11596,
+    "/clock": 104758,
+    "/rm_sim/ground_truth": 10362,
+    "/joint_states": 103509,
+    "/odom": 1014,
+    "/scan": 1015,
+    "/plan": 93,
+    "/cmd_vel_nav": 1406
+  },
+  "real_time_factor": 0.8924454861664812,
+  "passed": false,
+  "scope": "Isolated RMUL 2027 / ega_folded simulator; observer-only ground truth",
+  "progress_recovery_error_count": 1,
+  "retained_log_scope": "Only aggregate recovery count retained; full process log omitted"
+}

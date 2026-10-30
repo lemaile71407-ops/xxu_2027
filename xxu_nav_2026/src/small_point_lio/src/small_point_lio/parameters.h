@@ -25,8 +25,12 @@ namespace small_point_lio {
         double satu_gyro;
         double acc_norm;
         double max_imu_sample_gap = 0.25;
+        bool dynamic_init_en = false;
+        double dynamic_init_duration = 2.0;
 
         double map_resolution;
+        std::string map_backend = "ivox";
+        double moment_map_resolution = 0.5;
         size_t init_map_size;
         bool defer_map_insertion_by_scan;
         bool planar_constraint_en;

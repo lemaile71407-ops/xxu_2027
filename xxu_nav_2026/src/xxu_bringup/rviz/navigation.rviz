@@ -187,6 +187,12 @@ Visualization Manager:
           Value: true
         lio_base_sensor:
           Value: true
+        livox_lidar:
+          Value: true
+        livox_lidar_housing:
+          Value: true
+        livox_lidar_imu:
+          Value: true
         map:
           Value: true
         mid360_link:
@@ -211,11 +217,13 @@ Visualization Manager:
           odom:
             base_footprint:
               base_link:
-                gimbal_link:
-                  mid360_link:
-                    {}
                 lio_base_sensor:
                   {}
+                livox_lidar_housing:
+                  livox_lidar:
+                    {}
+                  livox_lidar_imu:
+                    {}
                 wheel_fl:
                   {}
                 wheel_fr:
@@ -377,7 +385,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: -1.4900026321411133
+      Angle: 13.425102233886719
       Class: rviz_default_plugins/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -387,23 +395,23 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 141.7877655029297
+      Scale: 195.03936767578125
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz_default_plugins)
-      X: -0.7546805143356323
-      Y: -5.65471887588501
+      X: 5.023796558380127
+      Y: 3.2512552738189697
     Saved: ~
 Window Geometry:
   Displays:
     collapsed: false
-  Height: 1015
+  Height: 1033
   Hide Left Dock: false
   Hide Right Dock: false
   Navigation 2:
     collapsed: false
-  QMainWindow State: 000000ff00000000fd0000000100000000000001f30000038dfc0200000003fb000000100044006900730070006c0061007900730100000048000000f3000000f300fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007301000001420000006f0000006f00fffffffb00000018004e0061007600690067006100740069006f006e0020003201000001b80000021d0000021700ffffff000005860000038d00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd0000000100000000000001f30000039ffc0200000003fb000000100044006900730070006c0061007900730100000048000000f3000000f300fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007301000001420000006f0000006f00fffffffb00000018004e0061007600690067006100740069006f006e0020003201000001b80000022f0000021700ffffff000005860000039f00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Tool Properties:
     collapsed: false
   Width: 1920
-  X: 0
-  Y: 28
+  X: 571
+  Y: 230

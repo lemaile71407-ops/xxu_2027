@@ -1,5 +1,6 @@
 """Start the XXU Gazebo simulation and optionally the Nav2 stack."""
 
+
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
@@ -20,9 +21,12 @@ from launch.substitutions import (
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
+from xxu_bringup.interfaces import interfaces
+from xxu_bringup.robot_profiles import RobotGeometryFile
 
 
 def generate_launch_description():
+    contract = interfaces()
     sim_backend = LaunchConfiguration("sim_backend")
 
     def backend_default(legacy, rm_sim):
@@ -109,10 +113,7 @@ def generate_launch_description():
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
-                FindPackageShare(PythonExpression([
-                    "'xxu_bringup' if '", sim_backend,
-                    "' == 'rm_sim_26' else 'xxu_description'",
-                ])),
+                bringup_share,
                 "launch",
                 PythonExpression([
                     "'rm_sim_gazebo.launch.py' if '", sim_backend,
@@ -128,6 +129,7 @@ def generate_launch_description():
             "lidar_mode": LaunchConfiguration("lidar_mode"),
             "rgl_plugin_dir": LaunchConfiguration("rgl_plugin_dir"),
             "field_model": LaunchConfiguration("field_model"),
+            "robot_model": LaunchConfiguration("robot_model"),
             "use_fake_frame": use_fake_frame,
             "gyro_spin_rate": gyro_spin_rate,
             "nav_velocity_smoothing_window": nav_velocity_smoothing_window,
@@ -152,6 +154,7 @@ def generate_launch_description():
             "use_sim_time": use_sim_time,
             "map": map_file,
             "params_file": nav2_params_file,
+            "robot_geometry_file": LaunchConfiguration('robot_geometry_file'),
             "rviz": rviz,
             "use_fake_frame": use_fake_frame,
             "enable_gicp": enable_gicp,
@@ -190,7 +193,7 @@ def generate_launch_description():
         name="wait_for_odom",
         output="screen",
         condition=IfCondition(AndSubstitution(start_navigation, enable_lio)),
-        parameters=[{"use_sim_time": use_sim_time, "topic": "/odom"}],
+        parameters=[{"use_sim_time": use_sim_time, "topic": contract.topic('localization.odometry')}],
     )
 
     start_navigation_after_odom = RegisterEventHandler(
@@ -209,6 +212,9 @@ def generate_launch_description():
                               choices=['rgl', 'gpu_lidar']),
         DeclareLaunchArgument('rgl_plugin_dir', default_value=''),
         DeclareLaunchArgument('field_model', default_value=''),
+        DeclareLaunchArgument('robot_model', default_value='upstream'),
+        DeclareLaunchArgument('robot_geometry_file', default_value=RobotGeometryFile(
+            LaunchConfiguration('robot_model'), bringup_share, sim_backend=sim_backend)),
         DeclareLaunchArgument(
             "use_sim_time",
             default_value="true",
@@ -261,12 +267,12 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "cmd_vel_in_topic",
-            default_value="cmd_vel_smoothed",
+            default_value=contract.topic("navigation.smoothed_output", relative=True),
             description="Velocity input consumed by collision_monitor",
         ),
         DeclareLaunchArgument(
             "cmd_vel_out_topic",
-            default_value="/cmd_vel_collision",
+            default_value=contract.topic('navigation.collision_output'),
             description="Collision-monitored velocity output",
         ),
         DeclareLaunchArgument(

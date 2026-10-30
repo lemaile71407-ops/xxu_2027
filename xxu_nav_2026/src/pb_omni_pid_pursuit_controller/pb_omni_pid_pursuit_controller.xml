@@ -5,5 +5,10 @@
                 pb_omni_pid_pursuit_controller
             </description>
         </class>
+        <class name="goal_approach_controller::GoalApproachController"
+               type="goal_approach_controller::GoalApproachController"
+               base_class_type="nav2_core::Controller">
+            <description>Goal approach speed wrapper for an explicitly selected inner controller.</description>
+        </class>
     </library>
 </class_libraries>

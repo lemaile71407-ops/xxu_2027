@@ -8,13 +8,14 @@
        与标准差速纯追踪的区别：线速度分解为 X/Y 分量，支持全向运动；
        使用双 PID（平移+旋转）独立控制线速度和角速度；
        支持曲率自适应降速、接近目标减速、碰撞检测等功能。 -->
-  <description>Omni Pure Pursuit Controller</description>
+  <description>Omni PID pursuit controller and goal approach wrapper</description>
 
   <maintainer email="lihanchen2004@163.com">Lihan Chen</maintainer>
   <license>Apache-2.0</license>
+  <license>MIT</license>
 
   <!-- 构建工具依赖: ament_cmake (ROS2 CMake 构建系统) -->
-  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
 
   <!-- 运行时依赖: Nav2 核心接口、工具库、代价地图等 -->
   <depend>nav2_common</depend>        <!-- Nav2 通用定义和工具 -->
@@ -32,8 +33,6 @@
   <depend>tf2_geometry_msgs</depend>  <!-- TF2 与 geometry_msgs 的互操作 -->
   <depend>tf2_ros</depend>            <!-- TF2 的 ROS2 集成（Buffer, TransformListener） -->
   <depend>visualization_msgs</depend> <!-- 可视化消息（MarkerArray 用于调试） -->
-
-  <!-- 测试依赖: 代码风格检查与格式化 -->
 
   <!-- 导出: 声明构建类型为 ament_cmake，并注册 Nav2 控制器插件 -->
   <export>

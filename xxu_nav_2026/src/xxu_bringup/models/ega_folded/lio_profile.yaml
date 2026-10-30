@@ -1,0 +1,4 @@
+# EGA RMUL simulator measurement weighting; not a real-sensor calibration.
+small_point_lio:
+  ros__parameters:
+    laser_point_cov: 0.001

@@ -1,0 +1,122 @@
+{
+  "name": "moment_repeat",
+  "command": [
+    "ros2",
+    "launch",
+    "xxu_bringup",
+    "rmul_navigation.launch.py",
+    "gazebo_gui:=false",
+    "rviz:=false"
+  ],
+  "domain": 73,
+  "gz_partition": "xxu_vehicle_check_moment_candidate_repeat_20261028",
+  "goals": [
+    {
+      "target": [
+        6.59,
+        4.44
+      ],
+      "start_truth": [
+        1.9999999999999925,
+        2.000000000000002
+      ],
+      "emergency_samples": 62,
+      "safe_peak": 0.541696865419245,
+      "wheel_peak": 12.492827017421648,
+      "scan_min": 0.5956199765205383,
+      "stalled": true,
+      "wall_seconds": 19.467337003001376,
+      "simulation_seconds": 19.373999999999995,
+      "truth_at_result": [
+        4.321807977884138,
+        2.7043795907827657
+      ],
+      "truth_error_m": 2.856059042471189,
+      "map_at_result": [
+        4.3493522004665355,
+        2.781582548995779
+      ],
+      "settled_truth": [
+        4.321807977884138,
+        2.7043795907827657
+      ],
+      "settled_error_m": 2.856059042471189,
+      "safe_after_stop": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "odom_after_stop": [
+        0.019192597632238458,
+        -0.0027308207558033853,
+        -0.005182119447819942
+      ],
+      "wheel_after_stop": 6.711654395984648e-18,
+      "parking_evidence": {
+        "passed": false,
+        "samples": {
+          "truth": 74,
+          "odom": 7,
+          "safe": 75,
+          "wheels": 743
+        },
+        "truth_translation_m": 0.0,
+        "truth_rotation_rad": 0.0,
+        "odom_translation_mps": 0.06884092251170115,
+        "odom_rotation_rps": 0.012667705694060205
+      }
+    }
+  ],
+  "physical_xy_tolerance_m": 0.12,
+  "expected_goal_count": 5,
+  "lio_profile_sha256": "a9f278fd30e40c5a527327762401a244c49efc0c1f271ce1defce6c22add0005",
+  "ready": true,
+  "parameters": {
+    "/local_costmap/local_costmap": {
+      "robot_radius": 0.533,
+      "inflation_layer.inflation_radius": 0.85
+    },
+    "/controller_server": {
+      "goal_checker.xy_goal_tolerance": 0.06,
+      "FollowPath.vx_max": 0.5
+    },
+    "/small_point_lio": {
+      "laser_point_cov": 0.001,
+      "map_backend": "moment",
+      "moment_map_resolution": 0.5
+    },
+    "/fake_vel_transform": {
+      "spin_speed": 1.5
+    },
+    "/collision_monitor": {
+      "EmergencyStop.points": "[[0.60939, 0.0], [0.4309, 0.4309], [0.0, 0.60939], [-0.4309, 0.4309], [-0.60939, 0.0], [-0.4309, -0.4309], [-0.0, -0.60939], [0.4309, -0.4309]]"
+    }
+  },
+  "warmup": {
+    "sim_seconds": 8.039000000000001,
+    "wall_seconds": 8.121457413999451,
+    "truth": [
+      1.9999999999999925,
+      2.000000000000002
+    ],
+    "odom": [
+      0.02779733820238221,
+      0.006739227696679888,
+      -0.0026785732235825323
+    ]
+  },
+  "counts": {
+    "/rm_sim/cmd_vel_safe": 4297,
+    "/cmd_vel_watchdog/healthy": 4297,
+    "/clock": 38776,
+    "/rm_sim/ground_truth": 3749,
+    "/joint_states": 37480,
+    "/odom": 352,
+    "/scan": 352,
+    "/plan": 18,
+    "/cmd_vel_nav": 278,
+    "/collision_monitor_state": 1
+  },
+  "real_time_factor": 0.8842975449608799,
+  "passed": false
+}

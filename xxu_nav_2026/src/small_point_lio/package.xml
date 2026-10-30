@@ -6,6 +6,8 @@
   <description>an advanced Point-LIO algorithm implementation</description>
   <maintainer email="1709185482@qq.com">Yingjie Huang</maintainer>
   <license>MIT</license>
+  <!-- Optional SMALL_POINT_LIO_ZLIO_MAP component, see 3rdparty/zlio_map/LICENSE. -->
+  <license>GPL-2.0-only</license>
   <author email="1709185482@qq.com">Yingjie Huang</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
@@ -22,6 +24,7 @@
   <depend>tf2_geometry_msgs</depend>
   <depend>std_srvs</depend>
   <depend>std_msgs</depend>
+
 
 
   <export>

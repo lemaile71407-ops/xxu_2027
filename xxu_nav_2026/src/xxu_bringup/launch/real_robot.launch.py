@@ -7,8 +7,8 @@ launch only owns the common perception, localization, Nav2, command
 transformation, and final safety gate.
 """
 
+
 from launch import LaunchDescription
-from xxu_description.launch_helpers import velocity_chain
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -21,9 +21,12 @@ from launch.substitutions import (
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
+from xxu_bringup.interfaces import interfaces
+from xxu_bringup.velocity_launch import velocity_chain
 
 
 def generate_launch_description():
+    contract = interfaces()
     bringup_share = FindPackageShare("xxu_bringup")
     description_share = FindPackageShare("xxu_description")
 
@@ -78,7 +81,7 @@ def generate_launch_description():
 
     lio = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
-            PathJoinSubstitution([description_share, "launch", "mid360_lio.launch.py"])
+            PathJoinSubstitution([bringup_share, "launch", "mid360_lio.launch.py"])
         ]),
         condition=IfCondition(enable_lio),
         launch_arguments={
@@ -106,7 +109,7 @@ def generate_launch_description():
         condition=IfCondition(enable_lio),
         parameters=[{
             "use_sim_time": use_sim_time,
-            "target_frame": "base_footprint",
+            "target_frame": contract.frame('ground_base'),
             "transform_tolerance": 0.10,
             "min_height": 0.05,
             "max_height": 0.50,
@@ -120,7 +123,7 @@ def generate_launch_description():
             "inf_epsilon": 1.0,
             "scan_qos_reliability": "reliable",
             "publish_processed_cloud": True,
-            "processed_cloud_frame": "base_footprint",
+            "processed_cloud_frame": contract.frame('ground_base'),
             "processed_cloud_project_to_2d": True,
             "processed_cloud_z_value": 0.0,
             "crop_min_x": -40.0,
@@ -129,9 +132,9 @@ def generate_launch_description():
             "crop_max_y": 40.0,
         }],
         remappings=[
-            ("cloud_in", "/cloud_deskewed"),
-            ("scan", "/scan"),
-            ("processed_cloud", "/mid360/points_navigation"),
+            ("cloud_in", contract.topic('localization.deskewed_cloud')),
+            ("scan", contract.topic('localization.scan')),
+            ("processed_cloud", contract.topic('localization.navigation_cloud')),
         ],
     )
 
@@ -150,18 +153,18 @@ def generate_launch_description():
             "enable_gicp": enable_gicp,
             "enable_localization": enable_localization,
             "gicp_pcd_map": gicp_pcd_map,
-            "cmd_vel_in_topic": "cmd_vel_smoothed",
-            "cmd_vel_out_topic": "/cmd_vel_collision",
+            "cmd_vel_in_topic": contract.topic("navigation.smoothed_output", relative=True),
+            "cmd_vel_out_topic": contract.topic('navigation.collision_output'),
         }.items(),
     )
 
     fake_vel_transform, cmd_vel_watchdog = velocity_chain(
         use_sim_time=use_sim_time, use_fake_frame=use_fake_frame,
-        cmd_vel_topic="/cmd_vel_collision",
+        cmd_vel_topic=contract.topic('navigation.collision_output'),
         spin_speed=ParameterValue(gyro_spin_rate, value_type=float),
         velocity_window=ParameterValue(nav_velocity_smoothing_window, value_type=float),
         joint_states_topic=joint_states_topic,
-        watchdog_parameters={"status_topic": "/cmd_vel_watchdog/healthy", "tf_topic": "/tf"},
+        watchdog_parameters={"status_topic": contract.topic('system.healthy'), "tf_topic": contract.topic('system.tf')},
     )
 
     chassis_controller = Node(
@@ -179,9 +182,9 @@ def generate_launch_description():
             "max_wheel_speed": 100.0,
             "timeout": 0.3,
             "publish_rate": 50.0,
-            "cmd_vel_topic": "/cmd_vel",
+            "cmd_vel_topic": contract.topic('navigation.chassis_input'),
             "wheel_command_topic": wheel_command_topic,
-            "expected_frame_id": "base_link",
+            "expected_frame_id": contract.frame('navigation_base'),
             "accept_empty_frame_id": True,
         }],
     )
@@ -263,17 +266,17 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "lidar_topic",
-            default_value="/livox/lidar",
+            default_value=contract.topic('radar.pointcloud'),
             description="Raw Livox PointCloud2; frame livox_frame, x/y/z+tag+timestamp fields",
         ),
         DeclareLaunchArgument(
             "imu_topic",
-            default_value="/livox/imu",
+            default_value=contract.topic('radar.imu'),
             description="Raw Livox Imu; frame livox_frame, acceleration in g",
         ),
         DeclareLaunchArgument(
             "joint_states_topic",
-            default_value="/joint_states",
+            default_value=contract.topic('gimbal.joint_states'),
             description="Gimbal JointState containing gimbal_joint position and velocity",
         ),
         DeclareLaunchArgument(
@@ -293,7 +296,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "wheel_command_topic",
-            default_value="/wheel_velocity_controller/commands",
+            default_value=contract.topic('chassis.wheel_command'),
             description="Float64MultiArray [fl, fr, rl, rr] wheel speeds in rad/s",
         ),
         DeclareLaunchArgument(

@@ -9,6 +9,7 @@
 #include "eskf.h"
 #include "parameters.h"
 #include "small_ivox.h"
+#include "moment_map.h"
 #include <pch.h>
 
 namespace small_point_lio {
@@ -39,6 +40,7 @@ namespace small_point_lio {
         eskf kf;
         // for h_point
         std::shared_ptr<SmallIVox> ivox;
+        std::unique_ptr<MomentMap> moment_map;
         Eigen::Matrix<state::value_type, 3, 1> Lidar_T_wrt_IMU;
         Eigen::Matrix<state::value_type, 3, 3> Lidar_R_wrt_IMU;
         Eigen::Vector3f point_lidar_frame;
@@ -52,6 +54,9 @@ namespace small_point_lio {
         Estimator();
 
         void reset();
+        // Capture uncertainty at observation time, including deferred inserts.
+        void add_map_point(const Eigen::Vector3f &world, bool defer = false);
+        MomentMap::Mat6 map_pose_covariance() const;
 
         [[nodiscard]] Eigen::Matrix<state::value_type, state::DIM, state::DIM> process_noise_cov() const;
 

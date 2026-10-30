@@ -1,0 +1,29 @@
+--- check_ega_navigation.py
++++ check_ega_navigation.py
+@@ -242,7 +242,7 @@
+             raise RuntimeError('navigation failed to become ready')
+         for node, names in [('/local_costmap/local_costmap', ['robot_radius', 'inflation_layer.inflation_radius']),
+                             ('/controller_server', ['goal_checker.xy_goal_tolerance', 'FollowPath.vx_max']),
+-                            ('/small_point_lio', ['laser_point_cov']),
++                            ('/small_point_lio', ['laser_point_cov', 'map_backend', 'moment_map_resolution']),
+                             ('/fake_vel_transform', ['spin_speed']),
+                             ('/collision_monitor', ['EmergencyStop.points'])]:
+             c = n.create_client(GetParameters, node + '/get_parameters')
+@@ -251,6 +251,17 @@
+             values = wait(c.call_async(GetParameters.Request(names=names)), 3).values
+             report.setdefault('parameters', {})[node] = {name: (v.double_value if v.type == 3 else v.string_value) for name, v in zip(names, values)}
+         print(args.name, 'ready', json.dumps(report['parameters']), flush=True)
++        # Allow independent truth/odometry/resource observer to measure the stationary startup.
++        warm_clock = current['clock']
++        warm_wall = time.monotonic()
++        while current['clock'] - warm_clock < 8.0 and time.monotonic() - warm_wall < 90 and proc.poll() is None:
++            spin(.1)
++        report['warmup'] = {'sim_seconds': current['clock'] - warm_clock,
++                            'wall_seconds': time.monotonic() - warm_wall,
++                            'truth': current['truth'], 'odom': current['odom']}
++        if proc.poll() is not None or current['clock'] - warm_clock < 8.0:
++            raise RuntimeError('stationary warmup could not complete')
++        (folder / 'motion_started').write_text('1')
+         for xy in goals:
+             goal = NavigateToPose.Goal()
+             goal.pose.header.frame_id = 'map'

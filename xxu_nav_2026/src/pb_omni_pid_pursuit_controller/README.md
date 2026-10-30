@@ -3,6 +3,13 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Build](https://github.com/LihanChen2004/pb_omni_pid_pursuit_controller/actions/workflows/ci.yml/badge.svg)](https://github.com/LihanChen2004/pb_omni_pid_pursuit_controller/actions/workflows/ci.yml)
 
+本包同时导出两个可选 Nav2 控制器：
+
+- `pb_omni_pid_pursuit_controller::OmniPidPursuitController`：全向 PID 路径追踪。
+- `goal_approach_controller::GoalApproachController`：接近目标时限速的外层插件，已合入本包，插件名保持兼容。它通过 `inner_plugin` 加载内部控制器；包裹 PID 时设为上面的 PID 类名。为兼容已有配置，未指定时仍使用原来的 MPPI 内部插件默认值，内部插件需已安装。
+
+当前导航与探索配置直接使用官方 MPPI，不加载本包；需要备用控制器时单独构建/安装并修改配置。此处只合并包和构建注册，保留两个插件的原有算法。PID 代码沿用 Apache-2.0 许可，目标接近插件沿用原包 MIT 许可。
+
 ## Configuration
 
 | Parameter | Description |
