@@ -1,0 +1,13 @@
+{
+  "date": "2026-11-09",
+  "initial_failure": "insufficient support in the weakest initialization geometry direction",
+  "scene_max_observed_z_about_m": 0.35,
+  "initialization_optimization_root_voxel_m": {
+    "stock": 1.0,
+    "new_map_profile": 0.25
+  },
+  "minimum_directional_support": 15,
+  "minimum_planes": 10,
+  "thresholds_unchanged": true,
+  "classification": "New map profile resolution adaptation; not a verified algorithm fix"
+}

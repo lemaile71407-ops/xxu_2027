@@ -1,0 +1,56 @@
+{
+  "date": "2026-11-09",
+  "new_baseline": true,
+  "goals": [
+    [
+      2.5,
+      2
+    ],
+    [
+      2,
+      2
+    ],
+    [
+      2,
+      2.4
+    ],
+    [
+      2,
+      2
+    ]
+  ],
+  "robot_radius_m": 0.533,
+  "map_clearance_checks": [
+    {
+      "target": [
+        2.5,
+        2
+      ],
+      "straight_corridor_min_known_free_clearance_m": 1.1884864324004714
+    },
+    {
+      "target": [
+        2,
+        2
+      ],
+      "straight_corridor_min_known_free_clearance_m": 1.1884864324004714
+    },
+    {
+      "target": [
+        2,
+        2.4
+      ],
+      "straight_corridor_min_known_free_clearance_m": 1.1313708498984762
+    },
+    {
+      "target": [
+        2,
+        2
+      ],
+      "straight_corridor_min_known_free_clearance_m": 1.1313708498984762
+    }
+  ],
+  "translation_axis_cap_mps": 0.1,
+  "angular_cap_radps": 0.2,
+  "scope": "XY targets near known spawn; no yaw-goal, static detour, passage, or fault injection acceptance"
+}

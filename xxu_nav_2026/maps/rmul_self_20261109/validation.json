@@ -1,0 +1,68 @@
+{
+  "date": "2026-11-09",
+  "new_baseline": true,
+  "survey_completed": true,
+  "three_dimensional_points": 26375,
+  "map_frame": "fixed startup map = odom + [2,2,base_height]; no trajectory fitting",
+  "resolution": 0.05,
+  "size": [
+    263,
+    183
+  ],
+  "origin": [
+    -0.25,
+    -0.25
+  ],
+  "occupied_height_band_m": [
+    0.1,
+    0.34
+  ],
+  "occupancy_dilation_cells": 2,
+  "free_rays": "Only observed endpoint returns in height band; transformed actual lidar origins; unknown remains unknown",
+  "grid_cells": {
+    "free": 26522,
+    "occupied": 10011,
+    "unknown": 11596
+  },
+  "protected_original_models_unchanged": true,
+  "coverage_checks": {
+    "spawn": {
+      "xy": [
+        2.0,
+        2.0
+      ],
+      "cell": 254,
+      "known_free_clearance_m": 1.4008925726121901
+    },
+    "left_approach": {
+      "xy": [
+        2.0,
+        3.8
+      ],
+      "cell": 254,
+      "known_free_clearance_m": 0.7000000000000001
+    },
+    "old_detour_goal": {
+      "xy": [
+        6.3,
+        3.8
+      ],
+      "cell": 254,
+      "known_free_clearance_m": 1.1510864433221337
+    },
+    "old_passage_goal": {
+      "xy": [
+        6.3,
+        5.2
+      ],
+      "cell": 205,
+      "known_free_clearance_m": 0.0
+    }
+  },
+  "limitations": [
+    "No Nav2 or TDT localization acceptance yet",
+    "Low plate below 0.10 m is excluded, as in the earlier test recipe",
+    "Unobserved/occluded regions remain unknown; no CAD geometry fills the map",
+    "Grid prior descriptors are sampled from the acquired 3D map, not additional real scans"
+  ]
+}

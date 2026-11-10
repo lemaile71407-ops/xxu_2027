@@ -20,6 +20,7 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>lifecycle_msgs</exec_depend>
+  <exec_depend>localization_interfaces</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>xxu_gicp_localization</exec_depend>
@@ -53,6 +54,7 @@
   <exec_depend>rm_sim_26</exec_depend>
   <exec_depend>small_point_lio</exec_depend>
   <exec_depend>fake_vel_transform</exec_depend>
+  <exec_depend>bringup</exec_depend>
   <exec_depend>xxu_livox_sim</exec_depend>
   <exec_depend>ros_gz_sim</exec_depend>
   <exec_depend>ros_gz_bridge</exec_depend>

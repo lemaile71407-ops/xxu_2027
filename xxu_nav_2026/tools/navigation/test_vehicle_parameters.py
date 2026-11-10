@@ -13,7 +13,8 @@ import unittest
 from unittest.mock import patch
 
 from launch import LaunchContext
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, GroupAction
+from launch.utilities import normalize_to_list_of_substitutions, perform_substitutions
 from launch.substitutions import TextSubstitution
 from launch_ros.actions import Node
 import yaml
@@ -21,6 +22,7 @@ import yaml
 from xxu_bringup.launch_helpers import (
     RobotGeometryParameters, RobotProfile, lio_preprocessing, nav2_parameters,
 )
+from xxu_bringup.sensor_launch import sensor_preprocessing, small_point_lio
 
 
 SHARE = Path(__file__).resolve().parents[2] / 'src/xxu_bringup'
@@ -34,6 +36,88 @@ if not LIO_PROFILE.is_file():
 
 
 class VehicleParametersTest(unittest.TestCase):
+    def test_external_mode_excludes_both_amcl_and_gicp(self):
+        spec = importlib.util.spec_from_file_location('nav_modes', SHARE / 'launch/navigation.launch.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        for mode in ('amcl', 'external'):
+            context = LaunchContext()
+            context.launch_configurations.update(enable_localization='true', localization_mode=mode,
+                                                  enable_gicp='true')
+            description = module.generate_launch_description()
+            for action in description.entities:
+                if isinstance(action, DeclareLaunchArgument):
+                    action.execute(context)
+            packages = []
+
+            def visit(actions):
+                for action in actions:
+                    if action.condition is not None and not action.condition.evaluate(context):
+                        continue
+                    if isinstance(action, Node):
+                        packages.append(perform_substitutions(context, normalize_to_list_of_substitutions(
+                            action.node_package)))
+                    elif isinstance(action, GroupAction):
+                        visit(action.get_sub_entities())
+
+            visit(description.entities)
+            self.assertEqual(packages.count('nav2_map_server'), 1)
+            self.assertEqual(packages.count('nav2_controller'), 1)
+            self.assertEqual('nav2_amcl' in packages, mode == 'amcl')
+            self.assertEqual('xxu_gicp_localization' in packages, mode == 'amcl')
+
+    def test_real_sensor_entry_can_disable_only_the_estimator(self):
+        spec = importlib.util.spec_from_file_location(
+            'mid360_lio_launch', SHARE / 'launch/mid360_lio.launch.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        nodes = []
+
+        def capture(**kwargs):
+            nodes.append(kwargs)
+            return Node(**kwargs)
+
+        with patch.object(module, 'Node', side_effect=capture), \
+                patch('xxu_bringup.sensor_launch.Node', side_effect=capture):
+            description = module.generate_launch_description()
+        declaration = next(action for action in description.entities
+                           if isinstance(action, DeclareLaunchArgument) and action.name == 'enable_lio')
+        context = LaunchContext()
+        declaration.execute(context)
+        estimator = next(node for node in nodes if node['package'] == 'small_point_lio')
+        self.assertTrue(estimator['condition'].evaluate(context))
+        context.launch_configurations['enable_lio'] = 'false'
+        self.assertFalse(estimator['condition'].evaluate(context))
+        self.assertTrue(any(node['package'] == 'xxu_bringup' for node in nodes))
+
+    def test_navigation_servers_can_be_constructed_without_localization(self):
+        spec = importlib.util.spec_from_file_location(
+            'navigation_launch', SHARE / 'launch/navigation.launch.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with patch.object(module, 'Node', side_effect=lambda **kw: kw):
+            servers = module.navigation_server_nodes('/nav.yaml', [], module.interfaces())
+            localization = module.localization_nodes(
+                '/nav.yaml', 'true', 'false', '/gicp.yaml', '', [])
+            map_server = module.map_server_node('/nav.yaml', '/map.yaml', 'true')
+        self.assertEqual(len(servers), 8)
+        self.assertNotIn('nav2_amcl', {node['package'] for node in servers})
+        self.assertEqual([node['package'] for node in localization],
+                         ['nav2_amcl', 'xxu_gicp_localization'])
+        self.assertEqual(map_server['package'], 'nav2_map_server')
+
+    def test_sensor_preprocessing_can_be_constructed_without_an_estimator(self):
+        profile = RobotProfile('ega_folded', str(GEOMETRY), json.loads(GEOMETRY.read_text()))
+        for platform in ['real', 'gazebo', 'rm_sim']:
+            with self.subTest(platform=platform), \
+                    patch('xxu_bringup.sensor_launch.Node', side_effect=lambda **kw: kw):
+                actions = sensor_preprocessing(
+                    platform, use_sim_time='true', profile=profile if platform == 'rm_sim' else None)
+                self.assertTrue(actions)
+                self.assertTrue(all(action['package'] == 'xxu_bringup' for action in actions))
+                estimator = small_point_lio(platform, use_sim_time='true', config_file='/lio.yaml')
+                self.assertEqual(estimator['package'], 'small_point_lio')
+
     def test_autonomous_mapping_resolves_selected_vehicle(self):
         launch_file = SHARE.parent / 'xxu_slam_toolbox/launch/autonomous_mapping.launch.py'
         spec = importlib.util.spec_from_file_location('autonomous_mapping', launch_file)

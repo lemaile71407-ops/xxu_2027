@@ -14,11 +14,11 @@ def sensor_chain_defaults(platform):
     return yaml.safe_load((share / "config/sensor_chain.yaml").read_text())[platform]
 
 
-def lio_preprocessing(platform, *, use_sim_time, config_file, profile=None,
-                      pointcloud_overrides=None, imu_overrides=None,
-                      pointcloud_remappings=None, imu_remappings=None,
-                      lio_overrides=None, conditions=None):
-    """Construct the platform's preprocessing and estimator from one definition."""
+def sensor_preprocessing(platform, *, use_sim_time, profile=None,
+                         pointcloud_overrides=None, imu_overrides=None,
+                         pointcloud_remappings=None, imu_remappings=None,
+                         conditions=None):
+    """Construct platform preprocessing without choosing a localization backend."""
     definitions = sensor_chain_defaults(platform)
     contract = interfaces()
     overrides = {"pointcloud": dict(pointcloud_overrides or {}), "imu": dict(imu_overrides or {})}
@@ -45,6 +45,13 @@ def lio_preprocessing(platform, *, use_sim_time, config_file, profile=None,
         actions.append(Node(package="xxu_bringup", executable=definition["executable"],
                             name=definition["name"], output="screen", parameters=[parameters],
                             remappings=list(mappings.items()), condition=conditions.get(key)))
+    return actions
+
+
+def small_point_lio(platform, *, use_sim_time, config_file, profile=None,
+                    lio_overrides=None, condition=None):
+    """Construct the existing estimator independently of sensor preprocessing."""
+    geometry = profile.geometry if profile else {}
     parameters = dict(lio_overrides or {})
     if geometry:
         parameters["planar_z"] = geometry["base_height"]
@@ -59,7 +66,23 @@ def lio_preprocessing(platform, *, use_sim_time, config_file, profile=None,
         parameters["use_sim_time"] = use_sim_time
     if parameters:
         files.append(parameters)
-    actions.append(Node(package="small_point_lio", executable="small_point_lio_node",
-                        name="small_point_lio", output="screen", parameters=files,
-                        condition=conditions.get("lio")))
-    return actions
+    return Node(package="small_point_lio", executable="small_point_lio_node",
+                name="small_point_lio", output="screen", parameters=files,
+                condition=condition)
+
+
+def lio_preprocessing(platform, *, use_sim_time, config_file, profile=None,
+                      pointcloud_overrides=None, imu_overrides=None,
+                      pointcloud_remappings=None, imu_remappings=None,
+                      lio_overrides=None, conditions=None):
+    """Compatibility wrapper for the original combined launch construction."""
+    conditions = conditions or {}
+    return sensor_preprocessing(
+        platform, use_sim_time=use_sim_time, profile=profile,
+        pointcloud_overrides=pointcloud_overrides, imu_overrides=imu_overrides,
+        pointcloud_remappings=pointcloud_remappings, imu_remappings=imu_remappings,
+        conditions=conditions,
+    ) + [small_point_lio(
+        platform, use_sim_time=use_sim_time, config_file=config_file,
+        profile=profile, lio_overrides=lio_overrides, condition=conditions.get("lio"),
+    )]

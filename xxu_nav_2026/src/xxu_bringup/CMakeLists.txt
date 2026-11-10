@@ -18,6 +18,7 @@ install(
     scripts/wait_for_odom.py
     scripts/rm_sim_adapter.py
     scripts/cmd_vel_odometry.py
+    scripts/zlio_base_odometry.py
     scripts/gimbal_stabilizer.py
     scripts/kill_simulation.sh
     scripts/pointcloud_frame_republisher.py

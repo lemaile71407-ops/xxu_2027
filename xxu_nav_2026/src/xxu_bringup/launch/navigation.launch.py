@@ -13,6 +13,133 @@ from xxu_bringup.interfaces import interfaces
 from xxu_bringup.navigation_parameters import nav2_parameters
 
 
+def map_server_node(configured_params, map_file, use_sim_time):
+    """Construct the navigation map server."""
+    return Node(
+        package="nav2_map_server",
+        executable="map_server",
+        name="map_server",
+        output="screen",
+        parameters=[configured_params, {"yaml_filename": map_file, "use_sim_time": use_sim_time}],
+    )
+
+
+def localization_nodes(configured_params, use_sim_time, enable_gicp,
+                       default_gicp_params, gicp_pcd_map, nav2_common_remaps):
+    """Construct the existing AMCL and optional GICP localization nodes."""
+    return [
+        Node(
+            package="nav2_amcl",
+            executable="amcl",
+            name="amcl",
+            output="both",
+            # AMCL remains the coarse initializer/relocalizer, but must not
+            # publish map->odom while GICP owns that transform.
+            parameters=[configured_params, {
+                "tf_broadcast": ParameterValue(PythonExpression([
+                    "'false' if '", enable_gicp, "' == 'true' else 'true'",
+                ]), value_type=bool),
+            }],
+            remappings=nav2_common_remaps,
+        ),
+        Node(
+            package="xxu_gicp_localization",
+            executable="gicp_localization_node",
+            name="gicp_localization",
+            output="both",
+            condition=IfCondition(enable_gicp),
+            parameters=[default_gicp_params, {
+                "use_sim_time": use_sim_time,
+                "pcd_map": gicp_pcd_map,
+            }],
+        ),
+    ]
+
+
+def navigation_server_nodes(selected_nav_params, nav2_common_remaps, contract):
+    """Construct the Nav2 navigation servers without selecting localization."""
+    return [
+        Node(
+            package="nav2_controller",
+            executable="controller_server",
+            output="screen",
+            parameters=[selected_nav_params],
+            remappings=nav2_common_remaps + [("cmd_vel", contract.topic("navigation.controller_output", relative=True))],
+        ),
+        Node(
+            package="nav2_smoother",
+            executable="smoother_server",
+            name="smoother_server",
+            output="screen",
+            parameters=[selected_nav_params],
+            remappings=nav2_common_remaps,
+        ),
+        Node(
+            package="nav2_planner",
+            executable="planner_server",
+            name="planner_server",
+            output="screen",
+            parameters=[selected_nav_params],
+            remappings=nav2_common_remaps,
+        ),
+        Node(
+            package="nav2_behaviors",
+            executable="behavior_server",
+            name="behavior_server",
+            output="screen",
+            parameters=[selected_nav_params],
+            remappings=nav2_common_remaps + [("cmd_vel", contract.topic("navigation.controller_output", relative=True))],
+        ),
+        Node(
+            package="nav2_bt_navigator",
+            executable="bt_navigator",
+            name="bt_navigator",
+            output="screen",
+            parameters=[selected_nav_params],
+            remappings=nav2_common_remaps,
+        ),
+        Node(
+            package="nav2_waypoint_follower",
+            executable="waypoint_follower",
+            name="waypoint_follower",
+            output="screen",
+            parameters=[selected_nav_params],
+            remappings=nav2_common_remaps,
+        ),
+        Node(
+            package="nav2_velocity_smoother",
+            executable="velocity_smoother",
+            name="velocity_smoother",
+            output="screen",
+            parameters=[selected_nav_params],
+            remappings=nav2_common_remaps + [("cmd_vel", contract.topic("navigation.controller_output", relative=True))],
+        ),
+        Node(
+            package="nav2_collision_monitor",
+            executable="collision_monitor",
+            name="collision_monitor",
+            output="screen",
+            parameters=[selected_nav_params],
+            remappings=nav2_common_remaps,
+        ),
+    ]
+
+
+def localization_lifecycle_manager(use_sim_time, autostart, localization_lifecycle_nodes):
+    """Construct the existing map/localization lifecycle manager."""
+    return Node(
+        package="nav2_lifecycle_manager",
+        executable="lifecycle_manager",
+        name="lifecycle_manager_localization",
+        output="screen",
+        parameters=[{
+            "use_sim_time": use_sim_time,
+            "autostart": autostart,
+            "node_names": localization_lifecycle_nodes,
+        }],
+    )
+
+
 def generate_launch_description():
     contract = interfaces()
     bringup_share = FindPackageShare("xxu_bringup")
@@ -26,6 +153,7 @@ def generate_launch_description():
     autostart = LaunchConfiguration("autostart")
     use_fake_frame = LaunchConfiguration("use_fake_frame")
     enable_localization = LaunchConfiguration("enable_localization")
+    localization_mode = LaunchConfiguration("localization_mode")
     enable_gicp = LaunchConfiguration("enable_gicp")
     gicp_pcd_map = LaunchConfiguration("gicp_pcd_map")
     cmd_vel_in_topic = LaunchConfiguration("cmd_vel_in_topic")
@@ -69,12 +197,14 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('robot_geometry_file', default_value=''),
+        DeclareLaunchArgument('localization_mode', default_value='amcl',
+                             choices=['amcl', 'external']),
         DeclareLaunchArgument(
             "enable_localization",
             default_value="false",
             description="Re-enable paused AMCL/GICP localization and map navigation",
         ),
-        LogInfo(msg="AMCL/GICP and map navigation require enable_localization:=true (temporarily disabled by default)."),
+        LogInfo(msg="Map navigation requires enable_localization:=true; external mode uses the supplied localization state and TF."),
         DeclareLaunchArgument(
             "use_sim_time",
             default_value="true",
@@ -138,112 +268,18 @@ def generate_launch_description():
         GroupAction(
             condition=IfCondition(enable_localization),
             actions=[
-                Node(
-                    package="nav2_map_server",
-                    executable="map_server",
-                    name="map_server",
-                    output="screen",
-                    parameters=[configured_params, {"yaml_filename": map_file, "use_sim_time": use_sim_time}],
-                ),
-                Node(
-                    package="nav2_amcl",
-                    executable="amcl",
-                    name="amcl",
-                    output="both",
-                    # AMCL remains the coarse initializer/relocalizer, but must not
-                    # publish map->odom while GICP owns that transform.
-                    parameters=[configured_params, {
-                        "tf_broadcast": ParameterValue(PythonExpression([
-                            "'false' if '", enable_gicp, "' == 'true' else 'true'",
-                        ]), value_type=bool),
-                    }],
-                    remappings=nav2_common_remaps,
-                ),
-                Node(
-                    package="xxu_gicp_localization",
-                    executable="gicp_localization_node",
-                    name="gicp_localization",
-                    output="both",
-                    condition=IfCondition(enable_gicp),
-                    parameters=[default_gicp_params, {
-                        "use_sim_time": use_sim_time,
-                        "pcd_map": gicp_pcd_map,
-                    }],
-                ),
-                Node(
-                    package="nav2_controller",
-                    executable="controller_server",
-                    output="screen",
-                    parameters=[selected_nav_params],
-                    remappings=nav2_common_remaps + [("cmd_vel", contract.topic("navigation.controller_output", relative=True))],
-                ),
-                Node(
-                    package="nav2_smoother",
-                    executable="smoother_server",
-                    name="smoother_server",
-                    output="screen",
-                    parameters=[selected_nav_params],
-                    remappings=nav2_common_remaps,
-                ),
-                Node(
-                    package="nav2_planner",
-                    executable="planner_server",
-                    name="planner_server",
-                    output="screen",
-                    parameters=[selected_nav_params],
-                    remappings=nav2_common_remaps,
-                ),
-                Node(
-                    package="nav2_behaviors",
-                    executable="behavior_server",
-                    name="behavior_server",
-                    output="screen",
-                    parameters=[selected_nav_params],
-                    remappings=nav2_common_remaps + [("cmd_vel", contract.topic("navigation.controller_output", relative=True))],
-                ),
-                Node(
-                    package="nav2_bt_navigator",
-                    executable="bt_navigator",
-                    name="bt_navigator",
-                    output="screen",
-                    parameters=[selected_nav_params],
-                    remappings=nav2_common_remaps,
-                ),
-                Node(
-                    package="nav2_waypoint_follower",
-                    executable="waypoint_follower",
-                    name="waypoint_follower",
-                    output="screen",
-                    parameters=[selected_nav_params],
-                    remappings=nav2_common_remaps,
-                ),
-                Node(
-                    package="nav2_velocity_smoother",
-                    executable="velocity_smoother",
-                    name="velocity_smoother",
-                    output="screen",
-                    parameters=[selected_nav_params],
-                    remappings=nav2_common_remaps + [("cmd_vel", contract.topic("navigation.controller_output", relative=True))],
-                ),
-                Node(
-                    package="nav2_collision_monitor",
-                    executable="collision_monitor",
-                    name="collision_monitor",
-                    output="screen",
-                    parameters=[selected_nav_params],
-                    remappings=nav2_common_remaps,
-                ),
-                Node(
-                    package="nav2_lifecycle_manager",
-                    executable="lifecycle_manager",
-                    name="lifecycle_manager_localization",
-                    output="screen",
-                    parameters=[{
-                        "use_sim_time": use_sim_time,
-                        "autostart": autostart,
-                        "node_names": localization_lifecycle_nodes,
-                    }],
-                ),
+                map_server_node(configured_params, map_file, use_sim_time),
+                GroupAction(condition=IfCondition(PythonExpression([
+                    "'", localization_mode, "' == 'amcl'",
+                ])), actions=[
+                    *localization_nodes(configured_params, use_sim_time, enable_gicp,
+                                        default_gicp_params, gicp_pcd_map, nav2_common_remaps),
+                    localization_lifecycle_manager(use_sim_time, autostart, localization_lifecycle_nodes),
+                ]),
+                GroupAction(condition=IfCondition(PythonExpression([
+                    "'", localization_mode, "' == 'external'",
+                ])), actions=[localization_lifecycle_manager(use_sim_time, autostart, ['map_server'])]),
+                *navigation_server_nodes(selected_nav_params, nav2_common_remaps, contract),
                 Node(
                     package="nav2_lifecycle_manager",
                     executable="lifecycle_manager",
@@ -251,7 +287,7 @@ def generate_launch_description():
                     output="screen",
                     parameters=[{
                         "use_sim_time": use_sim_time,
-                        # Planner activation needs AMCL's map -> odom transform.
+                        # Activation waits for localization in the selected mode.
                         # nav2_navigation_startup starts this manager once it exists.
                         "autostart": False,
                         "node_names": navigation_lifecycle_nodes,
@@ -262,7 +298,10 @@ def generate_launch_description():
                     executable="nav2_navigation_startup.py",
                     name="nav2_navigation_startup",
                     output="screen",
-                    parameters=[{"use_sim_time": use_sim_time}],
+                    parameters=[{"use_sim_time": use_sim_time,
+                                 "require_localization": ParameterValue(PythonExpression([
+                                     "'", localization_mode, "' == 'external'",
+                                 ]), value_type=bool)}],
                 ),
                 Node(
                     package="rviz2",

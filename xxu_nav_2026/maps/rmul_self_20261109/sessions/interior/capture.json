@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-09",
+  "completed": true,
+  "scope": "stationary supplementary view; independent frontend session",
+  "known_startup_seed": [
+    6.3,
+    3.8,
+    0.07973823713479496
+  ],
+  "frames": 202,
+  "saved_frames": 36,
+  "points": 4025,
+  "map_offset": [
+    6.3,
+    3.8,
+    0.07973823713479496
+  ],
+  "frontend_session": [
+    5576888134509342516,
+    0
+  ],
+  "source": "FrontendFrame cloud transformed by its atomic ZLIO posterior; no CAD occupancy or Gazebo truth",
+  "final_base_odom": [
+    0.00031788536900681464,
+    -0.000674343585705
+  ]
+}

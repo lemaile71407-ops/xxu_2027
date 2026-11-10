@@ -21,7 +21,7 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
 from sensor_msgs.msg import JointState, LaserScan
-from std_msgs.msg import Bool
+from std_msgs.msg import Bool, String
 from tf2_msgs.msg import TFMessage
 from tf2_ros import Buffer, TransformListener
 
@@ -40,6 +40,99 @@ def _finite_twist(message: TwistStamped) -> bool:
 
 def _frame_name(frame: str) -> str:
     return str(frame).strip().lstrip("/")
+
+
+class LocalizationHealth:
+    """Check backend trust, steady-clock source progress and ROS source age.
+
+    Backend epochs are local counters, independent of frontend generations.
+    Zero-stamp transition notices cannot renew source freshness.
+    """
+
+    def __init__(self, timeout=.5, recovery_hold=1.):
+        if not math.isfinite(timeout) or timeout <= 0 or not math.isfinite(recovery_hold) or recovery_hold < 0:
+            raise ValueError('localization timeout must be positive and recovery hold nonnegative')
+        self.timeout, self.recovery_hold = timeout, recovery_hold
+        self.identity, self.revision = None, -1
+        self.state_stamp = self.pose_stamp = 0
+        self.state_received = self.state_progress = None
+        self.pose_received = self.pose_progress = None
+        self.trusted = False
+        self.stable_since = None
+
+    def close(self):
+        self.trusted = False
+        self.state_progress = self.pose_progress = self.pose_received = None
+        self.stable_since = None
+
+    def observe_state(self, text, received):
+        try:
+            parts = [part.split('=', 1) for part in text.split(';')]
+            if any(len(part) != 2 for part in parts) or len({part[0] for part in parts}) != len(parts):
+                raise ValueError('malformed state fields')
+            fields = dict(parts)
+            epoch, generation, revision, stamp = (int(fields[k]) for k in ('epoch', 'generation', 'pose_revision', 'stamp_ns'))
+            if min(epoch, generation, revision, stamp) < 0:
+                raise ValueError('negative state identity or stamp')
+            identity = (epoch, generation)
+            if self.identity is not None and (identity < self.identity or (identity == self.identity and revision < self.revision)):
+                raise ValueError('regressed state version')
+            if identity != self.identity:
+                self.close()
+                self.state_stamp = self.pose_stamp = 0
+                self.identity = identity
+            self.revision = revision
+            self.state_received = received
+            trusted = (fields['status'] in ('NORMAL', 'OBS_DEGRADED')
+                       and fields['pose_trusted'] == 'true' and fields['tf_frozen'] == 'false')
+            if not trusted:
+                self.close()
+                return
+            if stamp and stamp < self.state_stamp:
+                raise ValueError('regressed state source time')
+            if stamp > self.state_stamp:
+                self.state_stamp, self.state_progress = stamp, received
+            self.trusted = True
+        except (ValueError, KeyError, TypeError):
+            self.close()
+
+    def observe_pose(self, message, received):
+        stamp = message.header.stamp
+        pose = message.pose.pose
+        values = [pose.position.x, pose.position.y, pose.position.z,
+                  pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w]
+        stamp_ns = stamp.sec * 1_000_000_000 + stamp.nanosec
+        if (message.header.frame_id != 'map' or not message.child_frame_id
+                or stamp.sec < 0 or not 0 <= stamp.nanosec < 1_000_000_000 or stamp_ns <= 0
+                or not all(math.isfinite(v) for v in values)
+                or sum(v*v for v in values[3:]) < 1.e-12 or stamp_ns < self.pose_stamp):
+            self.pose_received = self.pose_progress = self.stable_since = None
+            return
+        self.pose_received = received
+        if stamp_ns > self.pose_stamp:
+            self.pose_stamp, self.pose_progress = stamp_ns, received
+
+    def check(self, now, ros_now_ns):
+        reasons = []
+        if not self.trusted:
+            reasons.append('localization untrusted or malformed')
+        for name, received, progress, stamp in (
+                ('state', self.state_received, self.state_progress, self.state_stamp),
+                ('pose', self.pose_received, self.pose_progress, self.pose_stamp)):
+            if (received is None or progress is None or not 0 <= now-received <= self.timeout
+                    or not 0 <= now-progress <= self.timeout):
+                reasons.append(f'localization {name} receipt/source-progress timeout')
+            # Allow 50 ms of ROS clock delivery skew, never an unbounded future stamp.
+            if stamp <= 0 or not -50_000_000 <= ros_now_ns-stamp <= self.timeout * 1.e9:
+                reasons.append(f'localization {name} source timestamp expired or invalid')
+        if reasons:
+            self.stable_since = None
+            return False, reasons
+        if self.stable_since is None:
+            self.stable_since = now
+        if now-self.stable_since < self.recovery_hold:
+            return False, ['localization recovery hold']
+        return True, []
 
 
 class CmdVelWatchdog(Node):
@@ -70,6 +163,11 @@ class CmdVelWatchdog(Node):
         self.declare_parameter("tf_target_frame", "odom")
         self.declare_parameter("tf_source_frame", "base_link")
         self.declare_parameter("tf_timeout", 0.5)
+        self.declare_parameter("require_localization", False)
+        self.declare_parameter("localization_state_topic", "/backend_node/localization_state")
+        self.declare_parameter("localization_pose_topic", "/localization/odometry")
+        self.declare_parameter("localization_timeout", 0.5)
+        self.declare_parameter("localization_recovery_hold", 1.0)
         self.declare_parameter(
             "required_tf_pairs", ["odom->base_footprint", "base_link->gimbal_link"]
         )
@@ -116,6 +214,18 @@ class CmdVelWatchdog(Node):
             pair: None for pair in self.required_tf_pairs
         }
         self._last_health_state = None
+        self.require_localization = bool(self.get_parameter('require_localization').value)
+        self.localization_ready = False
+        if self.require_localization:
+            self.localization_health = LocalizationHealth(
+                float(self.get_parameter('localization_timeout').value),
+                float(self.get_parameter('localization_recovery_hold').value))
+            self.localization_state_subscription = self.create_subscription(
+                String, str(self.get_parameter('localization_state_topic').value),
+                lambda msg: self.localization_health.observe_state(msg.data, time.monotonic()), 100)
+            self.localization_pose_subscription = self.create_subscription(
+                Odometry, str(self.get_parameter('localization_pose_topic').value),
+                lambda msg: self.localization_health.observe_pose(msg, time.monotonic()), 100)
         self.steady_clock = Clock(clock_type=ClockType.STEADY_TIME)
 
         self.publisher = self.create_publisher(TwistStamped, self.output_topic, 10)
@@ -238,6 +348,14 @@ class CmdVelWatchdog(Node):
 
     def _health(self, now):
         reasons = []
+        if self.require_localization:
+            ready, localization_reasons = self.localization_health.check(now, self.get_clock().now().nanoseconds)
+            # Discard buffered commands while closed, and on the opening edge:
+            # release requires a new command after stable localization returns.
+            if not ready or not self.localization_ready:
+                self.last_cmd_receive_time = None
+            self.localization_ready = ready
+            reasons.extend(localization_reasons)
         if not self._fresh(self.last_cmd_receive_time, self.timeout, now):
             reasons.append("command timeout")
         stamp = self.last_cmd.header.stamp

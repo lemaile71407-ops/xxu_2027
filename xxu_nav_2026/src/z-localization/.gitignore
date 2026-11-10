@@ -1,0 +1,85 @@
+# colcon 工作空间与包内构建目录。
+/build*/
+/install*/
+/log*/
+**/build/
+**/install/
+**/log/
+cmake-build-*/
+
+# CMake、Ninja 与编译产物。
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+DartConfiguration.tcl
+compile_commands.json
+build.ninja
+.ninja_deps
+.ninja_log
+*.o
+*.a
+*.so
+*.so.*
+
+# Python 环境与工具缓存。
+.cache/
+.venv/
+/venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 测试、覆盖率与性能分析结果。
+ros_logs/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+/coverage/
+*.gcda
+*.gcno
+*.gcov
+*.profraw
+*.profdata
+
+# 本机地图、采集数据与运行结果。
+/.ros/
+/pcd/
+/bag/
+/bags/
+/rosbags/
+/rosbag2_*/
+/datasets/
+/results/
+/*.bag
+/*.bag.active
+/*.db3*
+/*.mcap*
+*.staging.*/
+
+# 本机环境与配置覆盖。
+/local.env
+/.env
+/.env.*
+!/.env.example
+!/.env.sample
+/CMakeUserPresets.json
+/config/*.local.yaml
+/config/*.local.yml
+/config/*.local.json
+
+# 编辑器配置、临时文件与系统元数据。
+.vscode/
+/.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# 本项目内的第三方源码和隔离安装前缀。
+/third_party/
+/deps/

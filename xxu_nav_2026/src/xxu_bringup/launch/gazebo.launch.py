@@ -24,7 +24,7 @@ from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackagePrefix, FindPackageShare
 from xxu_bringup.interfaces import interfaces
-from xxu_bringup.sensor_launch import lio_preprocessing, sensor_chain_defaults
+from xxu_bringup.sensor_launch import sensor_chain_defaults, sensor_preprocessing, small_point_lio
 from xxu_bringup.velocity_launch import velocity_chain
 
 
@@ -397,8 +397,8 @@ def generate_launch_description():
     # result is expressed at the rigid gimbal-axis frame and shared by LIO and
     # navigation. The false branch keeps the raw-LIO rollback while navigation
     # still receives a deskewed cloud in base_footprint.
-    lio_nodes = lio_preprocessing(
-        "gazebo", use_sim_time=use_sim_time, config_file=small_point_lio_config,
+    lio_nodes = sensor_preprocessing(
+        "gazebo", use_sim_time=use_sim_time,
         pointcloud_overrides={
             "target_frame": PythonExpression([
                 "'", contract.frame("lidar_compensated"), "' if '", compensate_gimbal_for_lio,
@@ -406,17 +406,20 @@ def generate_launch_description():
             ]),
             "use_joint_interpolation": ParameterValue(compensate_gimbal_for_lio, value_type=bool),
         },
-        lio_overrides={"motion_diagnostics_en": ParameterValue(
-            LaunchConfiguration("lio_motion_diagnostics"), value_type=bool)},
         conditions={
             "imu": IfCondition(PythonExpression([
                 "'", enable_lio, "' == 'true' and '",
                 compensate_gimbal_for_lio, "' == 'true'",
             ])),
-            "lio": IfCondition(enable_lio),
             "raw_pointcloud": UnlessCondition(use_livox_native),
         },
     )
+    lio_nodes.append(small_point_lio(
+        "gazebo", use_sim_time=use_sim_time, config_file=small_point_lio_config,
+        lio_overrides={"motion_diagnostics_en": ParameterValue(
+            LaunchConfiguration("lio_motion_diagnostics"), value_type=bool)},
+        condition=IfCondition(enable_lio),
+    ))
 
     # Fallback GPU lidar bridge. The native Livox plugin publishes its own
     # PointCloud2 and does not need this extra sensor stream.

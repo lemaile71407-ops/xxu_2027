@@ -1,0 +1,47 @@
+# New self-built map baseline; explicitly select this file and prior_map at launch.
+# Registration/NIS thresholds inherit unchanged; recovery continuity uses the
+# existing 1 m / 15 degree safety envelope from the earlier navigation trials.
+extends: ../../src/z-localization/config/backend.yaml
+common:
+  body:
+    frame: base_link
+    rotation:
+      roll_deg: 0.0
+      pitch_deg: 0.0
+      yaw_deg: 0.0
+    offset:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+  scan_context:
+    # Must match the configuration serialized in prior/sc_descriptors.bin.
+    lidar_height: 0.06973823713479495
+uwb:
+  enabled: false
+registration:
+  # Same-input shadow comparison: preserve the low-height scene geometry.
+  # Only this new-map profile changes; acceptance and NIS gates stay inherited.
+  voxel_resolution: 0.1
+startup_hint:
+  # Known simulation spawn and the acquisition map definition, not live truth.
+  # This profile is only for spawn_x=2, spawn_y=2, spawn_yaw=0.
+  enabled: true
+  force_until_matched: true
+  x: 2.0
+  y: 2.0
+  z: 0.06973823713479495
+  yaw_deg: 0.0
+recovery:
+  continuity_guard:
+    enabled: true
+    max_translation: 1.0
+    max_rotation_deg: 15.0
+output:
+  tf:
+    # Opt-in: extend the current committed correction at actual odometry stamps.
+    # State diagnostics retain synchronized-frame time; never extend stale input.
+    publish_predictions: true
+    max_prediction_age: 0.25
+  legacy:
+    enabled: false
+    publish_tf: false

@@ -1,0 +1,81 @@
+{
+  "date": "2026-11-09",
+  "new_baseline": true,
+  "completed": true,
+  "initial_base_odom": [
+    -0.0001225417710815708,
+    0.0021187639520387504
+  ],
+  "survey_boundary": {
+    "target": [
+      -0.9,
+      5.1
+    ],
+    "reason": "AssertionError('no mapping progress')",
+    "position": [
+      -0.7893343687010226,
+      4.989069351660752
+    ]
+  },
+  "reached": [
+    [
+      4.3,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      1.7
+    ],
+    [
+      -0.9,
+      1.7
+    ],
+    [
+      -0.8,
+      3.5
+    ],
+    [
+      -0.8,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ]
+  ],
+  "return_targets": [
+    [
+      -0.8,
+      3.5
+    ],
+    [
+      -0.8,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ]
+  ],
+  "frames": 2111,
+  "saved_frames": 379,
+  "points": 26137,
+  "map_offset": [
+    2.0,
+    2.0,
+    0.06973823713479495
+  ],
+  "frontend_session": [
+    7824769545011970874,
+    0
+  ],
+  "source": "FrontendFrame cloud transformed by its atomic ZLIO posterior; no CAD occupancy or Gazebo truth",
+  "final_base_odom": [
+    -0.05887660644981407,
+    0.004216589953219195
+  ]
+}

@@ -1,0 +1,6 @@
+# 无传感器的启动检查配置；不能作为实车标定。
+extends: backend.yaml
+prior_map:
+  enabled: false
+uwb:
+  enabled: false

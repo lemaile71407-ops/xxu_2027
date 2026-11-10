@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-09",
+  "new_baseline": true,
+  "scope": "Known-spawn stationary localization; normal single backend with coordinated reset enabled; no Nav2/goals/command publisher",
+  "source_report": "../../../docs/validation/nav2_stage3_20261108.md",
+  "stationary_acceptance_passed": true,
+  "navigation_started": false,
+  "latest_run": "../../log/zlio_static_20261109/run06",
+  "known_spawn_hint": [
+    2,
+    2,
+    0.06973823713479495,
+    0
+  ],
+  "continuity_guard": {
+    "enabled": true,
+    "max_translation_m": 1,
+    "max_rotation_deg": 15
+  },
+  "run_analyses": {
+    "run03": "../../log/zlio_static_20261109/run03/analysis.json",
+    "run04": "../../log/zlio_static_20261109/run04/analysis.json",
+    "run05": "../../log/zlio_static_20261109/run05/analysis.json",
+    "run06": "../../log/zlio_static_20261109/run06/analysis.json",
+    "same_input_voxel_ab": "../../log/zlio_static_20261109/voxel_ab02/analysis.json"
+  },
+  "reason": "0.4 m coarse sampling reproduced 14.49 cm RMSE with 11 SUSPECT transitions; shared-stream 0.1 m branch and independent normal-chain 300 s regression improved repeatably",
+  "acceptance_scope": "At least 300 source seconds after first global pose: stable state/epoch, complete error reporting and stationary zero outputs; excludes navigation, fault recovery and full TF ownership",
+  "registration_voxel_resolution_m": 0.1
+}

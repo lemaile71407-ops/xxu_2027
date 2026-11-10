@@ -1,0 +1,109 @@
+{
+  "date": "2026-11-09",
+  "new_baseline": true,
+  "completed": true,
+  "initial_base_odom": [
+    -0.0001225417710815708,
+    0.0021187639520387504
+  ],
+  "survey_boundary": {
+    "target": [
+      -0.9,
+      5.1
+    ],
+    "reason": "AssertionError('no mapping progress')",
+    "position": [
+      -0.7893343687010226,
+      4.989069351660752
+    ]
+  },
+  "reached": [
+    [
+      4.3,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      1.7
+    ],
+    [
+      -0.9,
+      1.7
+    ],
+    [
+      -0.8,
+      3.5
+    ],
+    [
+      -0.8,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ]
+  ],
+  "return_targets": [
+    [
+      -0.8,
+      3.5
+    ],
+    [
+      -0.8,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ]
+  ],
+  "frames": 2111,
+  "saved_frames": 415,
+  "points": 26375,
+  "map_offset": [
+    2.0,
+    2.0,
+    0.06973823713479495
+  ],
+  "frontend_session": [
+    7824769545011970874,
+    0
+  ],
+  "source": "FrontendFrame cloud transformed by its atomic ZLIO posterior; no CAD occupancy or Gazebo truth",
+  "final_base_odom": [
+    -0.05887660644981407,
+    0.004216589953219195
+  ],
+  "scope": "perimeter survey plus stationary interior capture; planned upper boundary retained as unreached",
+  "supplementary_session": {
+    "date": "2026-11-09",
+    "completed": true,
+    "scope": "stationary supplementary view; independent frontend session",
+    "known_startup_seed": [
+      6.3,
+      3.8,
+      0.07973823713479496
+    ],
+    "frames": 202,
+    "saved_frames": 36,
+    "points": 4025,
+    "map_offset": [
+      6.3,
+      3.8,
+      0.07973823713479496
+    ],
+    "frontend_session": [
+      5576888134509342516,
+      0
+    ],
+    "source": "FrontendFrame cloud transformed by its atomic ZLIO posterior; no CAD occupancy or Gazebo truth",
+    "final_base_odom": [
+      0.00031788536900681464,
+      -0.000674343585705
+    ]
+  }
+}

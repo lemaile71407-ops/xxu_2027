@@ -4,6 +4,7 @@
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -29,8 +30,13 @@ public:
   {
     target_frame_ = this->declare_parameter<std::string>("target_frame", "mid360_link");
     scan_period_ = this->declare_parameter<double>("scan_period", 0.1);
+    input_time_offset_field_ = this->declare_parameter<std::string>("input_time_offset_field", "");
     max_points_ = this->declare_parameter<int>("max_points", 12000);
     scan_mode_csv_ = this->declare_parameter<std::string>("scan_mode_csv", "");
+
+    if (!input_time_offset_field_.empty() && scan_period_ != 0.0) {
+      throw std::invalid_argument("input_time_offset_field requires scan_period=0");
+    }
 
     if (!scan_mode_csv_.empty()) {
       std::ifstream csv(scan_mode_csv_);
@@ -130,6 +136,7 @@ private:
     const auto z_field = findField(*msg, "z");
     const auto intensity_field = findField(*msg, "intensity");
     const auto ring_field = findField(*msg, "ring");
+    const auto time_offset_field = findField(*msg, input_time_offset_field_);
 
     if (!x_field.exists || !y_field.exists || !z_field.exists) {
       RCLCPP_WARN_THROTTLE(
@@ -141,6 +148,20 @@ private:
     const size_t input_size = static_cast<size_t>(msg->width) * static_cast<size_t>(msg->height);
     if (input_size == 0 || msg->point_step == 0) {
       return;
+    }
+
+    if (!input_time_offset_field_.empty()) {
+      const size_t packed_row_size = static_cast<size_t>(msg->width) * msg->point_step;
+      if (!time_offset_field.exists ||
+          time_offset_field.datatype != sensor_msgs::msg::PointField::UINT32 ||
+          static_cast<size_t>(time_offset_field.offset) + sizeof(uint32_t) > msg->point_step ||
+          msg->row_step < packed_row_size ||
+          static_cast<size_t>(msg->height - 1) * msg->row_step + packed_row_size > msg->data.size()) {
+        RCLCPP_WARN_THROTTLE(
+          this->get_logger(), *this->get_clock(), 2000,
+          "Point time input requires a valid UINT32 nanosecond offset field and point layout");
+        return;
+      }
     }
 
     const size_t max_points = max_points_ > 0 ? static_cast<size_t>(max_points_) : input_size;
@@ -167,7 +188,9 @@ private:
 
     size_t out_index = 0;
     for (size_t in_index = 0; in_index < input_size && out_index < output_size; in_index += stride) {
-      const size_t input_offset = in_index * msg->point_step;
+      const size_t input_offset = input_time_offset_field_.empty() ?
+        in_index * msg->point_step :
+        (in_index / msg->width) * msg->row_step + (in_index % msg->width) * msg->point_step;
       float x = 0.0F;
       float y = 0.0F;
       float z = 0.0F;
@@ -185,7 +208,14 @@ private:
 
       const double ratio = output_size > 1 ?
         static_cast<double>(out_index) / static_cast<double>(output_size - 1) : 0.0;
-      const double timestamp_ns = stamp_ns + scan_period_ns * ratio;
+      uint32_t time_offset_ns = 0;
+      if (!input_time_offset_field_.empty() &&
+          !readValue(*msg, input_offset + time_offset_field.offset, time_offset_ns)) {
+        return;
+      }
+      // The opt-in input is a UINT32 offset in nanoseconds from the header stamp.
+      const double timestamp_ns = stamp_ns + (input_time_offset_field_.empty() ?
+        scan_period_ns * ratio : static_cast<double>(time_offset_ns));
       const size_t output_offset = out_index * output.point_step;
 
       writeValue(output.data, output_offset + 0, x);
@@ -230,6 +260,7 @@ private:
 
   std::string target_frame_;
   double scan_period_;
+  std::string input_time_offset_field_;
   int max_points_;
   std::string scan_mode_csv_;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr sub_;

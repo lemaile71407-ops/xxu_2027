@@ -4,6 +4,7 @@
 import os
 import tempfile
 import xml.etree.ElementTree as ET
+import yaml
 
 from ament_index_python.packages import get_package_prefix, get_package_share_directory
 from launch import LaunchDescription
@@ -19,11 +20,12 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from xxu_bringup.interfaces import interfaces
 from xxu_bringup.robot_profiles import chassis_parameters, robot_profile
-from xxu_bringup.sensor_launch import lio_preprocessing
+from xxu_bringup.sensor_launch import sensor_preprocessing, small_point_lio
 from xxu_bringup.velocity_launch import velocity_chain
 
 
-def prepare_assets(share, directory, lidar_mode='gpu_lidar', field_model='', robot_model='upstream'):
+def prepare_assets(share, directory, lidar_mode='gpu_lidar', field_model='', robot_model='upstream',
+                   rgl_point_timing='off'):
     """Adapt copies only; preserve the pinned upstream sources."""
     contract = interfaces()
     world = ET.parse(os.path.join(share, 'worlds', 'rmuc_2025_world.world'))
@@ -54,6 +56,11 @@ def prepare_assets(share, directory, lidar_mode='gpu_lidar', field_model='', rob
             raise ValueError('CAD vehicles currently require lidar_mode:=rgl')
         folder = os.path.dirname(profile.geometry_file)
         model = ET.parse(os.path.join(folder, 'model.sdf'))
+        if rgl_point_timing == 'uniform':
+            plugins = model.findall(".//sensor/plugin[@name='rgl::RGLServerPluginInstance']")
+            if len(plugins) != 1:
+                raise ValueError('expected exactly one RGL sensor plugin')
+            ET.SubElement(plugins[0], 'timed_scan_uniform').text = 'true'
         for uri in model.findall('.//mesh/uri'):
             uri.text = os.path.abspath(os.path.join(folder, uri.text))
         model_path = os.path.join(directory, f'{profile.name}.sdf')
@@ -70,6 +77,8 @@ def prepare_assets(share, directory, lidar_mode='gpu_lidar', field_model='', rob
         plugin.find('topic').text = contract.topic('simulation.rm_lidar')
         plugin.find('range/min').text = '0.1'
         plugin.find('range/max').text = '40'
+        if rgl_point_timing == 'uniform':
+            ET.SubElement(plugin, 'timed_scan_uniform').text = 'true'
         plugin.remove(plugin.find('pattern_preset_path'))
         # Named presets carry the 40-frame alternation contract. The path
         # loader would cast the complete four-second file in every frame.
@@ -128,6 +137,14 @@ def launch_setup(context):
     custom_robot = bool(profile.geometry)
     geometry = profile.geometry
     lidar_mode = LaunchConfiguration('lidar_mode').perform(context)
+    rgl_point_timing = LaunchConfiguration('rgl_point_timing').perform(context)
+    enable_zlio_timed = LaunchConfiguration('enable_zlio_timed').perform(context) == 'true'
+    if rgl_point_timing == 'uniform' and lidar_mode != 'rgl':
+        raise ValueError('rgl_point_timing:=uniform requires lidar_mode:=rgl')
+    if enable_zlio_timed and (rgl_point_timing != 'uniform' or not custom_robot or
+                              LaunchConfiguration('enable_lio').perform(context) != 'false'):
+        raise ValueError('enable_zlio_timed requires a fixed-sensor CAD robot, '
+                         'rgl_point_timing:=uniform and enable_lio:=false')
     rgl_actions = []
     if lidar_mode == 'rgl':
         selected = LaunchConfiguration('rgl_plugin_dir').perform(context)
@@ -155,9 +172,20 @@ def launch_setup(context):
     temporary = tempfile.TemporaryDirectory(prefix='xxu_rm_sim_')
     world, model, robot = prepare_assets(
         share, temporary.name, lidar_mode, LaunchConfiguration('field_model').perform(context),
-        LaunchConfiguration('robot_model').perform(context))
+        LaunchConfiguration('robot_model').perform(context), rgl_point_timing)
     lc = LaunchConfiguration
     sim = {'use_sim_time': True}
+    zlio_config = None
+    if enable_zlio_timed:
+        # Both preprocessing outputs are already in the same virtual sensor frame.
+        source_config = os.path.join(get_package_share_directory('frontend'), 'config', 'lio.yaml')
+        with open(source_config, encoding='utf-8') as handle:
+            settings = yaml.safe_load(handle)
+        settings['sensor']['body_from_lidar'] = {
+            'rotation_xyzw': [0, 0, 0, 1], 'translation': [0, 0, 0]}
+        zlio_config = os.path.join(temporary.name, 'zlio_virtual_sensor.yaml')
+        with open(zlio_config, 'w', encoding='utf-8') as handle:
+            yaml.safe_dump(settings, handle)
 
     def node(package, executable, name, parameters=None, **kwargs):
         return Node(package=package, executable=executable, name=name,
@@ -168,7 +196,8 @@ def launch_setup(context):
                     arguments=arguments, remappings=remappings or [])
 
     actions = [
-        LogInfo(msg=f'rm_sim_26 lidar_mode={lidar_mode}; robot={profile.name}; frame timestamps, no synthetic point-time spread'),
+        LogInfo(msg=f'rm_sim_26 lidar_mode={lidar_mode}; robot={profile.name}; '
+                    f'rgl_point_timing={rgl_point_timing} (uniform is an assumed scan model)'),
         *rgl_actions,
         RegisterEventHandler(OnShutdown(on_shutdown=[
             OpaqueFunction(function=lambda context: temporary.cleanup())])),
@@ -205,13 +234,24 @@ def launch_setup(context):
                  chassis_parameters(profile))] if custom_robot else
            [node('xxu_bringup', 'rm_sim_adapter.py', 'rm_sim_adapter')]),
         node('xxu_livox_sim', 'livox_pointcloud_shaper', 'rm_lidar_shaper', {
-            'target_frame': contract.frame('rm_lidar'), 'scan_period': 0.0, 'max_points': 12000},
+            'target_frame': contract.frame('rm_lidar'), 'scan_period': 0.0, 'max_points': 12000,
+            'input_time_offset_field': 'offset_time' if rgl_point_timing == 'uniform' else ''},
             remappings=[('points_in', contract.topic('simulation.rm_lidar')),
                         ('points_out', contract.topic('simulation.lidar_shaped'))]),
-        *lio_preprocessing(
+        *sensor_preprocessing('rm_sim', use_sim_time=True, profile=profile,
+                              pointcloud_overrides={'use_point_timestamps': False}
+                              if custom_robot and rgl_point_timing == 'uniform' else None),
+        small_point_lio(
             'rm_sim', use_sim_time=True, profile=profile,
             config_file=os.path.join(bringup, 'config', 'rm_sim_lio.yaml'),
-            conditions={'lio': IfCondition(lc('enable_lio'))}),
+            condition=IfCondition(lc('enable_lio'))),
+        *([node('frontend', 'zlio_node', 'zlio_timed_candidate', {
+            'config_file': zlio_config,
+            'lidar_topic': contract.topic('simulation.lidar_compensated'),
+            'imu_topic': contract.topic('simulation.imu_compensated'),
+            'input_type': 'pointcloud2', 'point_time_field': 'timestamp',
+            'point_time_scale': 1e-9, 'point_time_absolute': True,
+            'imu_acceleration_scale': 1.0, 'publish_tf': False})] if enable_zlio_timed else []),
         node('pointcloud_to_laserscan', 'pointcloud_to_laserscan_node', 'pointcloud_to_laserscan', {
             'target_frame': contract.frame('ground_base'), 'transform_tolerance': 0.05,
             'min_height': ParameterValue(lc('scan_min_height'), value_type=float),
@@ -233,8 +273,15 @@ def launch_setup(context):
             output_topic=contract.topic('simulation.safe_velocity'),
             # The sensor is fixed: check its TF chain exists, but require a
             # fresh stream only for the dynamic odometry edge.
-            watchdog_parameters={'required_tf_pairs': [f"{contract.frame('odom')}->{contract.frame('ground_base')}"],
-                                 'tf_source_frame': contract.frame('rm_lidar')} if custom_robot else None,
+            watchdog_parameters={
+                **({'required_tf_pairs': [f"{contract.frame('odom')}->{contract.frame('ground_base')}"],
+                    'tf_source_frame': contract.frame('rm_lidar')} if custom_robot else {}),
+                'require_localization': ParameterValue(lc('require_localization'), value_type=bool),
+                'localization_state_topic': lc('localization_state_topic'),
+                'localization_pose_topic': lc('localization_pose_topic'),
+                'localization_timeout': ParameterValue(lc('localization_timeout'), value_type=float),
+                'localization_recovery_hold': ParameterValue(lc('localization_recovery_hold'), value_type=float),
+            },
         ),
     ]
     return actions
@@ -256,4 +303,11 @@ def generate_launch_description():
                               for key, value in defaults.items()] + [
         DeclareLaunchArgument('lidar_mode', default_value='rgl',
                               choices=['rgl', 'gpu_lidar']),
+        DeclareLaunchArgument('rgl_point_timing', default_value='off', choices=['off', 'uniform']),
+        DeclareLaunchArgument('enable_zlio_timed', default_value='false', choices=['false', 'true']),
+        DeclareLaunchArgument('require_localization', default_value='false', choices=['false', 'true']),
+        DeclareLaunchArgument('localization_state_topic', default_value='/backend_node/localization_state'),
+        DeclareLaunchArgument('localization_pose_topic', default_value='/localization/odometry'),
+        DeclareLaunchArgument('localization_timeout', default_value='0.5'),
+        DeclareLaunchArgument('localization_recovery_hold', default_value='1.0'),
         OpaqueFunction(function=launch_setup)])

@@ -1,0 +1,44 @@
+{
+  "date": "2026-11-09",
+  "completed": false,
+  "new_baseline": true,
+  "relative_odom_targets": [
+    [
+      4.3,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      1.7
+    ],
+    [
+      -0.9,
+      1.7
+    ],
+    [
+      -0.9,
+      5.1
+    ],
+    [
+      0.0,
+      5.1
+    ],
+    [
+      -0.9,
+      5.1
+    ],
+    [
+      -0.9,
+      0.0
+    ],
+    [
+      0.0,
+      0.0
+    ]
+  ],
+  "failure": "AssertionError('frontend/base/safety not ready')"
+}

@@ -1,7 +1,0 @@
-scenario,seed,method,duration_s,initialized,imu_fault,invalid_state,initial_pose_stamp_s,first_delivery_s,wall_ready_s,initial_tilt_error_deg,initial_velocity_error_mps,drift_2s_m,position_rmse_2s_m,final_position_error_m,post_duration_s,cpu_s,max_callback_ms,max_schedule_lag_ms,selected_path
-moving_room,20261027,static,6,0,0,0,,,,,,,,,,0.052068,0.078596,2.538113,none
-moving_room,20261027,auto,6,1,0,0,2.1,2.255,2.25513578,0.14144269,0.002454969652,0.002118650365,0.002788684079,0.002808836221,3.9,0.213824,0.875265,0.714711,motion
-moving_room,20261028,auto,6,1,0,0,2.1,2.235,2.235411951,0.1527795351,0.003616856036,0.00204283288,0.002481822436,0.00229102883,3.9,0.190114,0.924652,0.603839,motion
-moving_room,20261028,static,6,0,0,0,,,,,,,,,,0.050816,0.070347,0.749844,none
-moving_room,20261029,static,6,0,0,0,,,,,,,,,,0.058954,0.122118,0.830789,none
-moving_room,20261029,auto,6,1,0,0,2.1,2.245,2.24520452,0.06419488557,0.005004177615,0.0007757847573,0.001035711529,0.00270677454,3.9,0.190198,0.756458,0.744697,motion

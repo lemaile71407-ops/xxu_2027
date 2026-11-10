@@ -1,0 +1,8 @@
+{
+  "scope": "return leg only; earlier observer had wrong transport partition and captured no truth",
+  "matched_frames": 111,
+  "xy_rmse_m": 0.006690187256787579,
+  "xy_p95_m": 0.010772102464111543,
+  "xy_max_m": 0.016255444385123646,
+  "no_trajectory_fitting": true
+}

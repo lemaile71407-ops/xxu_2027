@@ -48,6 +48,7 @@ class FreshnessTest(unittest.TestCase):
         self.node = SimpleNamespace(
             last_cmd=TwistStamped(), last_cmd_receive_time=None, timeout=.3,
             require_odom=False, require_scan=False, require_joint_states=False, require_tf=False,
+            require_localization=False,
             output_frame_id='base_link', _last_health_state=None,
             publisher=Mock(), status_publisher=Mock(), get_logger=lambda: Mock(),
             get_clock=lambda: SimpleNamespace(now=lambda: self.clock))

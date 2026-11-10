@@ -5,10 +5,15 @@ log/
 
 # Local experiment recordings and generated measurements
 /xxu_nav_2026/bags/
+/docs/validation/data/
+
+# Independent localization worktree, dependencies and local changes.
+/z-localization/
 
 # Python cache artifacts
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
 # clangd generated indexes
 **/.cache/clangd/

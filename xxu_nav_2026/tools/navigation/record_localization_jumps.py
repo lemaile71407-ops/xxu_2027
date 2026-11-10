@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only TF/AMCL/scan recorder. Never sends goals, poses or velocities."""
+"""Read-only TF/localization/scan recorder. Never sends goals, poses or velocities."""
 import argparse
 import json
 import math
@@ -12,7 +12,9 @@ import rclpy
 from rclpy.parameter import Parameter
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.signals import SignalHandlerOptions
-from geometry_msgs.msg import PoseWithCovarianceStamped
+from rclpy.utilities import remove_ros_args
+from geometry_msgs.msg import PoseWithCovarianceStamped, TwistStamped
+from std_msgs.msg import Bool, String
 from nav_msgs.msg import Odometry
 from nav2_msgs.msg import ParticleCloud
 from sensor_msgs.msg import LaserScan
@@ -36,14 +38,23 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--duration', type=float, default=0)
-    args = parser.parse_args()
+    parser.add_argument('--tdt', action='store_true', help='Also record TDT state and global odometry')
+    parser.add_argument('--safe-velocity-topic', default='')
+    parser.add_argument('--truth-topic', default='', help='Optional read-only simulator TFMessage topic')
+    args = parser.parse_args(remove_ros_args()[1:])
     args.output.mkdir(parents=True, exist_ok=False)
     (args.output / 'particles').mkdir()
     rclpy.init(signal_handler_options=SignalHandlerOptions.NO)
     node = rclpy.create_node('localization_jump_recorder', parameter_overrides=[
         Parameter('use_sim_time', value=True)])
-    streams = {key: (args.output / (key + '.jsonl')).open('w')
-               for key in ['tf', 'odom', 'amcl', 'scan', 'particles', 'initialpose', 'jumps']}
+    keys = ['tf', 'odom', 'amcl', 'scan', 'particles', 'initialpose', 'jumps']
+    if args.tdt:
+        keys += ['localization', 'localization_state', 'watchdog']
+    if args.safe_velocity_topic:
+        keys.append('safe_velocity')
+    if args.truth_topic:
+        keys.append('truth')
+    streams = {key: (args.output / (key + '.jsonl')).open('w') for key in keys}
     latest = {}
     previous = {}
     publishers = {}
@@ -152,6 +163,28 @@ def main():
                              lambda m: pose_callback(m, 'initialpose'), 10)
     node.create_subscription(LaserScan, '/scan', scan_callback, qos_profile_sensor_data)
     node.create_subscription(ParticleCloud, '/particle_cloud', particles_callback, qos_profile_sensor_data)
+    if args.tdt:
+        node.create_subscription(Odometry, '/localization/odometry',
+                                 lambda m: pose_callback(m, 'localization'), qos_profile_sensor_data)
+        node.create_subscription(String, '/backend_node/localization_state',
+                                 lambda m: write('localization_state', {'data': m.data}), 10)
+        node.create_subscription(Bool, '/cmd_vel_watchdog/healthy',
+                                 lambda m: write('watchdog', {'healthy': m.data}), 10)
+    if args.safe_velocity_topic:
+        def safe_velocity(m):
+            v = m.twist
+            write('safe_velocity', {'stamp': stamp(m), 'frame': m.header.frame_id,
+                                   'velocity': [v.linear.x, v.linear.y, v.angular.z]})
+        node.create_subscription(TwistStamped, args.safe_velocity_topic,
+                                 safe_velocity, qos_profile_sensor_data)
+    if args.truth_topic:
+        def truth(m):
+            for tr in m.transforms:
+                p = tr.transform.translation
+                write('truth', {'stamp': stamp(tr), 'parent': tr.header.frame_id,
+                                'child': tr.child_frame_id, 'xyz': [p.x, p.y, p.z],
+                                'yaw': yaw(tr.transform.rotation)})
+        node.create_subscription(TFMessage, args.truth_topic, truth, qos_profile_sensor_data)
 
     def stop(*unused):
         nonlocal stopped

@@ -11,6 +11,12 @@
 
 `cmd_vel_watchdog.py` 也在本包安装，负责最终速度出口的命令、里程计、扫描、关节和 TF 新鲜度检查；它在普通坐标系模式下同样运行。命令同时检查单调时钟接收年龄和 ROS 源时间戳年龄，过期、未来或格式异常的源时间戳会关闭输出。输出消息使用副本，刷新输出时间戳不会续期缓存的源指令。共享启动定义位于 `xxu_bringup`，按平台参数调用本包的 watchdog。
 
+候选全局定位可显式启用 `require_localization:=true`，默认关闭。定位门同时要求后端声明可信、未冻结，且定位状态及 map 系全局里程计的接收时间、源时间和源时间推进均新鲜；`NORMAL` 和后端声明可信的 `OBS_DEGRADED` 可进入恢复观察，其余状态、字段异常或版本回退均关闭输出。重复旧消息、零时间戳状态通知不能续期源时间。ROS 源时间最多容忍 50 ms 时钟投递偏差，接收和源时间推进另用单调时钟检查，因此暂停 `/clock` 不会让旧源消息一直有效。
+
+`localization_state_topic` 默认 `/backend_node/localization_state`，`localization_pose_topic` 默认 `/localization/odometry`；后者要求 `header.frame_id=map`。`localization_timeout` 默认 0.5 秒，`localization_recovery_hold` 默认 1.0 秒，均为候选配置值。失信或超时清除缓存命令；连续可信且新鲜达到恢复观察时间后，还需新的速度请求才能放行。后端本地代次独立于前端线上代次，不按数值等同。该门控没有提供 Nav2 任务取消或重新规划策略，短时仿真结果见[候选链验证报告](../../../docs/validation/rgl_zlio_full_chain_20261031.md#导航及保护)。
+
+下表为速度转换器参数：
+
 | 参数 | 默认值 | 说明 |
 |---|---|---|
 | `odom_topic` | `Odometry` | 原始底盘里程计；项目 launch 设置为 `/odom` |

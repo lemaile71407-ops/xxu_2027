@@ -1,0 +1,207 @@
+diff --git a/RGLServerPlugin/include/RGLServerPluginInstance.hh b/RGLServerPlugin/include/RGLServerPluginInstance.hh
+index 1dfa5fe..0bef6e9 100644
+--- a/RGLServerPlugin/include/RGLServerPluginInstance.hh
++++ b/RGLServerPlugin/include/RGLServerPluginInstance.hh
+@@ -66,6 +66,8 @@ private:
+                      gz::sim::EntityComponentManager& ecm);
+ 
+     void UpdateLidarPose(const gz::sim::EntityComponentManager& ecm);
++    bool PrepareTimedLidar(const gz::sim::EntityComponentManager& ecm,
++                           std::chrono::steady_clock::duration simTime);
+     void UpdateAlternatingLidarPattern();
+ 
+     bool ShouldRayTrace(std::chrono::steady_clock::duration sim_time,
+@@ -93,8 +95,8 @@ private:
+     {
+         std::vector<char> data{};
+         int32_t hitPointCount{};
+-        static constexpr std::size_t pointSize{sizeof(rgl_vec3f) + sizeof(float)};  // Based on rglFields
+-        inline static const std::vector<rgl_field_t> rglFields = {
++        std::size_t pointSize{sizeof(rgl_vec3f) + sizeof(float)};  // Based on rglFields
++        std::vector<rgl_field_t> rglFields = {
+                 RGL_FIELD_XYZ_VEC3_F32,
+                 RGL_FIELD_LASER_RETRO_F32
+         };
+@@ -113,6 +115,12 @@ private:
+ 
+     bool updateOnPausedSim = false;
+     bool publishLaserScan = false;
++    bool timedScan = false;
++    bool havePreviousPose = false;
++    gz::math::Pose3d previousPose;
++    std::chrono::steady_clock::duration previousPoseTime{0};
++    std::chrono::steady_clock::duration scanStartTime{0};
++    std::vector<float> rayTimeOffsetsMs;
+ 
+     gz::sim::Entity thisLidarEntity;
+     gz::transport::Node::Publisher pointCloudPublisher;
+@@ -123,6 +131,7 @@ private:
+     std::vector<rgl_node_t> rglNodesUseRays;
+     rgl_node_t rglNodeLidarPose = nullptr;
+     rgl_node_t rglNodeSetRange = nullptr;
++    rgl_node_t rglNodeSetTimeOffsets = nullptr;
+     rgl_node_t rglNodeRaytrace = nullptr;
+     rgl_node_t rglNodeCompact = nullptr;
+     rgl_node_t rglNodeYieldLaserScan = nullptr;
+diff --git a/RGLServerPlugin/src/Lidar.cc b/RGLServerPlugin/src/Lidar.cc
+index 61c2a1f..200ff86 100644
+--- a/RGLServerPlugin/src/Lidar.cc
++++ b/RGLServerPlugin/src/Lidar.cc
+@@ -72,6 +72,11 @@ bool RGLServerPluginInstance::LoadConfiguration(const std::shared_ptr<const sdf:
+     lidarMinMaxRange.value[1] = sdf->FindElement(PARAM_RANGE_ID)->Get<float>(PARAM_RANGE_MAX_ID);
+     topicName = sdf->Get<std::string>(PARAM_TOPIC_ID);
+     frameId = sdf->Get<std::string>(PARAM_FRAME_ID);
++    timedScan = sdf->HasElement("timed_scan_uniform") && sdf->Get<bool>("timed_scan_uniform");
++    if (timedScan && (updateOnPausedSim || sdf->HasElement("pattern_lidar2d"))) {
++        gzerr << "timed_scan_uniform requires an unpaused 3D lidar.\n";
++        return false;
++    }
+ 
+     if (!LidarPatternLoader::Load(sdf, lidarPattern, lidarPatternSampleSize)) {
+         return false;
+@@ -81,6 +86,12 @@ bool RGLServerPluginInstance::LoadConfiguration(const std::shared_ptr<const sdf:
+         gzerr << "Total pattern size (" << lidarPattern.size() << ") must be a multiple of the sample size (" << lidarPatternSampleSize << "). Disabling plugin.\n";
+         return false;
+     }
++    if (timedScan) {
++        gzwarn << "timed_scan_uniform uses an assumed uniform ray order, not measured MID-360 timing.\n";
++        resultPointCloud.rglFields.push_back(RGL_FIELD_TIME_STAMP_U32);
++        resultPointCloud.pointSize += sizeof(uint32_t);
++        rayTimeOffsetsMs.resize(lidarPatternSampleSize);
++    }
+ 
+     // Check for 2d pattern and get LaserScan parameters
+     if (sdf->HasElement("pattern_lidar2d")) {
+@@ -138,8 +149,16 @@ void RGLServerPluginInstance::CreateLidar(gz::sim::Entity entity,
+         return;
+     }
+ 
++    if (timedScan && (!CheckRGL(rgl_node_rays_set_time_offsets(
++            &rglNodeSetTimeOffsets, rayTimeOffsetsMs.data(), rayTimeOffsetsMs.size())) ||
++        !CheckRGL(rgl_node_raytrace_configure_distortion(rglNodeRaytrace, true)))) {
++        gzerr << "Failed to configure timed rays.\n";
++        return;
++    }
++
+     if (!CheckRGL(rgl_graph_node_add_child(rglNodesUseRays.front(), rglNodeSetRange)) ||
+-        !CheckRGL(rgl_graph_node_add_child(rglNodeSetRange, rglNodeLidarPose)) ||
++        !CheckRGL(rgl_graph_node_add_child(rglNodeSetRange, timedScan ? rglNodeSetTimeOffsets : rglNodeLidarPose)) ||
++        (timedScan && !CheckRGL(rgl_graph_node_add_child(rglNodeSetTimeOffsets, rglNodeLidarPose))) ||
+         !CheckRGL(rgl_graph_node_add_child(rglNodeLidarPose, rglNodeRaytrace)) ||
+         !CheckRGL(rgl_graph_node_add_child(rglNodeRaytrace, rglNodeCompact)) ||
+         !CheckRGL(rgl_graph_node_add_child(rglNodeCompact, rglNodeFormatPointCloudWorld))) {
+@@ -171,6 +190,42 @@ void RGLServerPluginInstance::CreateLidar(gz::sim::Entity entity,
+     isLidarInitialized = true;
+ }
+ 
++bool RGLServerPluginInstance::PrepareTimedLidar(
++    const gz::sim::EntityComponentManager& ecm, std::chrono::steady_clock::duration simTime)
++{
++    const auto current = FindWorldPose(thisLidarEntity, ecm);
++    const auto duration = simTime - previousPoseTime;
++    const double seconds = std::chrono::duration<double>(duration).count();
++    if (!havePreviousPose || seconds <= 0.0 || seconds > 0.5) {
++        previousPose = current;
++        previousPoseTime = simTime;
++        lastRaytraceTime = simTime;
++        havePreviousPose = true;
++        return false;
++    }
++    const auto linear = previousPose.Rot().RotateVectorReverse((current.Pos() - previousPose.Pos()) / seconds);
++    auto rotation = previousPose.Rot().Inverse() * current.Rot();
++    if (rotation.W() < 0) rotation = gz::math::Quaterniond(-rotation.W(), -rotation.X(), -rotation.Y(), -rotation.Z());
++    gz::math::Vector3d axis;
++    double angle = 0;
++    rotation.AxisAngle(axis, angle);
++    const auto angular = axis * (angle / seconds);
++    const rgl_vec3f v{{static_cast<float>(linear.X()), static_cast<float>(linear.Y()), static_cast<float>(linear.Z())}};
++    const rgl_vec3f w{{static_cast<float>(angular.X()), static_cast<float>(angular.Y()), static_cast<float>(angular.Z())}};
++    for (size_t i = 0; i < rayTimeOffsetsMs.size(); ++i)
++        rayTimeOffsetsMs[i] = static_cast<float>(seconds * 1000.0 * i / rayTimeOffsetsMs.size());
++    auto lidarToWorld = IgnPose3dToRglMatrix(previousPose);
++    auto worldToLidar = IgnPose3dToRglMatrix(previousPose.Inverse());
++    if (!CheckRGL(rgl_node_rays_set_time_offsets(&rglNodeSetTimeOffsets, rayTimeOffsetsMs.data(), rayTimeOffsetsMs.size())) ||
++        !CheckRGL(rgl_node_raytrace_configure_velocity(rglNodeRaytrace, &v, &w)) ||
++        !CheckRGL(rgl_node_rays_transform(&rglNodeLidarPose, &lidarToWorld)) ||
++        !CheckRGL(rgl_node_points_transform(&rglNodeToLidarFrame, &worldToLidar))) return false;
++    scanStartTime = previousPoseTime;
++    previousPose = current;
++    previousPoseTime = simTime;
++    return true;
++}
++
+ void RGLServerPluginInstance::UpdateLidarPose(const gz::sim::EntityComponentManager& ecm)
+ {
+     gz::math::Pose3<double> ignLidarToWorld = FindWorldPose(thisLidarEntity, ecm);
+@@ -251,16 +306,18 @@ void RGLServerPluginInstance::RayTrace(std::chrono::steady_clock::duration simTi
+             gzerr << "Failed to fetch PointCloud result data (sensor frame) from RGL lidar.\n";
+             return;
+         }
+-        auto msg = CreatePointCloudMsg(simTime, frameId);
++        auto msg = CreatePointCloudMsg(timedScan ? scanStartTime : simTime, frameId);
+         pointCloudPublisher.Publish(msg);
+     }
+ 
+-    if (pointCloudWorldPublisher.HasConnections()) {
++    // With distortion the ray-local returns need each ray's own pose to form
++    // world points. Do not publish them as an instantaneous world-frame cloud.
++    if (!timedScan && pointCloudWorldPublisher.HasConnections()) {
+         if (!FetchPointCloudResult(rglNodeFormatPointCloudWorld)) {
+             gzerr << "Failed to fetch PointCloud result data (world frame) from RGL lidar.\n";
+             return;
+         }
+-        auto msg = CreatePointCloudMsg(simTime, worldFrameId);
++        auto msg = CreatePointCloudMsg(timedScan ? scanStartTime : simTime, worldFrameId);
+         pointCloudWorldPublisher.Publish(msg);
+     }
+ }
+@@ -319,17 +376,24 @@ gz::msgs::LaserScan RGLServerPluginInstance::CreateLaserScanMsg(std::chrono::ste
+ gz::msgs::PointCloudPacked RGLServerPluginInstance::CreatePointCloudMsg(std::chrono::steady_clock::duration simTime, const std::string& frame)
+ {
+     gz::msgs::PointCloudPacked outMsg;
+-    gz::msgs::InitPointCloudPacked(outMsg, frame, false,
++    if (timedScan) {
++        gz::msgs::InitPointCloudPacked(outMsg, frame, false,
++                                         {{"xyz", gz::msgs::PointCloudPacked::Field::FLOAT32},
++                                          {"intensity",gz::msgs::PointCloudPacked::Field::FLOAT32},
++                                          {"offset_time",gz::msgs::PointCloudPacked::Field::UINT32}});
++    } else {
++        gz::msgs::InitPointCloudPacked(outMsg, frame, false,
+                                          {{"xyz", gz::msgs::PointCloudPacked::Field::FLOAT32},
+                                           {"intensity",gz::msgs::PointCloudPacked::Field::FLOAT32}});
++    }
+     outMsg.mutable_data()->resize(resultPointCloud.hitPointCount * outMsg.point_step());
+     *outMsg.mutable_header()->mutable_stamp() = gz::msgs::Convert(simTime);
+     outMsg.set_height(1);
+     outMsg.set_width(resultPointCloud.hitPointCount);
+     outMsg.set_row_step(resultPointCloud.hitPointCount * outMsg.point_step());
+ 
+-    gz::msgs::PointCloudPackedIterator<float> xIter(outMsg, "x");
+-    memcpy(&(*xIter), resultPointCloud.data.data(), resultPointCloud.hitPointCount * resultPointCloud.pointSize);
++    if (resultPointCloud.hitPointCount > 0)
++        memcpy(outMsg.mutable_data()->data(), resultPointCloud.data.data(), resultPointCloud.hitPointCount * resultPointCloud.pointSize);
+     return outMsg;
+ }
+ 
+diff --git a/RGLServerPlugin/src/RGLServerPluginInstance.cc b/RGLServerPlugin/src/RGLServerPluginInstance.cc
+index a53ae63..9d734fb 100644
+--- a/RGLServerPlugin/src/RGLServerPluginInstance.cc
++++ b/RGLServerPlugin/src/RGLServerPluginInstance.cc
+@@ -45,8 +45,16 @@ void RGLServerPluginInstance::PreUpdate(
+         const gz::sim::UpdateInfo& info,
+         gz::sim::EntityComponentManager& ecm)
+ {
++    if (timedScan && info.simTime < lastRaytraceTime) {
++        havePreviousPose = false;
++        lastRaytraceTime = info.simTime;
++    }
+     if (ShouldRayTrace(info.simTime, info.paused)) {
+-        UpdateLidarPose(ecm);
++        if (timedScan) {
++            if (!PrepareTimedLidar(ecm, info.simTime)) return;
++        } else {
++            UpdateLidarPose(ecm);
++        }
+         RayTrace(info.simTime);
+     }
+ }

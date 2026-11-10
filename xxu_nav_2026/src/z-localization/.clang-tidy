@@ -1,0 +1,17 @@
+# 检查明确的生命周期、数值表达式和复制开销问题。
+Checks: >-
+  -*,
+  bugprone-dangling-handle,
+  bugprone-integer-division,
+  bugprone-suspicious-memset-usage,
+  bugprone-unused-raii,
+  bugprone-use-after-move,
+  performance-for-range-copy,
+  performance-unnecessary-copy-initialization,
+  modernize-use-nullptr
+# 将选定检查发现的问题作为质量检查错误。
+WarningsAsErrors: '*'
+# 检查工程维护的公共与私有头文件。
+HeaderFilterRegex: '.*[/\\]src[/\\](frontend|backend|localization_interfaces)[/\\].*'
+# 沿用仓库内的代码格式。
+FormatStyle: file

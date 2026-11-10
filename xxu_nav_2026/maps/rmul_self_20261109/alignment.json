@@ -1,0 +1,37 @@
+{
+  "method": "Robust point-to-point ICP using observed nonfloor overlap only; known spawn poses supply initial seed; simulator truth not used",
+  "initial_overlap_rmse_m": 0.029701434150114215,
+  "final_overlap_rmse_m": 0.028847371243443738,
+  "overlap_fraction": 0.9952413324269205,
+  "correction_translation_m": 0.00543135503376407,
+  "correction_rotation_deg": 0.10983329346309897,
+  "interior_to_perimeter_map": [
+    [
+      0.9999983403499368,
+      0.0001369999810358469,
+      0.0018167356381559353,
+      0.00014488990343086063
+    ],
+    [
+      -0.0001380830210935456,
+      0.9999998128381519,
+      0.0005960341772139529,
+      0.00022329278870620288
+    ],
+    [
+      -0.0018166536414613473,
+      -0.0005962840483512068,
+      0.9999981721057691,
+      0.005424828545603068
+    ],
+    [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "perimeter_frames": 379,
+  "interior_frames": 36,
+  "accepted": true
+}

@@ -29,9 +29,38 @@ colcon build --symlink-install \
 
 ## 预处理工具归属
 
-点云运动补偿、云台 IMU 补偿和 IMU 坐标重发布节点安装在 `xxu_bringup`。三套平台链由 [launch_helpers.py](../../src/xxu_bringup/xxu_bringup/launch_helpers.py) 构造，平台校准值集中在 [sensor_chain.yaml](../../src/xxu_bringup/config/sensor_chain.yaml)，话题及坐标系默认值来自 [robot_interfaces.yaml](../../src/xxu_bringup/config/robot_interfaces.yaml)。实车的话题、编码器零位和加速度单位仍支持启动参数覆盖。
+点云运动补偿、云台 IMU 补偿和 IMU 坐标重发布节点安装在 `xxu_bringup`。[sensor_launch.py](../../src/xxu_bringup/xxu_bringup/sensor_launch.py) 分别构造三套平台的传感器预处理和 Small Point-LIO；原组合函数保留兼容。平台校准值集中在 [sensor_chain.yaml](../../src/xxu_bringup/config/sensor_chain.yaml)，话题及坐标系默认值来自 [robot_interfaces.yaml](../../src/xxu_bringup/config/robot_interfaces.yaml)。实车的话题、编码器零位和加速度单位仍支持启动参数覆盖。
+
+单独检查实车传感器预处理时，可在直接入口指定 `enable_lio:=false`；默认仍为 `true`。此选项只关闭该入口中的 Small Point-LIO，不提供 `/odom` 或替代定位，也不代表已经接入新的定位模块。
 
 折叠车显式启用已有的两项扩展：`fixed_sensor=true` 关闭 IMU 云台关节插值，保留安装旋转和杆臂修正；`self_filter_geometry_file` 在几何声明的坐标系内过滤车身凸包和车轮回波，保留整条点记录及时间戳。这两项此前已存在，本次仅迁移归属，脚本内容未改；默认均关闭。模型与标定限制见 [CAD 说明](../navigation/cad/README.md)。
+
+## ZLIO 底盘里程计候选适配
+
+独立候选入口 `ros2 launch xxu_bringup zlio_base_adapter.launch.py` 订阅 ZLIO `/odometry`，查找消息时刻的 `lio_base_sensor ← base_footprint`，转换位姿、刚体速度及协方差，发布 `/odom` 和 `odom → base_footprint`。默认将 ZLIO 输出的 `imu` 标签对应到已补偿的 `lio_base_sensor`；只有两者确实表示同一刚性坐标系时才能这样配置。参数 `source_child_frame`、`sensor_frame`、`base_frame`、`odom_frame`、`input_topic`、`output_topic` 和 `use_sim_time` 可覆盖。
+
+运行前必须保证虚拟传感器相对底盘刚性固定，TF 由机器人模型发布；移动云台原始帧不满足刚体速度转换条件。输入帧名不符、时间为零或缺少对应时刻的 TF 时适配器不发布。候选运行时 ZLIO 应关闭自身 TF 发布，并停止其他 `/odom` 和 `odom → base_footprint` 发布者；后端负责 `map → odom`。该入口不启动 ZLIO、后端或导航，也不处理定位降级时的 Nav2 保护。[回放验证及未完成项](../../../docs/validation/zlio_base_tf_20261031.md)仍限制正式使用。
+
+### 固定传感器的统一定位入口
+
+现有 `bringup/bringup.launch.py` 和 `frontend/lio.launch.py` 支持显式传入 `point_time_field`、`point_time_scale`、`point_time_absolute` 和 `publish_tf`，默认值保持原行为。重新构建安装 `frontend`、`backend`、`bringup`、`xxu_bringup` 和 `xxu_livox_sim` 并加载工作空间后，可复用统一入口启动前后端；底盘适配仍用上面的已有入口。不要同时启用仿真入口内的 ZLIO 或 Small Point-LIO。
+
+在 `xxu_nav_2026` 工作空间目录中，以下参数仅适用于本次自建图、固定虚拟传感器和已知出生点 `(2,2,0)`；传感器预处理及仿真时钟须另行启动。它只启动定位，不启动 Nav2 或发送指令：
+
+```bash
+ros2 launch bringup bringup.launch.py \
+  frontend_config:="$PWD/maps/rmul_self_20261109/lio.yaml" \
+  backend_config:="$PWD/maps/rmul_self_20261109/backend.yaml" \
+  prior_map:="$PWD/maps/rmul_self_20261109/prior" \
+  mode:=localization use_sim_time:=true input_type:=pointcloud2 \
+  lidar_topic:=/mid360/livox_points_compensated imu_topic:=/imu_lio_compensated \
+  imu_acceleration_scale:=1.0 point_time_field:=timestamp \
+  point_time_scale:=1e-9 point_time_absolute:=true publish_tf:=false
+```
+
+仿真逐点时间版本沿用现存补丁，可用 `tools/navigation/build_rgl_timed_candidate.sh --output-dir "$PWD/build/rgl_timed_runtime"` 首次构建到新目录，再通过 `rgl_plugin_dir` 显式选择其 `install/RGLServerPlugin`；目录已存在时脚本拒绝覆盖。默认 RGL 插件不含这项扩展，不能只打开 `rgl_point_timing:=uniform` 就视为输入时序已成立。该模式仍是均匀扫描时间模型，未成为真实 Mid360 时序标定。
+
+当前安装与静止检查结果、GTSAM 路径及相机 SDK 动态库冲突的处理范围见[第三阶段续测记录](../../../docs/validation/nav2_stage3_20261108.md#2026-11-09-续测预检查)。`record_localization_jumps.py --tdt` 可额外只读记录 TDT 状态与全局位姿；`--safe-velocity-topic`、`--truth-topic` 可记录安全输出和仿真真值，均不发布数据或控制命令。
 
 ## 启动补偿版 LIO
 

@@ -39,14 +39,48 @@ python3 tools/navigation/recolor_rmul_field.py src/xxu_bringup/models/rmul_2027
 | 底盘控制器/下位机 | 执行轮速，保留轮速限制和超时停车 |
 | 云台驱动 | 执行独立的云台控制并发布带时间戳的 `gimbal_joint` 状态 |
 
+## 当前主线与收敛范围
+
+2026-11-09：后续集成以 **ZLIO → TDT → 底盘里程计适配 → Nav2 MPPI Omni → 速度保护 → 底盘** 为主线。`rmul_navigation.launch.py` 默认仍使用 Small Point-LIO / AMCL；现在可显式选择 `localization_backend:=zlio_tdt` 组合现有入口。新图近出生点四目标闭环结果见[阶段三当前记录](../../../docs/validation/nav2_stage3_20261108.md#新基线外部定位-nav2-四目标闭环)，不等于完整第三阶段或正式故障恢复验收。
+
+2026-11-10：新图专用后端配置显式启用可信高频 `map → odom` 发布，近出生点四目标的 15 Hz 控制周期连续两轮无超时告警，目标和停车均通过；失信、长路线与实车范围仍待验收。参数默认关闭，具体边界及对照数字见[阶段三时序修正记录](../../../docs/validation/nav2_stage3_20261108.md#2026-11-10高频-tf-发布修正与四目标复测)。
+
+| 范围 | 收敛处理 |
+| --- | --- |
+| 定位与导航代码 | 保留 ZLIO/TDT、底盘适配、逐点时间输入、Nav2、现有速度保护；不新增导航模块或替换算法 |
+| 启动与配置 | 默认保留兼容入口；外部定位模式复用既有 launch 与节点构造函数，不复制阶段启动文件 |
+| 候选与测试 | 停止扩展恢复矩阵、定位预测和轮地物理候选；保留随现存接口维护的离线检查，不重建一次性探针 |
+| 实验资料 | `docs/validation/data/` 不存在，不恢复已删除的旧录包和构建；当前新基线结果与运行产物由阶段三当前记录路由 |
+
+历史记录：[阶段一：接口与 Costmap](../../../docs/validation/nav2_stage1_20261108.md)、[阶段二：停车与恢复](../../../docs/validation/nav2_stage2_20261108.md)、[阶段三：正常导航](../../../docs/validation/nav2_stage3_20261108.md)。历史结果为六个正常导航目标成功，绕障受低薄板物理接触阻挡，通道未执行；实车可通过该区域由用户确认，仿真根因仍未确定。暂停物理候选后，后续正常导航可先选择不经过该薄板的路线，原失败结果保持未通过。
+
 ## 共享启动与参数来源
 
 - [nav2_navigation.yaml](../../src/xxu_bringup/config/nav2_navigation.yaml) 与 [nav2_exploration.yaml](../../src/xxu_bringup/config/nav2_exploration.yaml)保存各自基础参数，non-fake 模式直接使用基础行为。
 - [nav2_fake_profile.yaml](../../src/xxu_bringup/config/nav2_fake_profile.yaml)是 fake 模式覆盖值的唯一来源：`common` 为导航/探索共有的 15 项；`navigation` 为地图导航专用 PathFollow 三项；`exploration` 当前不增加覆盖，保留探索基础值。此文件是覆盖表，不能作为独立 Nav2 参数文件启动。调节 fake 模式时先确认目标值是否在此表中。
-- 共享启动实现按职责划分： [navigation_parameters.py](../../src/xxu_bringup/xxu_bringup/navigation_parameters.py) 构造 Nav2 参数，[velocity_launch.py](../../src/xxu_bringup/xxu_bringup/velocity_launch.py) 构造速度链，[sensor_launch.py](../../src/xxu_bringup/xxu_bringup/sensor_launch.py) 构造 LIO 预处理链，[robot_profiles.py](../../src/xxu_bringup/xxu_bringup/robot_profiles.py) 处理车型参数，[map_paths.py](../../src/xxu_bringup/xxu_bringup/map_paths.py) 解析建图保存位置。原 [launch_helpers.py](../../src/xxu_bringup/xxu_bringup/launch_helpers.py) 保留兼容导出；新调用按需导入对应模块。仿真时间、坐标系、命令话题和规划容差由启动参数决定；行为树文件名在覆盖表中保存，路径按当前安装位置展开。
+- 共享启动实现按职责划分： [navigation_parameters.py](../../src/xxu_bringup/xxu_bringup/navigation_parameters.py) 构造 Nav2 参数，[velocity_launch.py](../../src/xxu_bringup/xxu_bringup/velocity_launch.py) 构造速度链，[sensor_launch.py](../../src/xxu_bringup/xxu_bringup/sensor_launch.py) 分别构造传感器预处理与 Small Point-LIO，[robot_profiles.py](../../src/xxu_bringup/xxu_bringup/robot_profiles.py) 处理车型参数，[map_paths.py](../../src/xxu_bringup/xxu_bringup/map_paths.py) 解析建图保存位置。原 [launch_helpers.py](../../src/xxu_bringup/xxu_bringup/launch_helpers.py) 保留兼容导出；新调用按需导入对应模块。仿真时间、坐标系、命令话题和规划容差由启动参数决定；行为树文件名在覆盖表中保存，路径按当前安装位置展开。
 - 实车、旧 Gazebo、rm_sim 共用速度转换器和 watchdog 的定义。调用处仅指定平台差异：输入/输出话题、关节话题、自旋值与滤波窗口。rm_sim 最终安全输出仍是 `/rm_sim/cmd_vel_safe`；CAD 车型交给 `xxu_chassis_controller` 发布逐轮指令，上游车型保留速度/云台适配器。
 
 共享代码安装在既有 `xxu_bringup` 包内。[interfaces.py](../../src/xxu_bringup/xxu_bringup/interfaces.py) 单独提供接口数据读取，运行节点可直接使用，无需导入 Nav2 启动代码。`xxu_description` 只安装模型、显示和 ros2_control 资源；修改集成代码或新增 Python 模块后需重新构建并加载工作空间。
+
+[navigation.launch.py](../../src/xxu_bringup/launch/navigation.launch.py) 默认按原方式组合 AMCL/GICP 与 Nav2。显式选择 `localization_mode:=external enable_localization:=true` 时，只管理地图服务和导航服务器，排除 AMCL/GICP；启动器复用现有 watchdog 的状态、源时间和恢复保持检查，并同时等待 TF。运行中的保护仍由原 watchdog 负责，启动门不等于任务恢复联锁。
+
+EGA 仿真可通过原 `rmul_navigation.launch.py` 选择外部模式；须显式提供匹配的二维图、先验地图包、前后端配置和 Nav2 参数，缺失时拒绝启动。该模式固定关闭其他 LIO、自旋和 fake frame，使用已有逐点时间插件及底盘适配。加载重建的工作空间、并按[运行环境记录](../../../docs/validation/nav2_stage3_20261108.md#2026-11-09-续测预检查)处理本机动态库路径后，在 `xxu_nav_2026` 目录中使用：
+
+```bash
+ros2 launch xxu_bringup rmul_navigation.launch.py \
+  localization_backend:=zlio_tdt gazebo_gui:=false rviz:=false \
+  frontend_config:="$PWD/maps/rmul_self_20261109/lio.yaml" \
+  backend_config:="$PWD/maps/rmul_self_20261109/backend.yaml" \
+  prior_map:="$PWD/maps/rmul_self_20261109/prior" \
+  external_map:="$PWD/maps/rmul_self_20261109/nav2.yaml" \
+  external_nav2_params:="$PWD/maps/rmul_self_20261109/navigation.yaml" \
+  rgl_plugin_dir:="$PWD/build/rgl_timed_runtime/install/RGLServerPlugin"
+```
+
+该新图配置仅适用于已知出生点 `(2,2,0)`；默认只启动系统，不自动下发目标。现有 `check_ega_navigation.py --external-localization` 在隔离域内监督本轮测试，定位失信时取消动作并持续向平滑前话题发送零速度，随后结束测试，不自动重发目标。这是测试客户端行为，未把暂停的新请求门或任务联锁候选接入正式链；本轮正常导航未注入故障验证此分支。
+
+固定虚拟传感器的 ZLIO 适配入口为 [zlio_base_adapter.launch.py](../../src/xxu_bringup/launch/zlio_base_adapter.launch.py)，可显式启用 `publish_deskewed_cloud`；它要求前端 `imu` 与补偿后的 `lio_base_sensor` 表示同一个固定虚拟传感器坐标。底盘转换、点云转发及状态/时间校验由适配器负责。定位失信保护参数见 [watchdog 接口](../../src/fake_vel_transform/README.md)；这些部件不等于外部定位 Nav2 已正式接入。
 
 [sensor_chain.yaml](../../src/xxu_bringup/config/sensor_chain.yaml) 保存 `gazebo`、`rm_sim`、`real` 的校准及补偿默认参数，话题/坐标系使用 [robot_interfaces.yaml](../../src/xxu_bringup/config/robot_interfaces.yaml) 的语义引用。CAD 车型按 `models/<robot_model>/geometry.json` 选择，模型目录须同时提供 `model.sdf` 和 `robot.urdf`；当前 CAD 接口约定为固定传感器、四个独立驱动轮和 RGL。
 

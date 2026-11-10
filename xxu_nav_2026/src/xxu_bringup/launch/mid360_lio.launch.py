@@ -9,12 +9,13 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 from xxu_bringup.interfaces import interfaces
-from xxu_bringup.sensor_launch import lio_preprocessing
+from xxu_bringup.sensor_launch import sensor_preprocessing, small_point_lio
 
 
 def generate_launch_description():
     contract = interfaces()
     use_sim_time = LaunchConfiguration("use_sim_time")
+    enable_lio = LaunchConfiguration("enable_lio")
     model = LaunchConfiguration("model")
     config_file = LaunchConfiguration("config_file")
     lidar_topic = LaunchConfiguration("lidar_topic")
@@ -52,8 +53,8 @@ def generate_launch_description():
         remappings=[("joint_states", joint_states_topic)],
     )
 
-    lio_nodes = lio_preprocessing(
-        "real", use_sim_time=use_sim_time, config_file=config_file,
+    lio_nodes = sensor_preprocessing(
+        "real", use_sim_time=use_sim_time,
         pointcloud_overrides={"joint_position_offset": ParameterValue(joint_position_offset, value_type=float)},
         imu_overrides={
             "joint_position_offset": ParameterValue(joint_position_offset, value_type=float),
@@ -62,6 +63,10 @@ def generate_launch_description():
         pointcloud_remappings={"points_in": lidar_topic, "joint_states": joint_states_topic},
         imu_remappings={"imu_in": imu_topic, "joint_states": joint_states_topic},
     )
+    lio_nodes.append(small_point_lio(
+        "real", use_sim_time=use_sim_time, config_file=config_file,
+        condition=IfCondition(enable_lio),
+    ))
 
 
     return LaunchDescription([
@@ -69,6 +74,11 @@ def generate_launch_description():
             "use_sim_time",
             default_value="false",
             description="Use the ROS simulation clock when true",
+        ),
+        DeclareLaunchArgument(
+            "enable_lio",
+            default_value="true",
+            description="Start Small Point-LIO after sensor preprocessing",
         ),
         DeclareLaunchArgument(
             "model",

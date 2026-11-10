@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-10",
+  "new_baseline": true,
+  "near_spawn_four_xy_goals_passed": true,
+  "full_stage3_accepted": false,
+  "source_report": "../../../docs/validation/nav2_stage3_20261108.md",
+  "latest_result": "../../log/zlio_navigation_20261109/run07_tf_fix/result.json",
+  "analysis": "../../log/zlio_navigation_20261109/tf_fix/analysis.json",
+  "remaining": [
+    "Yaw-goal accuracy",
+    "Static obstacle detour avoiding the known physical obstruction",
+    "Unknown passage coverage",
+    "Production fault/recovery task protection and complete TF owner audit",
+    "Hardware, prolonged operation and dynamic-load timing"
+  ],
+  "timing_diagnosis": "../../log/zlio_navigation_20261109/run03_profile/analysis.json",
+  "timing_fix_implemented": true,
+  "function_profile": "../../log/zlio_navigation_20261109/run05_detail/analysis.json",
+  "repeat_result": "../../log/zlio_navigation_20261109/run06_tf_fix/result.json",
+  "near_spawn_15hz_passed": true,
+  "control_timing_scope": "two isolated four-goal near-spawn runs"
+}
