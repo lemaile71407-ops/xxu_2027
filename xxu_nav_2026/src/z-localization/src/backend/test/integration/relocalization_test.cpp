@@ -91,6 +91,43 @@ TEST_F(RelocalizationSearch, CandidateRadiusDoesNotBoundRecoveredPose) {
               request.search_radius);
 }
 
+/// 局部对称解不满足恢复边界时，应继续验证全局候选而不是结束本轮搜索。
+TEST_F(RelocalizationSearch, ContinuityRejectedLocalAliasDoesNotHideGlobalCandidate) {
+    prior.clear();
+    prior.add(testing::sceneFrame(*world, 1, Eigen::Matrix4d::Identity(),
+                                  testing::scenePose(6, 0, 0, 0)));
+    prior.add(testing::sceneFrame(*world, 2, Eigen::Matrix4d::Identity(),
+                                  Eigen::Matrix4d::Identity()));
+    rebuildMapDescriptors(descriptor, prior.snapshot());
+    positions = prior.positions();
+    RelocalizationRequest request{runtime, config, positions};
+    request.status = LocalizationStatus::Lost;
+    request.T_map_runtime_pred = testing::scenePose(6, 0, 0, 0);
+    request.search_radius = 1.;
+    request.global_fallback_candidates = 2;
+    request.continuity_bound = RelocalizationContinuityBound{truth, .3, .2};
+    const auto result = runRelocalization(prior, descriptor, cache, request);
+    ASSERT_TRUE(result.success);
+    EXPECT_EQ(result.prior_index, 1);
+    EXPECT_GT(result.continuity_rejections, 0);
+    EXPECT_LT((result.T_map_odom * runtime.odom_pose - truth).norm(), .01);
+}
+
+/// 没有可信参考、边界无效或真实解越界时仍须拒绝，不能由回退搜索放宽验收。
+TEST_F(RelocalizationSearch, ContinuityBoundFailsClosedForMissingOrInvalidReference) {
+    RelocalizationRequest request{runtime, config, positions};
+    request.continuity_bound = RelocalizationContinuityBound{std::nullopt, .3, .2};
+    auto result = runRelocalization(prior, descriptor, cache, request);
+    EXPECT_FALSE(result.success);
+    EXPECT_GT(result.continuity_rejections, 0);
+    request.continuity_bound->reference_pose = truth;
+    request.continuity_bound->max_translation = 0.;
+    EXPECT_FALSE(runRelocalization(prior, descriptor, cache, request).success);
+    request.continuity_bound->max_translation = .3;
+    request.continuity_bound->reference_pose = testing::scenePose(6, 0, 0, 0);
+    EXPECT_FALSE(runRelocalization(prior, descriptor, cache, request).success);
+}
+
 /// 二维位置先验按水平距离验收，并在初值与结果中计入天线杆臂。
 TEST_F(RelocalizationSearch, HorizontalPositionPriorIgnoresHeightAndAccountsForLeverArm) {
     RelocalizationPositionPrior position;

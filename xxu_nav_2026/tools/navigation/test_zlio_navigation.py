@@ -22,7 +22,7 @@ def load(name, path):
     return module
 
 
-watchdog = load('candidate_watchdog', ROOT / 'src/fake_vel_transform/scripts/cmd_vel_watchdog.py')
+watchdog = load('candidate_watchdog', ROOT / 'src/xxu_bringup/scripts/cmd_vel_watchdog.py')
 adapter = load('candidate_adapter', ROOT / 'src/xxu_bringup/scripts/zlio_base_odometry.py')
 
 
@@ -74,6 +74,44 @@ class LocalizationHealthTest(unittest.TestCase):
         self.guard.observe_state(state(0, revision=2), .6)
         self.guard.observe_pose(pose(100600000000), .6)
         self.assertFalse(self.guard.check(.6, 100600000000)[0])
+
+    def test_trusted_generation_transition_keeps_existing_freshness(self):
+        self.assertFalse(self.feed(0))
+        self.assertTrue(self.feed(.21))
+        # Backend working generation changes for NORMAL <-> OBS_DEGRADED,
+        # while the coordinate epoch and committed pose remain valid.
+        for t, status, generation in ((.3, 'OBS_DEGRADED', 3), (.4, 'NORMAL', 4)):
+            self.guard.observe_state(state(0, status=status, generation=generation, revision=2), t)
+            self.assertTrue(self.guard.check(t, 100000000000 + round(t*1e9))[0])
+        self.assertEqual(self.guard.state_stamp, 100210000000)
+        self.assertEqual(self.guard.pose_stamp, 100210000000)
+
+    def test_zero_stamp_new_generations_cannot_extend_source_lifetime(self):
+        self.feed(0)
+        self.assertTrue(self.feed(.21))
+        for i, t in enumerate((.3, .5, .72), start=3):
+            self.guard.observe_state(state(0, status='OBS_DEGRADED', generation=i), t)
+            self.guard.observe_pose(pose(100000000000 + round(t*1e9)), t)
+        healthy, reasons = self.guard.check(.72, 100720000000)
+        self.assertFalse(healthy)
+        self.assertIn('localization state receipt/source-progress timeout', reasons)
+
+    def test_untrusted_transition_cannot_reuse_pose_or_skip_recovery_hold(self):
+        self.feed(0)
+        self.assertTrue(self.feed(.21))
+        self.guard.observe_state(state(0, status='SUSPECT', generation=3), .3)
+        self.assertFalse(self.guard.check(.3, 100300000000)[0])
+        self.guard.observe_state(state(100400000000, generation=4), .4)
+        self.assertFalse(self.guard.check(.4, 100400000000)[0])
+        self.assertFalse(self.feed(.41, generation=4))
+        self.assertTrue(self.feed(.62, generation=4))
+
+    def test_new_trusted_generation_still_rejects_regressed_source_stamp(self):
+        self.feed(0)
+        self.assertTrue(self.feed(.21))
+        self.guard.observe_state(state(100100000000, status='OBS_DEGRADED', generation=3), .3)
+        self.guard.observe_pose(pose(100300000000), .3)
+        self.assertFalse(self.guard.check(.3, 100300000000)[0])
 
     def test_state_and_pose_source_ages_are_checked(self):
         self.feed(0)

@@ -3,7 +3,8 @@
 
 The source's large plane at Y=420 mm is the playing surface; Y=520 mm is
 the underside. Use a proper rotation, never a reflection: (X,Z,420-Y)/1000.
-The input is read-only. The output preserves all collision triangles.
+The input is read-only and the converted reference preserves all triangles.
+Material export separately flattens ground decoration collision and renders decals.
 """
 
 import argparse

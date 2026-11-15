@@ -1,0 +1,95 @@
+{
+  "date": "2026-11-12",
+  "session": "right",
+  "completed": false,
+  "known_spawn": [
+    11.0,
+    2.0
+  ],
+  "stations": [
+    [
+      11.0,
+      2.0
+    ],
+    [
+      11.0,
+      4.5
+    ],
+    [
+      10.7,
+      6.65
+    ],
+    [
+      8.5,
+      7.0
+    ],
+    [
+      8.4,
+      5.9
+    ]
+  ],
+  "reached": [
+    [
+      11.0,
+      2.0
+    ],
+    [
+      11.0,
+      4.5
+    ],
+    [
+      10.7,
+      6.65
+    ],
+    [
+      8.5,
+      7.0
+    ]
+  ],
+  "initial_base_odom": [
+    0.001459077681961653,
+    -0.0007684269073657869
+  ],
+  "rotation_checks": [
+    {
+      "world_xy": [
+        10.979613217487584,
+        1.989097419035941
+      ],
+      "rotation_rad": 6.258473844551165,
+      "heading_bins_10deg": 36,
+      "saved_frames": 60,
+      "translation_during_rotation_m": 0.024081999212629948
+    },
+    {
+      "world_xy": [
+        10.9998551099636,
+        4.442615522912706
+      ],
+      "rotation_rad": 6.258401388823354,
+      "heading_bins_10deg": 36,
+      "saved_frames": 59,
+      "translation_during_rotation_m": 0.0008552559101188506
+    },
+    {
+      "world_xy": [
+        10.657925160556605,
+        6.591028629856665
+      ],
+      "rotation_rad": 6.258605219146057,
+      "heading_bins_10deg": 36,
+      "saved_frames": 60,
+      "translation_during_rotation_m": 0.0008913039699242014
+    },
+    {
+      "world_xy": [
+        8.558333176150937,
+        6.990026628070677
+      ],
+      "rotation_rad": 6.258262774607097,
+      "heading_bins_10deg": 36,
+      "saved_frames": 59,
+      "translation_during_rotation_m": 0.0005581387484151153
+    }
+  ]
+}

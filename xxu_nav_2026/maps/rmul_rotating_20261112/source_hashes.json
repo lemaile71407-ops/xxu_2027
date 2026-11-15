@@ -1,0 +1,11 @@
+{
+  "xxu_nav_2026/maps/rmul_self_20261109/map.pcd": "bcc6e153451743702b831656d7e6c18502b06c05546eb3df33b05f5bf831d02e",
+  "xxu_nav_2026/maps/rmul_self_20261109/nav2.pgm": "272a635c531b472335dbce14bb89c7ca7d14d7975762b193a17c7b462c5be505",
+  "xxu_nav_2026/maps/rmul_self_20261109/nav2.yaml": "4fbe6fe59e3ade7d443fc2be03e3dffc39370c5848f27987ec714a69549a0b90",
+  "xxu_nav_2026/maps/rmul_self_20261109/prior/map.pcd": "f0b3419c1426e945cfd1c5692b132a1fda615746e701f110ea13328b0fe26331",
+  "xxu_nav_2026/maps/rmul_self_20261109/prior/keyframes.txt": "32b567fd087e680ddeea212fe928029c32a171465a18eb79bd0dc08620eca77b",
+  "xxu_nav_2026/maps/rmul_self_20261109/prior/sc_descriptors.bin": "8d501b543a0e53bad5f6395c5a4d4b499fa1c69eb18404b5fa12d88f4ac67ab2",
+  "xxu_nav_2026/src/xxu_bringup/models/ega_folded/model.sdf": "99830772e9bde4701fceb1ffe1335f97b799b5e99f67cf6c7fa7c33b1a8f1732",
+  "xxu_nav_2026/src/xxu_bringup/models/rmul_2027/model.sdf": "1fc4bf2aa42ee8e744253c661c059e507df6e4abd4262f812fd10aab239e326a",
+  "xxu_nav_2026/log/velocity_after_yaw_20261111/antialias_matched_noise_regression/frontend.yaml": "27ed639a8224d7381ac3dac17839925d97f43c4589b525a4993f42dbfed571b2"
+}

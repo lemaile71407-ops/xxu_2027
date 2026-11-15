@@ -1,0 +1,4 @@
+# Explicit simulation candidate; known diagnostics and long-route failures remain.
+extends: backend.yaml
+registration:
+  experimental_blended_adaptive: true

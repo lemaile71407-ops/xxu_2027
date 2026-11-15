@@ -1,0 +1,142 @@
+{
+  "date": "2026-11-12",
+  "scope": "new rotating measured map plus dense 0.1 m prior, previously accepted frontend/backend overlays and fast MPPI; simulation only, known spawn initialization",
+  "all_tests_passed": false,
+  "tests": {
+    "interior_yaw01": {
+      "passed": true,
+      "result": "log/rotating_map_20261112/validation/interior_yaw01/result.json",
+      "completed_goals": 1,
+      "expected_goals": 1,
+      "physical_xy_tolerance_m": 0.12,
+      "physical_yaw_tolerance_rad": 0.2,
+      "settled_goal_errors_m": [
+        0.05339198855970072
+      ],
+      "settled_yaw_errors_rad": [
+        0.020511042068450447
+      ],
+      "failure": null,
+      "failed_goals": [],
+      "max_static_map_truth_xy_difference_m": 0.005729184593466837
+    },
+    "interior_yaw02": {
+      "passed": true,
+      "result": "log/rotating_map_20261112/validation/interior_yaw02/result.json",
+      "completed_goals": 1,
+      "expected_goals": 1,
+      "physical_xy_tolerance_m": 0.12,
+      "physical_yaw_tolerance_rad": 0.2,
+      "settled_goal_errors_m": [
+        0.00288937332045014
+      ],
+      "settled_yaw_errors_rad": [
+        0.14337025339155263
+      ],
+      "failure": null,
+      "failed_goals": [],
+      "max_static_map_truth_xy_difference_m": 0.00523246959703423
+    },
+    "navigation01": {
+      "passed": false,
+      "result": "log/rotating_map_20261112/validation/navigation01/result.json",
+      "completed_goals": 7,
+      "expected_goals": 7,
+      "physical_xy_tolerance_m": 0.12,
+      "physical_yaw_tolerance_rad": 0.2,
+      "settled_goal_errors_m": [
+        0.013447227635165041,
+        0.007406253595829769,
+        0.0054021794866629304,
+        0.0018934494654829026,
+        0.007035209553955495,
+        0.013080907615901255,
+        4.032773190052419
+      ],
+      "settled_yaw_errors_rad": [
+        0.022213695474657895,
+        0.011374153584402167,
+        0.01797771863177225,
+        0.010977504628802433,
+        0.10313515236521331,
+        0.012014057663310318,
+        2.898486518415165
+      ],
+      "failure": null,
+      "failed_goals": [
+        {
+          "target": [
+            6.9,
+            6.3
+          ],
+          "stalled": true,
+          "localization_fault": null,
+          "status": null,
+          "truth_xy_m": [
+            5.460621286517906,
+            2.532846097969955
+          ],
+          "map_xy_m": [
+            5.463469102941193,
+            2.5347659100855777
+          ]
+        }
+      ],
+      "max_static_map_truth_xy_difference_m": 0
+    },
+    "single_goal01": {
+      "passed": false,
+      "result": "log/rotating_map_20261112/validation/single_goal01/result.json",
+      "completed_goals": 1,
+      "expected_goals": 1,
+      "physical_xy_tolerance_m": 0.12,
+      "physical_yaw_tolerance_rad": 0.2,
+      "settled_goal_errors_m": [
+        4.037734981452788
+      ],
+      "settled_yaw_errors_rad": [
+        0.26418536505387136
+      ],
+      "failure": null,
+      "failed_goals": [
+        {
+          "target": [
+            6.9,
+            6.3
+          ],
+          "stalled": true,
+          "localization_fault": null,
+          "status": null,
+          "truth_xy_m": [
+            5.453123570124788,
+            2.5304042156858375
+          ],
+          "map_xy_m": [
+            5.454310728164627,
+            2.531842182262429
+          ]
+        }
+      ],
+      "max_static_map_truth_xy_difference_m": 0.0031069303873534912
+    }
+  },
+  "protected_inputs_unchanged": true,
+  "source_observations_consistent": true,
+  "global_defaults_modified": false,
+  "limits": [
+    "Not unhinted global relocalization acceptance",
+    "New map and prior sampling changed together; does not isolate the sole cause of the prior localization failure",
+    "Full station azimuth coverage does not prove zero vertical/occlusion blind spots",
+    "Low thin plates remain excluded by the inherited 2D obstacle height band",
+    "Initial right survey failed; right_retry completed all station scans but its return stalled; failed mission records preserved",
+    "Acquisition truth XY transient peak on left was 0.15985 m; P95 0.00489 m; sustained 0.12 m/0.5 s abort criterion remained unchanged",
+    "No real hardware, full dynamic avoidance, long term stability or complete stage-three acceptance"
+  ],
+  "motion_analysis": "log/rotating_map_20261112/single_goal01_motion_analysis.json",
+  "interactive_session": "log/rotating_map_20261112/view_runtime.json",
+  "interactive_verification": "log/rotating_map_20261112/view_verification.json",
+  "subsequent_scene_validation": {
+    "record": "log/field_decals_20261112/verification.json",
+    "description": "Later user-authorized ground markings flattened; direct outbound and yaw-zero roundtrip pass; 180-degree followed by fast diagonal translation still fails localization. Original map-acquisition and navigation results above remain historical and unchanged."
+  }
+}

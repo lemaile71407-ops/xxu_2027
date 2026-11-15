@@ -38,6 +38,7 @@ struct RelocalizationBest {
 
 struct VerificationRunResult {
     bool success = false;
+    bool continuity_rejected = false;
     Eigen::Matrix4d measured = Eigen::Matrix4d::Identity();
     double residual_score = std::numeric_limits<double>::max();
     PoseCovariance6d covariance = PoseCovariance6d::Zero();
@@ -58,6 +59,7 @@ struct CandidateVerificationInput {
 
 struct CandidateVerificationResult {
     int tried = 0;
+    int continuity_rejections = 0;
     double best_failed_residual_score = std::numeric_limits<double>::max();
     ObservabilityQuality best_failed_quality;
     RelocalizationBest best;
@@ -163,6 +165,7 @@ private:
     int target_keyframe_limit_ = 0;
     int global_fallback_considered_ = 0;
     int tried_verifications_ = 0;
+    int continuity_rejections_ = 0;
     double best_descriptor_distance_ = std::numeric_limits<double>::max();
     double descriptor_distance_limit_ = std::numeric_limits<double>::max();
     double best_failed_residual_score_ = std::numeric_limits<double>::max();

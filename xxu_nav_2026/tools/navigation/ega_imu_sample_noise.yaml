@@ -1,0 +1,6 @@
+# Explicit EGA simulation profile, in SI sample VARIANCES, not noise densities.
+# Derived from models/ega_folded/model.sdf: gyro std=2e-4 rad/s,
+# acceleration std=1.7e-2 m/s^2. Compensated input was checked against these values.
+# Apply only via --frontend-noise-profile; real sensor defaults are unchanged.
+gyro_variance: 4.0e-8
+accel_variance: 2.89e-4

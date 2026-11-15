@@ -41,6 +41,13 @@ struct RelocalizationPositionPrior {
     int max_candidates = 0;
 };
 
+/// 已启用的恢复连续性边界；缺少可信参考时拒绝所有候选。
+struct RelocalizationContinuityBound {
+    std::optional<Eigen::Matrix4d> reference_pose;
+    double max_translation = 0.;
+    double max_rotation_rad = 0.;
+};
+
 /// 单次重定位的输入快照；引用的数据须在检索期间有效。
 struct RelocalizationRequest {
     /// 当前运行关键帧。
@@ -65,6 +72,8 @@ struct RelocalizationRequest {
     int global_fallback_candidates = 0;
     /// 源点云配准观测的信息缩放系数。
     double source_information_scale = 1.0;
+    /// 在候选排序和回退决策前应用；提交阶段仍独立复核原连续性门。
+    std::optional<RelocalizationContinuityBound> continuity_bound{};
 };
 
 /// 重定位的匹配结果、全局变换与协方差。
@@ -81,6 +90,8 @@ struct RelocalizationResult {
     PoseCovariance6d covariance = PoseCovariance6d::Zero();
     /// 恢复位姿协方差是否有效。
     bool covariance_valid = false;
+    /// 有几何解但被原恢复连续性边界拒绝的假设数。
+    int continuity_rejections = 0;
 };
 
 /// 分批执行的对称航向采样序列，偏移值为采样角间隔的整数倍。

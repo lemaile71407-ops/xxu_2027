@@ -1,0 +1,71 @@
+{
+  "date": "2026-11-12",
+  "new_baseline": true,
+  "survey_completed": true,
+  "three_dimensional_points": 58202,
+  "map_frame": "left session known spawn world anchor; right/interior rigid transforms from observed nonfloor cloud overlap; no fitted truth trajectory",
+  "resolution": 0.05,
+  "size": [
+    264,
+    183
+  ],
+  "origin": [
+    -0.25,
+    -0.25
+  ],
+  "occupied_height_band_m": [
+    0.1,
+    0.34
+  ],
+  "occupancy_dilation_cells": 2,
+  "free_rays": "Only observed endpoint returns in height band; transformed actual lidar origins; unknown remains unknown",
+  "grid_cells": {
+    "free": 27477,
+    "occupied": 13076,
+    "unknown": 7759
+  },
+  "protected_original_models_unchanged": true,
+  "coverage_checks": {
+    "spawn": {
+      "xy": [
+        2.0,
+        2.0
+      ],
+      "cell": 254,
+      "known_free_clearance_m": 1.4150971698084907
+    },
+    "left_approach": {
+      "xy": [
+        2.0,
+        3.8
+      ],
+      "cell": 254,
+      "known_free_clearance_m": 0.65
+    },
+    "old_detour_goal": {
+      "xy": [
+        6.3,
+        3.8
+      ],
+      "cell": 254,
+      "known_free_clearance_m": 1.35
+    },
+    "old_passage_goal": {
+      "xy": [
+        6.3,
+        5.2
+      ],
+      "cell": 254,
+      "known_free_clearance_m": 1.35
+    }
+  },
+  "limitations": [
+    "Unobserved regions remain unknown",
+    "Thin plates below 0.10 m remain excluded from this 2D collision-height band",
+    "Station headings cover 360 degrees; vertical FOV and hidden surfaces still require coverage inspection",
+    "Descriptor grid samples are derived from acquired map, not extra real scans",
+    "Global localization and navigation require independent validation"
+  ],
+  "scope": "measured multi-position full rotations; complete azimuth sampling at stations does not prove absence of all sensor/occlusion blind spots",
+  "independent_navigation_check": "navigation_check.json"
+}

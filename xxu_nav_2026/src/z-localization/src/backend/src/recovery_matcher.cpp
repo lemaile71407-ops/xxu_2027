@@ -4,6 +4,7 @@
  */
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include "backend/frame_history.hpp"
@@ -50,12 +51,22 @@ bool RecoveryMatcher::match(const RecoveryWork& work,
                             RecoveryResult& out) {
     if (work.prior_positions.empty())
         return false;
+    if (work.continuity_bound) {
+        const auto& bound = *work.continuity_bound;
+        if (!bound.reference_pose || !bound.reference_pose->allFinite() ||
+            !std::isfinite(bound.max_translation) || bound.max_translation <= 0. ||
+            !std::isfinite(bound.max_rotation_rad) || bound.max_rotation_rad <= 0.) {
+            out.source = "recovery continuity guard missing valid thresholds or trusted map reference";
+            return false;
+        }
+    }
 
     RelocalizationRequest request{work.runtime, config_.relocalization, work.prior_positions};
     request.status = work.identity.status;
     request.T_map_runtime_pred = work.predicted_map_pose;
     request.fine_source = work.fine_source;
     request.coarse_source = work.coarse_source;
+    request.continuity_bound = work.continuity_bound;
     request.position_prior = position_prior;
     request.source_information_scale =
         1.0 / static_cast<double>(std::max(1, work.accumulated_frames));
@@ -72,6 +83,10 @@ bool RecoveryMatcher::match(const RecoveryWork& work,
     const RelocalizationResult result =
         runRelocalization(prior_map_, descriptor_, target_cache_, request);
     if (!result.success || !result.covariance_valid) {
+        if (result.continuity_rejections > 0) {
+            out.source = "recovery continuity guard rejected " +
+                         std::to_string(result.continuity_rejections) + " candidate hypotheses";
+        }
         if (result.success) {
             BACKEND_WARN_STREAM(
                 "relocalization produced no full-rank pose likelihood; "
@@ -138,7 +153,8 @@ RecoveryResult RecoveryMatcher::compute(const RecoveryWork& work) {
         return result;
     }
     result.outcome = RecoveryOutcome::Failed;
-    result.source = work.uwb_prior ? "UWB preference and descriptor fallback" : "descriptor";
+    if (result.source.empty())
+        result.source = work.uwb_prior ? "UWB preference and descriptor fallback" : "descriptor";
     return result;
 }
 }  // namespace backend

@@ -1,0 +1,7 @@
+# Explicit regression overlay; does not change the EGA default profile.
+# Preserve the existing footprint/inflation/XY settings and StoppedGoalChecker.
+navigation:
+  minimum_inflation_radius: 0.85
+  translation_velocity_limit: 0.5
+  goal_xy_tolerance: 0.06
+  goal_yaw_tolerance: 0.2

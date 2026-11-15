@@ -283,7 +283,7 @@ def prepare(source, decoded, reader, upstream, output, cover_mode='closed'):
             [*tensor.diagonal(), tensor[0, 1], tensor[0, 2], tensor[1, 2]]))))
         visual = ET.SubElement(link, 'visual')
         geom = ET.SubElement(visual, 'geometry')
-        ET.SubElement(geom, 'mesh', filename=f'package://xxu_bringup/models/ega_folded/meshes/{name}.glb')
+        ET.SubElement(geom, 'mesh', filename=f'package://xxu_sim_bringup/models/ega_folded/meshes/{name}.glb')
         return link
 
     def urdf_joint(name, parent, child, xyz, rpy, joint_type='fixed'):
@@ -388,7 +388,7 @@ def prepare(source, decoded, reader, upstream, output, cover_mode='closed'):
         collision = ET.SubElement(body, 'collision', name=f'body_collision_{i}')
         text(ET.SubElement(ET.SubElement(collision, 'geometry'), 'mesh'), 'uri', 'meshes/' + filename)
         ucollision = ET.SubElement(urdf.find("link[@name='base_link']"), 'collision')
-        ET.SubElement(ET.SubElement(ucollision, 'geometry'), 'mesh', filename=f'package://xxu_bringup/models/ega_folded/meshes/{filename}')
+        ET.SubElement(ET.SubElement(ucollision, 'geometry'), 'mesh', filename=f'package://xxu_sim_bringup/models/ega_folded/meshes/{filename}')
     for old in meshes.glob('collision_*.stl'):
         if old.name not in collision_files:
             old.unlink()

@@ -48,6 +48,19 @@ Eigen::Matrix4d se3Exp(const Eigen::Matrix<double, 6, 1>& tangent) {
     return transform;
 }
 
+/// 取刚体增量的主平方根；应用两次等于原增量，保留旋转和平移的耦合。
+Eigen::Matrix4d halfRigidStep(const Eigen::Matrix4d& step) {
+    Eigen::Matrix4d half = Eigen::Matrix4d::Identity();
+    const Eigen::AngleAxisd angle(step.block<3, 3>(0, 0));
+    half.block<3, 3>(0, 0) =
+        Eigen::AngleAxisd(0.5 * angle.angle(), angle.axis()).toRotationMatrix();
+    // solveOnce 将旋转限制在 16° 以内，因此 I + R_half 可逆。
+    half.block<3, 1>(0, 3) =
+        (Eigen::Matrix3d::Identity() + half.block<3, 3>(0, 0)).inverse() *
+        step.block<3, 1>(0, 3);
+    return half;
+}
+
 /// 计算 Huber 点残差权重，非正阈值返回单位权重。
 double robustWeight(const double residual, const double huber_delta) {
     if (huber_delta <= 0.0) {
@@ -76,7 +89,7 @@ std::vector<Registration::PlaneCorrespondence> Registration::buildCorrespondence
     const Eigen::Matrix3d rotation = source_to_target.block<3, 3>(0, 0);
     const Eigen::Vector3d translation = source_to_target.block<3, 1>(0, 3);
     level.tree.query(
-        source.size(), 1,
+        source.size(), config_.experimental_blended_adaptive ? 5 : 1,
         /// 将源点转换到目标坐标系后查询近邻。
         [&](std::size_t i) -> Eigen::Vector3d {
             const auto& p = source[i];
@@ -84,21 +97,63 @@ std::vector<Registration::PlaneCorrespondence> Registration::buildCorrespondence
         },
         /// 验收对应平面与残差并保存原始源点和目标系 Jacobian 支撑。
         [&](std::size_t i, const Eigen::Vector3d& target_point, const std::size_t* indices,
-            const float* distances, std::size_t) {
+            const float* distances, std::size_t found) {
             if (!pointIsFinite(source[i]))
                 return;
             if (distances[0] >
                 level.max_correspondence_distance * level.max_correspondence_distance)
                 return;
-            const auto& plane = level.planes[indices[0]];
-            if (!plane.valid)
+            if (!config_.experimental_blended_adaptive) {
+                const auto& plane = level.planes[indices[0]];
+                if (!plane.valid)
+                    return;
+                const double residual = plane.normal.dot(target_point - plane.point);
+                if (!std::isfinite(residual))
+                    return;
+                const auto& point = source[i];
+                correspondences.push_back(
+                    {Eigen::Vector3d(point.x, point.y, point.z), target_point, plane.normal, residual});
                 return;
-            const double residual = plane.normal.dot(target_point - plane.point);
+            }
+            // Invalid nearest patches contribute no weight; other valid neighbors remain.
+            // Diagnostic candidate: blend nearby coplanar patches with a compact
+            // kernel that vanishes at the last neighbor; never relax acceptance.
+            Eigen::Vector3d reference_normal = Eigen::Vector3d::Zero();
+            for (std::size_t neighbor = 0; neighbor < found; ++neighbor) {
+                if (level.planes[indices[neighbor]].valid) {
+                    reference_normal = level.planes[indices[neighbor]].normal;
+                    break;
+                }
+            }
+            Eigen::Vector3d normal = Eigen::Vector3d::Zero();
+            double offset = 0.;
+            const double radius_squared = found ? distances[found - 1] : 0.;
+            if (radius_squared > 1.e-12) {
+                for (std::size_t neighbor = 0; neighbor < found; ++neighbor) {
+                    const auto& patch = level.planes[indices[neighbor]];
+                    const double alignment = patch.normal.dot(reference_normal);
+                    if (!patch.valid || distances[neighbor] > level.max_correspondence_distance * level.max_correspondence_distance)
+                        continue;
+                    const double kernel = std::max(0., 1. - distances[neighbor] / radius_squared);
+                    const double weight = kernel * kernel;
+                    const Eigen::Vector3d oriented = alignment < 0. ? -patch.normal : patch.normal;
+                    normal += weight * oriented;
+                    offset += weight * oriented.dot(patch.point);
+                }
+            }
+            const double length = normal.norm();
+            double residual;
+            if (length > 1.e-12) {
+                normal /= length;
+                residual = normal.dot(target_point) - offset / length;
+            } else {
+                return;
+            }
             if (!std::isfinite(residual))
                 return;
             const auto& point = source[i];
             correspondences.push_back(
-                {Eigen::Vector3d(point.x, point.y, point.z), target_point, plane.normal, residual});
+                {Eigen::Vector3d(point.x, point.y, point.z), target_point, normal, residual});
         });
     return correspondences;
 }
@@ -160,6 +215,16 @@ Registration::LevelRun Registration::runLevel(
     const int max_iterations, std::vector<PlaneCorrespondence> correspondences) const {
     LevelRun run;
     run.estimate = initial_guess;
+    constexpr double kAcceptedFinalTranslationStep = 5.0e-3;
+    const double kAcceptedFinalRotationStep = degreesToRadians(0.1);
+    constexpr double kSmallTranslationStep = 1.0e-4;
+    const double small_rotation_step = degreesToRadians(0.02);
+    Eigen::Matrix4d previous_estimate = initial_guess;
+    bool have_previous = false;
+    bool damped_cycle = false;
+    int damping_halvings = 0;
+    bool have_accepted_estimate = false;
+    Eigen::Matrix4d accepted_estimate = initial_guess;
     for (int iteration = 0; iteration < std::max(1, max_iterations); ++iteration) {
         if (correspondences.empty()) {
             correspondences = buildCorrespondences(level, source, run.estimate);
@@ -175,29 +240,77 @@ Registration::LevelRun Registration::runLevel(
         if (!solved) {
             break;
         }
-        run.estimate = delta * run.estimate;
-        ++run.iterations;
         const double translation = delta.block<3, 1>(0, 3).norm();
         const double rotation = rotationAngleFromMatrix(delta);
+        const Eigen::Matrix4d candidate = delta * run.estimate;
+        // 重新关联平面后可能精确或近似地来回修正。相邻非小步更新反向后减半本层更新；
+        // 早停与最终收敛仍检查未缩小的求解步长，不因阻尼而放宽接受条件。
+        if (config_.experimental_blended_adaptive && have_previous) {
+            const Eigen::Vector3d previous_translation =
+                run.estimate.block<3, 1>(0, 3) - previous_estimate.block<3, 1>(0, 3);
+            const Eigen::Vector3d proposed_translation =
+                candidate.block<3, 1>(0, 3) - run.estimate.block<3, 1>(0, 3);
+            const Eigen::AngleAxisd previous_rotation(
+                run.estimate.block<3, 3>(0, 0) * previous_estimate.block<3, 3>(0, 0).transpose());
+            const Eigen::AngleAxisd proposed_rotation(delta.block<3, 3>(0, 0));
+            const bool translation_reverses = previous_translation.norm() >= kSmallTranslationStep &&
+                proposed_translation.norm() >= kSmallTranslationStep &&
+                previous_translation.dot(proposed_translation) < 0.;
+            const bool rotation_reverses = previous_rotation.angle() >= small_rotation_step &&
+                proposed_rotation.angle() >= small_rotation_step &&
+                previous_rotation.axis().dot(proposed_rotation.axis()) < 0.;
+            if (translation_reverses || rotation_reverses) {
+                if (!damped_cycle || translation > kAcceptedFinalTranslationStep ||
+                    rotation > kAcceptedFinalRotationStep) {
+                    damping_halvings = std::min(4, damping_halvings + 1);
+                }
+                damped_cycle = true;
+                BACKEND_DEBUG_STREAM("point-to-plane reversing update: damping remaining level updates");
+            }
+        }
+        // 缓存已满足原最终完整步判据的阻尼状态，但继续原来的精细迭代；仅在
+        // 最终状态不合格时回退并重新检查，避免降低普通收敛与重定位的精度。
+        if (damped_cycle && translation <= kAcceptedFinalTranslationStep &&
+            rotation <= kAcceptedFinalRotationStep) {
+            accepted_estimate = run.estimate;
+            have_accepted_estimate = true;
+        }
+        previous_estimate = run.estimate;
+        have_previous = true;
+        if (damped_cycle) {
+            Eigen::Matrix4d applied = delta;
+            for (int halving = 0; halving < damping_halvings; ++halving)
+                applied = halfRigidStep(applied);
+            run.estimate = applied * run.estimate;
+        } else {
+            run.estimate = candidate;
+        }
+        ++run.iterations;
         correspondences.clear();
-        if (translation < 1.0e-4 && rotation < degreesToRadians(0.02)) {
+        if (translation < kSmallTranslationStep && rotation < small_rotation_step) {
             break;
         }
     }
 
-    run.correspondences = buildCorrespondences(level, source, run.estimate);
     bool final_step_solved = false;
-    const Eigen::Matrix4d final_step =
-        solveOnce(run.correspondences, level.huber_delta, level.max_correspondence_distance,
-                  &run.hessian_analysis, &final_step_solved, &run.linear_solve);
-    run.converged = false;
-    if (final_step_solved) {
+    Eigen::Matrix4d final_step = Eigen::Matrix4d::Identity();
+    const auto assess_final_state = [&]() {
+        run.correspondences = buildCorrespondences(level, source, run.estimate);
+        final_step = solveOnce(run.correspondences, level.huber_delta,
+                               level.max_correspondence_distance, &run.hessian_analysis,
+                               &final_step_solved, &run.linear_solve);
         // 达到最大迭代数不代表收敛；在重建的最终对应集上用略宽阈值确认数值稳定。
         // 早期小步长不作依据，因为重新关联对应点后最终线性化仍可能明显移动。
-        constexpr double kAcceptedFinalTranslationStep = 5.0e-3;
-        const double kAcceptedFinalRotationStep = degreesToRadians(0.1);
-        run.converged = final_step.block<3, 1>(0, 3).norm() <= kAcceptedFinalTranslationStep &&
+        run.converged = final_step_solved &&
+                        final_step.block<3, 1>(0, 3).norm() <= kAcceptedFinalTranslationStep &&
                         rotationAngleFromMatrix(final_step) <= kAcceptedFinalRotationStep;
+    };
+    assess_final_state();
+    if (!run.converged && have_accepted_estimate) {
+        run.estimate = accepted_estimate;
+        assess_final_state();
+        BACKEND_DEBUG_STREAM("point-to-plane restored previously accepted damped state: converged="
+                             << (run.converged ? "true" : "false"));
     }
     if (!run.converged) {
         BACKEND_DEBUG_STREAM(

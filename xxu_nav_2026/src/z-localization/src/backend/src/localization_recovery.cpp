@@ -5,6 +5,7 @@
 
 #include <cmath>
 #include <sstream>
+#include <utility>
 
 #include "backend/covariance.hpp"
 #include "backend/localization.hpp"
@@ -153,6 +154,19 @@ std::optional<RecoveryWork> Localization::captureRecovery() {
     work.identity.manual_request_id = manual_request_ ? manual_request_->id : 0;
     work.identity.epoch = active_epoch_;
     work.predicted_map_pose = poses_.transform() * frames_.latest().odom_pose;
+    if (config_.recovery.continuity_guard_enabled && current != LocalizationStatus::Initializing) {
+        RelocalizationContinuityBound bound;
+        bound.max_translation = config_.recovery.continuity_max_translation;
+        bound.max_rotation_rad = config_.recovery.continuity_max_rotation_rad;
+        const auto& trusted = poses_.trusted();
+        if (trusted.hasPose() && trusted.epoch() == work.frame.epoch) {
+            bound.reference_pose = work.predicted_map_pose;
+        } else if (config_.prior_map_enabled && trusted.hasPose() &&
+                   trusted.epoch() < work.frame.epoch) {
+            bound.reference_pose = trusted.mapSensorPose();
+        }
+        work.continuity_bound = std::move(bound);
+    }
     if (current == LocalizationStatus::Suspect && poses_.trusted().hasPose()) {
         // SUSPECT 只在最后可信位置附近召回；LOST 保持宽域或全局搜索。
         work.predicted_map_pose = poses_.trusted().mapSensorPose();

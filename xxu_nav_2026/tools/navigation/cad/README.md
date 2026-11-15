@@ -1,8 +1,8 @@
 # EGA 折叠车模转换
 
-`rmul_navigation.launch.py` 接入固定折叠构型，继续使用现有 Small Point-LIO、AMCL、MPPI、fake 坐标系及 watchdog。
-模型入口为 [model.sdf](../../../src/xxu_bringup/models/ega_folded/model.sdf)，ROS 描述为 [robot.urdf](../../../src/xxu_bringup/models/ega_folded/robot.urdf)。
-几何参数以 [geometry.json](../../../src/xxu_bringup/models/ega_folded/geometry.json) 为准，物理参数来源和近似以 [physical_properties.json](../../../src/xxu_bringup/models/ega_folded/physical_properties.json) 为准。
+`rmul_navigation.launch.py` 接入固定折叠构型，统一使用 ZLIO、TDT、底盘适配、MPPI 及 watchdog；主线关闭 fake 坐标系和自旋。
+模型入口为 [model.sdf](../../../src/xxu_sim_bringup/models/ega_folded/model.sdf)，ROS 描述为 [robot.urdf](../../../src/xxu_sim_bringup/models/ega_folded/robot.urdf)。
+几何参数以 [geometry.json](../../../src/xxu_sim_bringup/models/ega_folded/geometry.json) 为准，物理参数来源和近似以 [physical_properties.json](../../../src/xxu_sim_bringup/models/ega_folded/physical_properties.json) 为准。
 
 ## 固定折叠构型
 
@@ -27,7 +27,7 @@ CAD 的封闭半球形雷达保护罩会遮挡扫描。对保留的雷达，生�
 扫描高度按折叠车高加 2 cm 设置。其他平台和上游车模继续使用原配置。
 折叠车型通过 `geometry.json` 选择已有 `StoppedGoalChecker`，平移速度低于 0.05 m/s 且仍在位置容差内才报告到达，不约束目标朝向。车型导航配置可收紧估计位置的判定阈值，为定位误差留余量；真实停点验收仍按运行报告的原有容差。该设置不引入预测定位器。
 
-单点导航参数由 [navigation_profile.yaml](../../../src/xxu_bringup/models/ega_folded/navigation_profile.yaml) 保存，LIO 仿真观测权重由 [lio_profile.yaml](../../../src/xxu_bringup/models/ega_folded/lio_profile.yaml) 保存。前者的 `navigation` 分支协调膨胀范围、控制器与速度平滑器的 XY 限速以及到点判定；膨胀范围至少覆盖停车多边形并留一格缓冲，已有更宽的配置不会被缩小。后者仅用于 `rm_sim` 的该车型，不代表实车标定。生成车模时沿用这两份配置，不在生成器内重复保存导航数值。
+单点导航参数由 [navigation_profile.yaml](../../../src/xxu_sim_bringup/models/ega_folded/navigation_profile.yaml) 保存，协调膨胀范围、控制器与速度平滑器的 XY 限速以及到点判定；更宽的膨胀配置不会被缩小。ZLIO 使用显式传入的前端配置；旧 Small Point-LIO 的 `lio_profile.yaml` 已归档撤除，不再作为车型资源。仿真噪声测试覆盖与实际验收结果见[阶段三源速度回归](../../../../docs/validation/nav2_stage3_20261108.md#2026-11-11转后源速度的采样遗漏复现与区间平均回归)。
 
 ## 生成与检查
 
@@ -38,15 +38,15 @@ python tools/navigation/cad/convert_ega_sentry.py \
   local_assets/cad_source/folded_0517 <patched_reader> local_assets/ega_folded_decode
 python tools/navigation/cad/prepare_folded_robot.py \
   local_assets/cad_source/folded_0517 local_assets/ega_folded_decode \
-  <patched_reader> src/rm_sim_26 src/xxu_bringup/models/ega_folded --cover-mode removed
-python tools/navigation/cad/validate_folded_robot.py src/xxu_bringup/models/ega_folded
-colcon build --symlink-install --packages-select xxu_bringup small_point_lio xxu_description
+  <patched_reader> src/rm_sim_26 src/xxu_sim_bringup/models/ega_folded --cover-mode removed
+python tools/navigation/cad/validate_folded_robot.py src/xxu_sim_bringup/models/ega_folded
+colcon build --symlink-install --packages-select xxu_bringup xxu_sim_bringup frontend backend bringup xxu_description
 ```
 
 新增资源文件后必须重新构建启动包，不能仅依赖已有文件的安装软链接。
 当前折叠车型使用 RGL，`gpu_lidar` 后端仍仅支持上游车型。
 
-生成物校验见 [static_validation.json](../../../src/xxu_bringup/models/ega_folded/static_validation.json)。当前导航修复、实测参数、重复回归及剩余限制统一见 [runtime_validation.json](../../../src/xxu_bringup/models/ega_folded/runtime_validation.json)。2026-10-18 的三个目标中有两个真实停点超差，原报告归档为 [20261018_runtime.json](../../../src/xxu_bringup/models/ega_folded/validation/20261018_runtime.json)。核验均使用取下保护罩的运行假设；实车罩体处理、质量、摩擦和电机参数仍未实测确认。
+生成物校验见 [static_validation.json](../../../src/xxu_sim_bringup/models/ega_folded/static_validation.json)。当前导航修复、实测参数、重复回归及剩余限制统一见 [runtime_validation.json](../../../src/xxu_sim_bringup/models/ega_folded/runtime_validation.json)。2026-10-18 的三个目标中有两个真实停点超差，原报告归档为 [20261018_runtime.json](../../../src/xxu_sim_bringup/models/ega_folded/validation/20261018_runtime.json)。核验均使用取下保护罩的运行假设；实车罩体处理、质量、摩擦和电机参数仍未实测确认。
 
 ### 导航适配回归
 
@@ -58,22 +58,15 @@ python3 tools/navigation/test_vehicle_parameters.py
 python3 tools/navigation/check_interfaces.py
 ```
 
-运行回归需要 RGL 已构建，并使用空闲的 ROS 域 73 和唯一的 Gazebo 通信分区。检查器独立启动无界面仿真，只停止自己创建的进程组；输出目录下的运行名称必须未被使用：
+运行回归需要匹配的 ZLIO/TDT 配置、地图和逐点时间 RGL 插件，并使用空闲的 ROS 域 73 和唯一 Gazebo 分区。现有检查器会独立启动无界面仿真，只停止自己的进程组；完整输入及命令以[阶段三当前回归](../../../../docs/validation/nav2_stage3_20261108.md#2026-11-11180-转后定位稳定性回归)为准，不能沿用旧无参数 Small Point-LIO 命令。
 
-```bash
-export ROS_DOMAIN_ID=73
-export GZ_PARTITION=xxu_vehicle_check_20261027_run1
-python3 tools/navigation/check_ega_navigation.py rmul_single_point \
-  --output-dir /tmp/xxu_navigation_checks
-```
-
-默认依次测试原卡住目标、回程及三个短距离目标。检查器只读观测 Gazebo 真值，分别记录 Nav2 成功状态、宣布到达时和停车后的真实位置误差、速度出口、轮速、急停状态与数据计数；有目标未完成、超出原 0.12 m 真实误差要求或未停车时返回失败，不能仅凭 Action 成功判通过。停车观测取最后 0.75 秒，各数据流至少 3 个样本、覆盖至少 0.25 秒源时间，末样本的源时间和接收年龄均不超过 0.5 秒；真值平移/转动范围不超过 5 mm/0.01 rad，里程计速度不超过 0.02 m/s/0.05 rad/s，同时要求安全指令和轮速为零附近。证据保存在各目标的 `parking_evidence`，旧报告未包含此字段的结果不能代替该项验证。`--profile` 和 `--lio-profile` 可显式加载候选 YAML；后者使用仅对子进程生效的临时包目录，避免覆盖正式配置。
+默认依次测试原卡住目标、回程及三个短距离目标。检查器只读观测 Gazebo 真值，分别记录 Nav2 成功状态、宣布到达时和停车后的真实位置误差、速度出口、轮速、急停状态与数据计数；有目标未完成、超出原 0.12 m 真实误差要求或未停车时返回失败，不能仅凭 Action 成功判通过。停车观测取最后 0.75 秒，各数据流至少 3 个样本、覆盖至少 0.25 秒源时间，末样本的源时间和接收年龄均不超过 0.5 秒；真值平移/转动范围不超过 5 mm/0.01 rad，里程计速度不超过 0.02 m/s/0.05 rad/s，同时要求安全指令和轮速为零附近。证据保存在各目标的 `parking_evidence`，旧报告未包含此字段的结果不能代替该项验证。`--profile` 显式选择导航测试 YAML；前端配置通过 `frontend_config` 启动参数提供。旧 `--lio-profile` 参数已随 Small Point-LIO 链撤除。
 
 当前改善仍有范围限制：部分目标存在进度恢复与到点收敛慢，雷达盲区继续存在。运行结果不能替代实车标定、用户验收或发布授权；具体样本和未完成项以当前运行报告为准。
 
 ### 单雷达盲区量化
 
-2026-10-19 已按当前单雷达、取下保护罩构型，结合详细车体网格、厂商视场和已读取的运行过滤参数完成离线盲区计算，并用运行点云抽样核对车体遮挡。26.63 cm 高障碍物在距底盘中心 1 m 环上的导航几何盲区方位约 66.1%；这不是实车漏检概率。盲区图、分高度/方向数据、采样证据及复现入口统一见[盲区量化报告](../../../src/xxu_bringup/models/ega_folded/blindspot_analysis/REPORT.md)。本次未修改导航默认参数或安装姿态。
+2026-10-19 已按当前单雷达、取下保护罩构型，结合详细车体网格、厂商视场和已读取的运行过滤参数完成离线盲区计算，并用运行点云抽样核对车体遮挡。26.63 cm 高障碍物在距底盘中心 1 m 环上的导航几何盲区方位约 66.1%；这不是实车漏检概率。盲区图、分高度/方向数据、采样证据及复现入口统一见[盲区量化报告](../../../src/xxu_sim_bringup/models/ega_folded/blindspot_analysis/REPORT.md)。本次未修改导航默认参数或安装姿态。
 
 ## 底层显示网格读取器
 

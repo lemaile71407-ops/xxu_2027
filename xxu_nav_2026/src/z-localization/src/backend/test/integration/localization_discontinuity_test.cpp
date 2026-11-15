@@ -35,6 +35,35 @@ TEST_F(LocalizationFlow, PriorRecoveryAfterInputGapUsesLastTrustedMapBound) {
     EXPECT_EQ(trajectory.latest().epoch, 1U);
 }
 
+/// 对称地图中越界的几何好解不能遮蔽同轮仍在连续性界限内的候选。
+TEST_F(LocalizationFlow, PriorRecoverySkipsAliasedCandidateOutsideContinuityBound) {
+    const auto identity = Eigen::Matrix4d::Identity().eval();
+    config.startup_hint.T_map_sensor = identity;
+    config.recovery.source.min_frames = 1;
+    config.recovery.source.max_frames = 1;
+    config.recovery.continuity_guard_enabled = true;
+    config.recovery.continuity_max_translation = .3;
+    config.recovery.continuity_max_rotation_rad = .2;
+    config.recovery.lost_search_radius = 1.;
+    config.recovery.global_fallback_candidates = 2;
+    reset.available = true;
+    // 两个局部几何相同的房间：错误房间先插入，正确房间由 start() 加入。
+    prior.add(frame(1, identity, testing::scenePose(6, 0, 0, 0)));
+    start(true);
+    ASSERT_TRUE(ingest(frame(10, identity, identity)));
+    maintain();
+    ASSERT_EQ(controller->status(), LocalizationStatus::Normal);
+    controller->notifyFrontendDiscontinuity(0);
+    reply(FrontendResetOutcome::Completed, 1);
+    const auto truth = testing::scenePose(.1, 0, 0, .05);
+    // 新代次的里程计原点并不代表地图位姿；局部先召回错误房间，正确候选仍可全局召回。
+    const auto resumed = frame(20, truth, testing::scenePose(6, 0, 0, 0), 1);
+    ASSERT_TRUE(ingest(resumed));
+    maintain();
+    ASSERT_EQ(controller->status(), LocalizationStatus::Normal);
+    EXPECT_LT((output(resumed).T_map_sensor - truth).norm(), .01);
+}
+
 /// 未观测间隙的平移/转角超限不能靠新里程计或重复重置逐步漂移恢复界限。
 TEST_F(LocalizationFlow, PriorRecoveryAfterInputGapRejectsJumpAcrossRepeatedResets) {
     config.startup_hint.T_map_sensor = Eigen::Matrix4d::Identity();

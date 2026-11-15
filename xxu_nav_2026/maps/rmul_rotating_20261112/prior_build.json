@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-12",
+  "command_script": "../../log/rotating_map_20261112/build_prior.sh",
+  "result_log": "../../log/rotating_map_20261112/build_prior.log",
+  "input_points": 58202,
+  "prior_points": 15814,
+  "map_voxel_m": 0.1,
+  "scan_voxel_m": 0.1,
+  "keyframes": 24,
+  "descriptor_lidar_height_m": 0.06973823713479495,
+  "scope": "existing build_pcd_map_bundle, generated descriptor scans from measured map; not additional sensor acquisitions",
+  "output_sha256": {
+    "map.pcd": "b7fd6ad79c70436c11060a358ebbbcc195c4fb3d3ac0822a167a073f1084925c",
+    "nav2.pgm": "b952f1d8b9cc716e87b4b62a3f63e3f1a8cef9528f6c9541d72867f31c606edb",
+    "nav2.yaml": "4fbe6fe59e3ade7d443fc2be03e3dffc39370c5848f27987ec714a69549a0b90",
+    "prior/map.pcd": "9f3f56cdd385f1a6738c6dc8f96bc6a8a7db9bcdc0d6082c36dc4445811389d8",
+    "prior/keyframes.txt": "32b567fd087e680ddeea212fe928029c32a171465a18eb79bd0dc08620eca77b",
+    "prior/sc_descriptors.bin": "f6bb1650eaf5f2de877f832a39dbf8ed686de59b64187f2b7813c999c51afc5e"
+  }
+}

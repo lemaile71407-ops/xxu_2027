@@ -135,6 +135,26 @@ VerificationRunResult Search::evaluatePreparedEntry(const VerificationEntry& ent
         return out;
     }
 
+    if (request_.continuity_bound) {
+        const auto& bound = *request_.continuity_bound;
+        if (!bound.reference_pose || !bound.reference_pose->allFinite() ||
+            !std::isfinite(bound.max_translation) || bound.max_translation <= 0. ||
+            !std::isfinite(bound.max_rotation_rad) || bound.max_rotation_rad <= 0.) {
+            out.continuity_rejected = true;
+            return out;
+        }
+        const Eigen::Matrix4d pose = entry.T_map_prior * result.source_to_target;
+        const Eigen::Matrix4d delta = bound.reference_pose->inverse() * pose;
+        const double translation = delta.block<3, 1>(0, 3).norm();
+        const double rotation = rotationAngleFromMatrix(delta);
+        if (!delta.allFinite() || !std::isfinite(translation) || !std::isfinite(rotation) ||
+            translation > bound.max_translation || rotation > bound.max_rotation_rad) {
+            // 该几何解不可能通过提交门；继续当前批次及后续全局/航向回退。
+            out.continuity_rejected = true;
+            return out;
+        }
+    }
+
     if (request_.position_prior != nullptr) {
         const RelocalizationPositionPrior& prior = *request_.position_prior;
         const Eigen::Matrix4d T_map_runtime = entry.T_map_prior * result.source_to_target;
@@ -271,6 +291,7 @@ CandidateVerificationResult Search::runCandidateVerification(
     for (const auto& entry : input.entries) {
         const VerificationRunResult result = evaluatePreparedEntry(entry, corrector);
         out.tried += result.tried_alignments;
+        out.continuity_rejections += result.continuity_rejected ? 1 : 0;
         if (result.best_observed_residual_score < out.best_failed_residual_score) {
             out.best_failed_residual_score = result.best_observed_residual_score;
             out.best_failed_quality = result.best_observed_quality;
@@ -310,6 +331,7 @@ bool Search::runCandidateSet(const std::vector<CandidateVerificationInput>& inpu
 
     for (const auto& result : results) {
         tried_verifications_ += result.tried;
+        continuity_rejections_ += result.continuity_rejections;
         if (result.best_failed_residual_score < best_failed_residual_score_) {
             best_failed_residual_score_ = result.best_failed_residual_score;
             best_failed_quality_ = result.best_failed_quality;

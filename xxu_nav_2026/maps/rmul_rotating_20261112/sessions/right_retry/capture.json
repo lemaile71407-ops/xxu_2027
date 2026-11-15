@@ -1,0 +1,130 @@
+{
+  "date": "2026-11-12",
+  "session": "right_retry",
+  "completed": false,
+  "known_spawn": [
+    11.0,
+    2.0
+  ],
+  "stations": [
+    [
+      11.0,
+      2.0
+    ],
+    [
+      11.0,
+      4.5
+    ],
+    [
+      10.7,
+      6.65
+    ],
+    [
+      8.5,
+      7.0
+    ],
+    [
+      8.4,
+      5.9
+    ]
+  ],
+  "reached": [
+    [
+      11.0,
+      2.0
+    ],
+    [
+      11.0,
+      4.5
+    ],
+    [
+      10.7,
+      6.65
+    ],
+    [
+      8.5,
+      7.0
+    ],
+    [
+      8.4,
+      5.9
+    ]
+  ],
+  "initial_base_odom": [
+    0.001083312327931044,
+    -0.0009518751010801428
+  ],
+  "rotation_checks": [
+    {
+      "world_xy": [
+        10.980012025693078,
+        1.9896656027823418
+      ],
+      "rotation_rad": 6.25859567425946,
+      "heading_bins_10deg": 36,
+      "saved_frames": 60,
+      "translation_during_rotation_m": 0.02306579375864152
+    },
+    {
+      "world_xy": [
+        11.000357464962622,
+        4.441645732531603
+      ],
+      "rotation_rad": 6.258571899474307,
+      "heading_bins_10deg": 36,
+      "saved_frames": 60,
+      "translation_during_rotation_m": 0.0001966324607325153
+    },
+    {
+      "world_xy": [
+        10.658813002874858,
+        6.590928106131857
+      ],
+      "rotation_rad": 6.258214528645032,
+      "heading_bins_10deg": 36,
+      "saved_frames": 59,
+      "translation_during_rotation_m": 0.001730129502562162
+    },
+    {
+      "world_xy": [
+        8.55844651431055,
+        6.988996393264615
+      ],
+      "rotation_rad": 6.258517838195783,
+      "heading_bins_10deg": 36,
+      "saved_frames": 59,
+      "translation_during_rotation_m": 0.0006866559394703389
+    },
+    {
+      "world_xy": [
+        8.404443869239707,
+        5.952293944896992
+      ],
+      "rotation_rad": 6.258401703062062,
+      "heading_bins_10deg": 36,
+      "saved_frames": 60,
+      "translation_during_rotation_m": 0.006380133107385567
+    }
+  ],
+  "failure": "AssertionError('translation stalled')",
+  "frames": 2605,
+  "saved_frames": 466,
+  "points": 31069,
+  "map_offset": [
+    11.0,
+    2.0,
+    0.06973823713479495
+  ],
+  "frontend_session": [
+    7889005915979313950,
+    0
+  ],
+  "source": "FrontendFrame cloud transformed by its atomic ZLIO posterior; no CAD occupancy or Gazebo truth",
+  "final_base_odom": [
+    -0.13756546119735338,
+    0.1367376981514734
+  ],
+  "truth_quality_scope": "diagnostic only, never used for point transforms or motion control; fixed known spawn, no trajectory fitting",
+  "truth_xy_error_peak_m": 0.012552757714023408,
+  "truth_yaw_error_peak_rad": 0.004172220064987631
+}

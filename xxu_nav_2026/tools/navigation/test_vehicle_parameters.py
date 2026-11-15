@@ -10,6 +10,7 @@ import math
 from pathlib import Path
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
 from launch import LaunchContext
@@ -20,75 +21,97 @@ from launch_ros.actions import Node
 import yaml
 
 from xxu_bringup.launch_helpers import (
-    RobotGeometryParameters, RobotProfile, lio_preprocessing, nav2_parameters,
+    RobotGeometryParameters, RobotProfile, nav2_parameters,
 )
-from xxu_bringup.sensor_launch import sensor_preprocessing, small_point_lio
+from xxu_bringup.sensor_launch import sensor_preprocessing
 
 
 SHARE = Path(__file__).resolve().parents[2] / 'src/xxu_bringup'
-GEOMETRY = SHARE / 'models/ega_folded/geometry.json'
+SIM_SHARE = Path(__file__).resolve().parents[2] / 'src/xxu_sim_bringup'
+GEOMETRY = SIM_SHARE / 'models/ega_folded/geometry.json'
 NAV_PROFILE = GEOMETRY.parent / 'navigation_profile.yaml'
 if not NAV_PROFILE.is_file():
     NAV_PROFILE = GEOMETRY.parent / 'navigation_profile.candidate.yaml'
-LIO_PROFILE = GEOMETRY.parent / 'lio_profile.yaml'
-if not LIO_PROFILE.is_file():
-    LIO_PROFILE = GEOMETRY.parent / 'lio_profile.candidate.yaml'
 
 
 class VehicleParametersTest(unittest.TestCase):
+    def test_spin_profile_preserves_collision_and_stopped_goal_configuration(self):
+        from xxu_bringup.navigation_parameters import continuous_spin_parameters
+        source = yaml.safe_load((SHARE / 'config/nav2_navigation.yaml').read_text())
+        source['controller_server']['ros__parameters']['FollowPath']['motion_model'] = 'Omni'
+        before = yaml.safe_dump(source)
+        after = continuous_spin_parameters(source)
+        self.assertEqual(yaml.safe_dump(source), before)
+        for key in ('collision_monitor', 'local_costmap', 'global_costmap'):
+            self.assertEqual(after[key], source[key])
+        for key in ('goal_checker', 'progress_checker', 'odom_topic'):
+            self.assertEqual(after['controller_server']['ros__parameters'].get(key),
+                             source['controller_server']['ros__parameters'].get(key))
+        self.assertEqual(after['velocity_smoother']['ros__parameters']['max_velocity'][:2],
+                         source['velocity_smoother']['ros__parameters']['max_velocity'][:2])
+
+    def test_spin_profile_rejects_nonholonomic_and_out_of_range_requests(self):
+        from xxu_bringup.navigation_parameters import continuous_spin_parameters
+        source = yaml.safe_load((SHARE / 'config/nav2_navigation.yaml').read_text())
+        source['controller_server']['ros__parameters']['FollowPath']['motion_model'] = 'DiffDrive'
+        with self.assertRaises(ValueError):
+            continuous_spin_parameters(source)
+        source['controller_server']['ros__parameters']['FollowPath']['motion_model'] = 'Omni'
+        for rate in (0., .6, -.6, float('nan'), float('inf')):
+            with self.subTest(rate=rate), self.assertRaises(ValueError):
+                continuous_spin_parameters(source, rate=rate)
+
+    def test_interval_sampling_changes_only_temporary_imu_model(self):
+        from ament_index_python.packages import get_package_share_directory
+        spec = importlib.util.spec_from_file_location(
+            'rm_sim_interval', SIM_SHARE / 'launch/rm_sim_gazebo.launch.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        source = SIM_SHARE / 'models/ega_folded/model.sdf'
+        original = source.read_bytes()
+        upstream = get_package_share_directory('rm_sim_26')
+        with tempfile.TemporaryDirectory() as folder:
+            _, direct, _ = module.prepare_assets(upstream, folder, 'rgl', robot_model='ega_folded')
+            before = ET.parse(direct).find(".//sensor[@type='imu']")
+            _, averaged, _ = module.prepare_assets(
+                upstream, folder, 'rgl', robot_model='ega_folded', imu_sampling='interval_mean')
+            after = ET.parse(averaged).find(".//sensor[@type='imu']")
+            self.assertEqual(float(before.findtext('update_rate')), 100.)
+            self.assertEqual(float(after.findtext('update_rate')), 1000.)
+            for old, new in zip(before.findall('.//noise/stddev'), after.findall('.//noise/stddev')):
+                self.assertAlmostEqual(float(new.text), float(old.text) * math.sqrt(10))
+                new.text = old.text
+            after.find('update_rate').text = before.findtext('update_rate')
+            self.assertEqual(ET.tostring(before), ET.tostring(after))
+        self.assertEqual(source.read_bytes(), original)
+
     def test_external_mode_excludes_both_amcl_and_gicp(self):
         spec = importlib.util.spec_from_file_location('nav_modes', SHARE / 'launch/navigation.launch.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        for mode in ('amcl', 'external'):
-            context = LaunchContext()
-            context.launch_configurations.update(enable_localization='true', localization_mode=mode,
-                                                  enable_gicp='true')
-            description = module.generate_launch_description()
-            for action in description.entities:
-                if isinstance(action, DeclareLaunchArgument):
-                    action.execute(context)
-            packages = []
-
-            def visit(actions):
-                for action in actions:
-                    if action.condition is not None and not action.condition.evaluate(context):
-                        continue
-                    if isinstance(action, Node):
-                        packages.append(perform_substitutions(context, normalize_to_list_of_substitutions(
-                            action.node_package)))
-                    elif isinstance(action, GroupAction):
-                        visit(action.get_sub_entities())
-
-            visit(description.entities)
-            self.assertEqual(packages.count('nav2_map_server'), 1)
-            self.assertEqual(packages.count('nav2_controller'), 1)
-            self.assertEqual('nav2_amcl' in packages, mode == 'amcl')
-            self.assertEqual('xxu_gicp_localization' in packages, mode == 'amcl')
-
-    def test_real_sensor_entry_can_disable_only_the_estimator(self):
-        spec = importlib.util.spec_from_file_location(
-            'mid360_lio_launch', SHARE / 'launch/mid360_lio.launch.py')
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        nodes = []
-
-        def capture(**kwargs):
-            nodes.append(kwargs)
-            return Node(**kwargs)
-
-        with patch.object(module, 'Node', side_effect=capture), \
-                patch('xxu_bringup.sensor_launch.Node', side_effect=capture):
-            description = module.generate_launch_description()
-        declaration = next(action for action in description.entities
-                           if isinstance(action, DeclareLaunchArgument) and action.name == 'enable_lio')
         context = LaunchContext()
-        declaration.execute(context)
-        estimator = next(node for node in nodes if node['package'] == 'small_point_lio')
-        self.assertTrue(estimator['condition'].evaluate(context))
-        context.launch_configurations['enable_lio'] = 'false'
-        self.assertFalse(estimator['condition'].evaluate(context))
-        self.assertTrue(any(node['package'] == 'xxu_bringup' for node in nodes))
+        context.launch_configurations.update(enable_localization='true', localization_mode='external')
+        description = module.generate_launch_description()
+        for action in description.entities:
+            if isinstance(action, DeclareLaunchArgument):
+                action.execute(context)
+        packages = []
+
+        def visit(actions):
+            for action in actions:
+                if action.condition is not None and not action.condition.evaluate(context):
+                    continue
+                if isinstance(action, Node):
+                    packages.append(perform_substitutions(context, normalize_to_list_of_substitutions(
+                        action.node_package)))
+                elif isinstance(action, GroupAction):
+                    visit(action.get_sub_entities())
+
+        visit(description.entities)
+        self.assertEqual(packages.count('nav2_map_server'), 1)
+        self.assertEqual(packages.count('nav2_controller'), 1)
+        self.assertNotIn('nav2_amcl', packages)
+        self.assertNotIn('xxu_gicp_localization', packages)
 
     def test_navigation_servers_can_be_constructed_without_localization(self):
         spec = importlib.util.spec_from_file_location(
@@ -97,26 +120,21 @@ class VehicleParametersTest(unittest.TestCase):
         spec.loader.exec_module(module)
         with patch.object(module, 'Node', side_effect=lambda **kw: kw):
             servers = module.navigation_server_nodes('/nav.yaml', [], module.interfaces())
-            localization = module.localization_nodes(
-                '/nav.yaml', 'true', 'false', '/gicp.yaml', '', [])
             map_server = module.map_server_node('/nav.yaml', '/map.yaml', 'true')
         self.assertEqual(len(servers), 8)
         self.assertNotIn('nav2_amcl', {node['package'] for node in servers})
-        self.assertEqual([node['package'] for node in localization],
-                         ['nav2_amcl', 'xxu_gicp_localization'])
+        self.assertNotIn('xxu_gicp_localization', {node['package'] for node in servers})
         self.assertEqual(map_server['package'], 'nav2_map_server')
 
     def test_sensor_preprocessing_can_be_constructed_without_an_estimator(self):
         profile = RobotProfile('ega_folded', str(GEOMETRY), json.loads(GEOMETRY.read_text()))
-        for platform in ['real', 'gazebo', 'rm_sim']:
+        for platform in ['real', 'rm_sim']:
             with self.subTest(platform=platform), \
                     patch('xxu_bringup.sensor_launch.Node', side_effect=lambda **kw: kw):
                 actions = sensor_preprocessing(
                     platform, use_sim_time='true', profile=profile if platform == 'rm_sim' else None)
                 self.assertTrue(actions)
                 self.assertTrue(all(action['package'] == 'xxu_bringup' for action in actions))
-                estimator = small_point_lio(platform, use_sim_time='true', config_file='/lio.yaml')
-                self.assertEqual(estimator['package'], 'small_point_lio')
 
     def test_autonomous_mapping_resolves_selected_vehicle(self):
         launch_file = SHARE.parent / 'xxu_slam_toolbox/launch/autonomous_mapping.launch.py'
@@ -124,43 +142,41 @@ class VehicleParametersTest(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         radius = json.loads(GEOMETRY.read_text())['robot_radius']
-        for fake in ['true', 'false']:
-            for geometry in ['', str(GEOMETRY)]:
-                with self.subTest(fake=fake, geometry=geometry):
-                    nodes = []
+        for geometry in ['', str(GEOMETRY)]:
+            with self.subTest(geometry=geometry):
+                nodes = []
 
-                    def capture_node(**kwargs):
-                        nodes.append(kwargs)
-                        return Node(**kwargs)
+                def capture_node(**kwargs):
+                    nodes.append(kwargs)
+                    return Node(**kwargs)
 
-                    with patch.object(module, 'Node', side_effect=capture_node), \
-                            patch.object(module, 'get_package_share_directory', return_value=str(SHARE)), \
-                            patch.object(module, 'FindPackageShare', side_effect=lambda name: TextSubstitution(text=str(SHARE.parent / name))), \
-                            patch.object(module, 'default_map_save_path', return_value='/tmp/xxu_test_map'):
-                        description = module.generate_launch_description()
-                    declarations = [action for action in description.entities
-                                    if isinstance(action, DeclareLaunchArgument)]
-                    self.assertIn('robot_geometry_file', [action.name for action in declarations])
-                    context = LaunchContext()
-                    context.launch_configurations.update(
-                        use_fake_frame=fake, robot_geometry_file=geometry)
-                    for action in declarations:
-                        action.execute(context)
-                    controller = next(node for node in nodes if node['package'] == 'nav2_controller')
-                    selected = controller['parameters'][0]
-                    after = yaml.safe_load(Path(selected.perform(context)).read_text())
-                    before = self.resolve('exploration', fake)
-                    if not geometry:
-                        self.assertEqual(after, before)
-                        continue
-                    for name in ['local_costmap', 'global_costmap']:
-                        self.assertEqual(after[name][name]['ros__parameters']['robot_radius'], radius)
-                    points = json.loads(after['collision_monitor']['ros__parameters']['EmergencyStop']['points'])
-                    for a, b in zip(points, points[1:] + points[:1]):
-                        edge_distance = abs(a[0] * b[1] - a[1] * b[0]) / math.dist(a, b)
-                        self.assertGreaterEqual(edge_distance, radius + .03 - 1e-5)
+                with patch.object(module, 'Node', side_effect=capture_node), \
+                        patch.object(module, 'get_package_share_directory', return_value=str(SHARE)), \
+                        patch.object(module, 'FindPackageShare', side_effect=lambda name: TextSubstitution(text=str(SHARE.parent / name))), \
+                        patch.object(module, 'default_map_save_path', return_value='/tmp/xxu_test_map'):
+                    description = module.generate_launch_description()
+                declarations = [action for action in description.entities
+                                if isinstance(action, DeclareLaunchArgument)]
+                self.assertIn('robot_geometry_file', [action.name for action in declarations])
+                context = LaunchContext()
+                context.launch_configurations.update(robot_geometry_file=geometry)
+                for action in declarations:
+                    action.execute(context)
+                controller = next(node for node in nodes if node['package'] == 'nav2_controller')
+                selected = controller['parameters'][0]
+                after = yaml.safe_load(Path(selected.perform(context)).read_text())
+                before = self.resolve('exploration')
+                if not geometry:
+                    self.assertEqual(after, before)
+                    continue
+                for name in ['local_costmap', 'global_costmap']:
+                    self.assertEqual(after[name][name]['ros__parameters']['robot_radius'], radius)
+                points = json.loads(after['collision_monitor']['ros__parameters']['EmergencyStop']['points'])
+                for a, b in zip(points, points[1:] + points[:1]):
+                    edge_distance = abs(a[0] * b[1] - a[1] * b[0]) / math.dist(a, b)
+                    self.assertGreaterEqual(edge_distance, radius + .03 - 1e-5)
 
-    def resolve(self, mode, fake, geometry_file='', *, candidate=False):
+    def resolve(self, mode, geometry_file='', *, candidate=False):
         with tempfile.TemporaryDirectory() as folder:
             if candidate:
                 geometry_copy = Path(folder) / 'geometry.json'
@@ -169,7 +185,7 @@ class VehicleParametersTest(unittest.TestCase):
                     NAV_PROFILE.read_text())
                 geometry_file = geometry_copy
             _, selected, _ = nav2_parameters(
-                str(SHARE / f'config/nav2_{mode}.yaml'), 'true', fake,
+                str(SHARE / f'config/nav2_{mode}.yaml'), 'true',
                 str(SHARE), mode=mode, robot_geometry_file=str(geometry_file))
             return yaml.safe_load(Path(selected.perform(LaunchContext())).read_text())
 
@@ -193,32 +209,31 @@ class VehicleParametersTest(unittest.TestCase):
     def test_selected_vehicle_keeps_clearance_in_all_profiles(self):
         radius = json.loads(GEOMETRY.read_text())['robot_radius']
         for mode in ['navigation', 'exploration']:
-            for fake in ['true', 'false']:
-                with self.subTest(mode=mode, fake=fake):
-                    before = self.resolve(mode, fake)
-                    after = self.resolve(mode, fake, GEOMETRY, candidate=True)
-                    # The profile may tighten arrival tolerance, never relax it.
-                    old_controller = before['controller_server']['ros__parameters']
-                    new_controller = after['controller_server']['ros__parameters']
-                    self.assertLessEqual(new_controller['goal_checker']['xy_goal_tolerance'],
-                                         old_controller['goal_checker']['xy_goal_tolerance'])
-                    if mode == 'navigation':
-                        self.assert_clearance(before, after, radius)
-                        self.assertEqual(new_controller['goal_checker']['xy_goal_tolerance'], .06)
-                        controller = new_controller['FollowPath']
-                        smoother = after['velocity_smoother']['ros__parameters']
-                        self.assertEqual([controller['vx_min'], controller['vx_max'], controller['vy_max']],
-                                         [-.5, .5, .5])
-                        self.assertEqual(smoother['max_velocity'][:2], [.5, .5])
-                        self.assertEqual(smoother['min_velocity'][:2], [-.5, -.5])
-                        self.assertEqual(after['local_costmap']['local_costmap']['ros__parameters']
-                                         ['inflation_layer']['inflation_radius'], .85)
-                    else:
-                        self.assertEqual(new_controller['FollowPath'], old_controller['FollowPath'])
-                        self.assertEqual(after['velocity_smoother'], before['velocity_smoother'])
-                        for name in ['local_costmap', 'global_costmap']:
-                            self.assertEqual(after[name][name]['ros__parameters']['inflation_layer'],
-                                             before[name][name]['ros__parameters']['inflation_layer'])
+            with self.subTest(mode=mode):
+                before = self.resolve(mode)
+                after = self.resolve(mode, GEOMETRY, candidate=True)
+                # The profile may tighten arrival tolerance, never relax it.
+                old_controller = before['controller_server']['ros__parameters']
+                new_controller = after['controller_server']['ros__parameters']
+                self.assertLessEqual(new_controller['goal_checker']['xy_goal_tolerance'],
+                                     old_controller['goal_checker']['xy_goal_tolerance'])
+                if mode == 'navigation':
+                    self.assert_clearance(before, after, radius)
+                    self.assertEqual(new_controller['goal_checker']['xy_goal_tolerance'], .06)
+                    controller = new_controller['FollowPath']
+                    smoother = after['velocity_smoother']['ros__parameters']
+                    self.assertEqual([controller['vx_min'], controller['vx_max'], controller['vy_max']],
+                                     [-.5, .5, .5])
+                    self.assertEqual(smoother['max_velocity'][:2], [.5, .5])
+                    self.assertEqual(smoother['min_velocity'][:2], [-.5, -.5])
+                    self.assertEqual(after['local_costmap']['local_costmap']['ros__parameters']
+                                     ['inflation_layer']['inflation_radius'], .85)
+                else:
+                    self.assertEqual(new_controller['FollowPath'], old_controller['FollowPath'])
+                    self.assertEqual(after['velocity_smoother'], before['velocity_smoother'])
+                    for name in ['local_costmap', 'global_costmap']:
+                        self.assertEqual(after[name][name]['ros__parameters']['inflation_layer'],
+                                         before[name][name]['ros__parameters']['inflation_layer'])
 
     def test_no_vehicle_leaves_source_untouched(self):
         source = str(SHARE / 'config/nav2_navigation.yaml')
@@ -229,7 +244,7 @@ class VehicleParametersTest(unittest.TestCase):
             with self.subTest(radius=radius, explicit_inflation=explicit_inflation):
                 with tempfile.TemporaryDirectory() as folder:
                     folder = Path(folder)
-                    before = self.resolve('navigation', 'true')
+                    before = self.resolve('navigation')
                     for name in ['local_costmap', 'global_costmap']:
                         before[name][name]['ros__parameters']['inflation_layer']['inflation_radius'] = explicit_inflation
                     source = folder / 'params.yaml'
@@ -244,7 +259,7 @@ class VehicleParametersTest(unittest.TestCase):
     def test_vehicle_profile_never_raises_stricter_source_limits(self):
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
-            before = self.resolve('navigation', 'true')
+            before = self.resolve('navigation')
             controller = before['controller_server']['ros__parameters']
             controller['FollowPath'].update(vx_min=-.2, vx_max=.2, vy_max=.2)
             controller['goal_checker']['xy_goal_tolerance'] = .04
@@ -262,14 +277,42 @@ class VehicleParametersTest(unittest.TestCase):
             self.assertEqual(after['controller_server'], before['controller_server'])
             self.assertEqual(after['velocity_smoother'], before['velocity_smoother'])
 
+    def test_stopped_goal_yaw_check_requires_explicit_profile(self):
+        with tempfile.TemporaryDirectory() as folder:
+            folder = Path(folder)
+            geometry = folder / 'geometry.json'
+            geometry.write_text(GEOMETRY.read_text())
+            source = folder / 'params.yaml'
+            params = self.resolve('navigation')
+            source.write_text(yaml.safe_dump(params))
+            profile = folder / 'navigation_profile.yaml'
+
+            def checker():
+                output = RobotGeometryParameters(str(source), str(geometry)).perform(LaunchContext())
+                return yaml.safe_load(Path(output).read_text())['controller_server']['ros__parameters']['goal_checker']
+
+            self.assertEqual(checker()['yaw_goal_tolerance'], math.pi)
+            profile.write_text('navigation:\n  goal_yaw_tolerance: 0.2\n')
+            opted_in = checker()
+            self.assertEqual(opted_in['plugin'], 'nav2_controller::StoppedGoalChecker')
+            self.assertEqual(opted_in['yaw_goal_tolerance'], .2)
+            self.assertEqual(opted_in['rot_stopped_velocity'], .05)
+
+            params['controller_server']['ros__parameters']['goal_checker']['yaw_goal_tolerance'] = .1
+            source.write_text(yaml.safe_dump(params))
+            self.assertEqual(checker()['yaw_goal_tolerance'], .1)
+            profile.write_text('navigation:\n  goal_yaw_tolerance: 3.2\n')
+            with self.assertRaisesRegex(ValueError, 'goal_yaw_tolerance'):
+                checker()
+
     def test_missing_profile_keeps_existing_defaults(self):
         with tempfile.TemporaryDirectory() as folder:
             geometry_file = Path(folder) / 'geometry.json'
             geometry_file.write_text(GEOMETRY.read_text())
             for mode in ['navigation', 'exploration']:
                 with self.subTest(mode=mode):
-                    before = self.resolve(mode, 'true')
-                    after = self.resolve(mode, 'true', geometry_file)
+                    before = self.resolve(mode)
+                    after = self.resolve(mode, geometry_file)
                     old = before['controller_server']['ros__parameters']
                     new = after['controller_server']['ros__parameters']
                     self.assertEqual(new['FollowPath'], old['FollowPath'])
@@ -280,24 +323,72 @@ class VehicleParametersTest(unittest.TestCase):
                         self.assertEqual(after[name][name]['ros__parameters']['inflation_layer'],
                                          before[name][name]['ros__parameters']['inflation_layer'])
 
-    def test_simulator_lio_overlay_preserves_explicit_override_precedence(self):
+    def test_rmul_entry_selects_only_zlio_and_composes_one_frontend(self):
+        spec = importlib.util.spec_from_file_location(
+            'rmul_navigation', SIM_SHARE / 'launch/rmul_navigation.launch.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        description = module.generate_launch_description()
+        declaration = next(action for action in description.entities
+                           if isinstance(action, DeclareLaunchArgument)
+                           and action.name == 'localization_backend')
+        context = LaunchContext()
+        declaration.execute(context)
+        self.assertEqual(context.launch_configurations['localization_backend'], 'zlio_tdt')
+        context.launch_configurations['localization_backend'] = 'amcl'
+        with self.assertRaises(RuntimeError):
+            declaration.execute(context)
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
-            geometry_file = folder / 'geometry.json'
-            geometry = json.loads(GEOMETRY.read_text())
-            geometry_file.write_text(json.dumps(geometry))
-            model_lio = folder / 'lio_profile.yaml'
-            model_lio.write_text(LIO_PROFILE.read_text())
-            profile = RobotProfile('candidate', str(geometry_file), geometry)
-            base_config = str(SHARE / 'config/rm_sim_lio.yaml')
-            with patch('xxu_bringup.sensor_launch.Node', side_effect=lambda **kw: kw):
-                actions = lio_preprocessing(
-                    'rm_sim', use_sim_time='true', config_file=base_config,
-                    profile=profile, lio_overrides={'laser_point_cov': .002})
-            parameters = actions[-1]['parameters']
-            self.assertEqual(parameters[:2], [base_config, str(model_lio)])
-            self.assertEqual(parameters[-1]['laser_point_cov'], .002)
-            self.assertEqual(parameters[-1]['planar_z'], geometry['base_height'])
+            settings = folder / 'config.yaml'
+            settings.write_text('{}')
+            context.launch_configurations.update(
+                enable_localization='true', robot_model='ega_folded', prior_map=str(folder),
+                **{key: str(settings) for key in
+                   ('frontend_config', 'backend_config', 'external_map', 'external_nav2_params')},
+                **{key: 'false' for key in ('gazebo_gui', 'rviz', 'dynamic_test_vehicle', 'idle_scan')},
+                **{key: '' for key in ('field_model', 'rgl_plugin_dir', 'robot_geometry_file')},
+                spawn_x='2', spawn_y='2', spawn_yaw='0', lidar_mode='rgl', imu_sampling='direct')
+            with patch.object(module, 'get_package_share_directory',
+                              side_effect=lambda name: str(SIM_SHARE if name == 'xxu_sim_bringup' else SHARE)), \
+                    patch.object(module, 'PythonLaunchDescriptionSource',
+                                 wraps=module.PythonLaunchDescriptionSource) as constructed:
+                actions = module.external_setup(context)
+            from launch.actions import IncludeLaunchDescription
+            includes = [action for action in actions if isinstance(action, IncludeLaunchDescription)]
+            sources = [call.args[0] for call in constructed.call_args_list]
+            self.assertEqual(sum(path.endswith('/bringup.launch.py') for path in sources), 1, sources)
+            self.assertEqual(sum(path.endswith('/rm_sim_gazebo.launch.py') for path in sources), 1)
+            self.assertEqual(sum(path.endswith('/zlio_base_adapter.launch.py') for path in sources), 1)
+            simulation = next(action for action, path in zip(includes, sources)
+                              if path.endswith('/rm_sim_gazebo.launch.py'))
+            self.assertNotIn('enable_lio', dict(simulation.launch_arguments))
+            self.assertNotIn('enable_zlio_timed', dict(simulation.launch_arguments))
+
+    def test_simulation_constructs_sensors_without_a_second_estimator(self):
+        spec = importlib.util.spec_from_file_location(
+            'rm_sim_sensors', SIM_SHARE / 'launch/rm_sim_gazebo.launch.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        context = LaunchContext()
+        for action in module.generate_launch_description().entities:
+            if isinstance(action, DeclareLaunchArgument):
+                action.execute(context)
+        context.launch_configurations.update(lidar_mode='gpu_lidar')
+        nodes = []
+
+        def capture(**kwargs):
+            nodes.append(kwargs)
+            return Node(**kwargs)
+
+        with patch.object(module, 'prepare_assets', return_value=('/world', '/model', '<robot/>')), \
+                patch.object(module, 'Node', side_effect=capture), \
+                patch('xxu_bringup.sensor_launch.Node', side_effect=capture):
+            module.launch_setup(context)
+        self.assertFalse({'frontend', 'backend', 'small_point_lio'} &
+                         {node['package'] for node in nodes})
+        self.assertEqual(sum(node['name'] == 'gimbal_imu_compensator' for node in nodes), 1)
+        self.assertEqual(sum(node['name'] == 'pointcloud_motion_compensator' for node in nodes), 1)
 
 
 if __name__ == '__main__':

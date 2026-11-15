@@ -128,6 +128,7 @@ RelocalizationResult Search::run() {
                             << ", best_quality=" << qualitySummary(best_failed_quality_)
                             << ", global_fallback_considered=" << global_fallback_considered_
                             << ")");
+        result.continuity_rejections = continuity_rejections_;
         return result;
     }
 
@@ -139,6 +140,7 @@ RelocalizationResult Search::run() {
                         << tried_verifications_ << " alignment attempts"
                         << " (best_residual_score=" << best_failed_residual_score_
                         << ", best_quality=" << qualitySummary(best_failed_quality_) << ")");
+    result.continuity_rejections = continuity_rejections_;
     return result;
 }
 

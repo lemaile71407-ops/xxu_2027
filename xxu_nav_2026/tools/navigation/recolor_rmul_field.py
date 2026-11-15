@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Add deterministic, matte arena materials to the supplied RMUL field.
 
-The STL's existing raised paint/zone geometry supplies the boundaries. This
-palette is a simulation reference, not official artwork. Collision and Nav2
-assets are read-only. COLLADA carries the original triangles, UVs and materials.
+The reference STL supplies the paint/zone boundaries. Ground markings become
+visual decals and a separate collision mesh removes their artificial thickness.
+Walls, ramps and platforms retain their source geometry. Nav2 assets are read-only.
 """
 
 import argparse
@@ -189,10 +189,43 @@ def write_collada(path, triangles, labels, normals):
     ET.ElementTree(root).write(path, encoding='utf-8', xml_declaration=True)
 
 
+def ground_decals(triangles, labels, normals):
+    """Flatten only faces wholly within the reference ground-marking layer.
+
+    Do not move low vertices of faces extending into a wall, ramp or platform.
+    Upward marking faces remain as render-only layers; their sides and undersides
+    disappear. Collision surfaces sit exactly at ground height.
+    """
+    low = ((triangles[:, :, 2].min(1) >= -1e-7)
+           & (triangles[:, :, 2].max(1) <= 0.0111))
+    keep = ~low | (normals[:, 2] > 0.98)
+    collision = triangles[keep].copy()
+    collision[low[keep], :, 2] = 0.0
+    visual = triangles[keep].copy()
+    selected = low[keep] & (visual[:, :, 2].mean(1) > 1e-7)
+    heights = np.round(visual[selected, :, 2].mean(1), 5)
+    # Separate material layers by 0.1 mm to avoid coplanar rendering flicker.
+    visual[selected, :, 2] = (np.searchsorted(np.unique(heights), heights) + 1)[:, None] * 0.0001
+    return visual, collision, labels[keep], normals[keep], {
+        'source_ground_layer_max_m': 0.0111,
+        'removed_side_and_underside_faces': int((~keep).sum()),
+        'flattened_upward_faces': int((low & keep).sum()),
+        'non_ground_faces_preserved': int((~low).sum()),
+        'visual_only_layer_step_m': 0.0001,
+    }
+
+
 def apply_materials(model_directory):
     mesh = model_directory/'meshes/rmul_2027_m_zup.stl'
     raw, triangles = read_triangles(mesh)
     labels, normals = classify(triangles)
+    triangles, collision, labels, normals, decal_summary = ground_decals(triangles, labels, normals)
+    collision_path = model_directory/'meshes/rmul_2027_collision.stl'
+    records = np.zeros(len(collision), dtype=STL_DTYPE)
+    records['vertices'] = collision
+    records['normal'] = normals
+    collision_path.write_bytes(b'RMUL ground markings flattened; structural faces preserved'.ljust(80, b'\0')
+                               + struct.pack('<I', len(records)) + records.tobytes())
     textures = model_directory/'materials/textures'
     textures.mkdir(parents=True, exist_ok=True)
     for index, name in enumerate(sorted(set(labels))):
@@ -209,17 +242,19 @@ def apply_materials(model_directory):
         raise ValueError('Expected the supplied field visual')
     field_visual.set('name', 'field_visual')
     field_visual.find('geometry/mesh/uri').text = 'meshes/rmul_2027_visual.dae'
+    field_link.find("collision[@name='field']/geometry/mesh/uri").text = 'meshes/rmul_2027_collision.stl'
     material = field_visual.find('material')
     if material is not None:
         field_visual.remove(material)
     sdf.write(sdf_path, encoding='utf-8', xml_declaration=True)
     summary = {
-        'style': 'matte PVC / painted panels / red-blue zones / existing raised markings',
+        'style': 'matte PVC / painted panels / red-blue zones / ground visual decals',
         'official_artwork': False,
         'source_mesh_sha256': hashlib.sha256(raw).hexdigest(),
         'visual_triangles': len(triangles),
         'groups': {name: int(np.count_nonzero(labels == name)) for name in sorted(set(labels))},
-        'collision_mesh': 'meshes/rmul_2027_m_zup.stl',
+        'collision_mesh': 'meshes/rmul_2027_collision.stl',
+        'ground_decals': decal_summary,
         'navigation_map_modified': False,
         'contact_friction_modified': False,
         'lidar_material_response_calibrated': False,

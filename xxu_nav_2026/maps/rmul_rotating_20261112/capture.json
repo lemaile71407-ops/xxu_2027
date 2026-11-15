@@ -1,0 +1,434 @@
+{
+  "date": "2026-11-12",
+  "completed": true,
+  "new_baseline": true,
+  "source": "only committed ZLIO frame clouds; known session spawn seeds plus observed nonfloor cloud overlap ICP, no truth trajectory fitting or CAD occupancy",
+  "points": 58202,
+  "frames": 5909,
+  "saved_frames": 1058,
+  "sessions": {
+    "left": {
+      "date": "2026-11-12",
+      "session": "left",
+      "completed": true,
+      "known_spawn": [
+        2.0,
+        2.0
+      ],
+      "stations": [
+        [
+          2.0,
+          2.0
+        ],
+        [
+          6.0,
+          2.0
+        ],
+        [
+          2.0,
+          4.0
+        ],
+        [
+          2.0,
+          6.3
+        ],
+        [
+          2.35,
+          7.7
+        ]
+      ],
+      "reached": [
+        [
+          2.0,
+          2.0
+        ],
+        [
+          6.0,
+          2.0
+        ],
+        [
+          2.0,
+          4.0
+        ],
+        [
+          2.0,
+          6.3
+        ],
+        [
+          2.35,
+          7.7
+        ]
+      ],
+      "initial_base_odom": [
+        -0.00011638531309252207,
+        0.0018620298269464521
+      ],
+      "rotation_checks": [
+        {
+          "world_xy": [
+            2.0027804310527118,
+            2.0086429676547266
+          ],
+          "rotation_rad": 6.25853217813925,
+          "heading_bins_10deg": 36,
+          "saved_frames": 59,
+          "translation_during_rotation_m": 0.00737378212869178
+        },
+        {
+          "world_xy": [
+            5.943569480995048,
+            1.9961329974172728
+          ],
+          "rotation_rad": 6.258293856694761,
+          "heading_bins_10deg": 36,
+          "saved_frames": 60,
+          "translation_during_rotation_m": 0.004337454671424453
+        },
+        {
+          "world_xy": [
+            2.011902641878928,
+            3.9410783363534705
+          ],
+          "rotation_rad": 6.258205989946827,
+          "heading_bins_10deg": 36,
+          "saved_frames": 59,
+          "translation_during_rotation_m": 0.002602735443816925
+        },
+        {
+          "world_xy": [
+            1.8471070727652144,
+            6.241239299227371
+          ],
+          "rotation_rad": 6.258592540632974,
+          "heading_bins_10deg": 36,
+          "saved_frames": 63,
+          "translation_during_rotation_m": 0.1498564328161566
+        },
+        {
+          "world_xy": [
+            2.32231807621794,
+            7.675046076942686
+          ],
+          "rotation_rad": 6.2582228412200855,
+          "heading_bins_10deg": 36,
+          "saved_frames": 61,
+          "translation_during_rotation_m": 0.022180883388881627
+        }
+      ],
+      "frames": 2881,
+      "saved_frames": 516,
+      "points": 36595,
+      "map_offset": [
+        2.0,
+        2.0,
+        0.06973823713479495
+      ],
+      "frontend_session": [
+        12983998000000251972,
+        0
+      ],
+      "source": "FrontendFrame cloud transformed by its atomic ZLIO posterior; no CAD occupancy or Gazebo truth",
+      "final_base_odom": [
+        0.0016619188024037228,
+        0.05911087764509274
+      ],
+      "truth_quality_scope": "diagnostic only, never used for point transforms or motion control; fixed known spawn, no trajectory fitting",
+      "truth_xy_error_peak_m": 0.15985035663941027,
+      "truth_yaw_error_peak_rad": 0.014526582796093201
+    },
+    "right_retry": {
+      "date": "2026-11-12",
+      "session": "right_retry",
+      "completed": false,
+      "known_spawn": [
+        11.0,
+        2.0
+      ],
+      "stations": [
+        [
+          11.0,
+          2.0
+        ],
+        [
+          11.0,
+          4.5
+        ],
+        [
+          10.7,
+          6.65
+        ],
+        [
+          8.5,
+          7.0
+        ],
+        [
+          8.4,
+          5.9
+        ]
+      ],
+      "reached": [
+        [
+          11.0,
+          2.0
+        ],
+        [
+          11.0,
+          4.5
+        ],
+        [
+          10.7,
+          6.65
+        ],
+        [
+          8.5,
+          7.0
+        ],
+        [
+          8.4,
+          5.9
+        ]
+      ],
+      "initial_base_odom": [
+        0.001083312327931044,
+        -0.0009518751010801428
+      ],
+      "rotation_checks": [
+        {
+          "world_xy": [
+            10.980012025693078,
+            1.9896656027823418
+          ],
+          "rotation_rad": 6.25859567425946,
+          "heading_bins_10deg": 36,
+          "saved_frames": 60,
+          "translation_during_rotation_m": 0.02306579375864152
+        },
+        {
+          "world_xy": [
+            11.000357464962622,
+            4.441645732531603
+          ],
+          "rotation_rad": 6.258571899474307,
+          "heading_bins_10deg": 36,
+          "saved_frames": 60,
+          "translation_during_rotation_m": 0.0001966324607325153
+        },
+        {
+          "world_xy": [
+            10.658813002874858,
+            6.590928106131857
+          ],
+          "rotation_rad": 6.258214528645032,
+          "heading_bins_10deg": 36,
+          "saved_frames": 59,
+          "translation_during_rotation_m": 0.001730129502562162
+        },
+        {
+          "world_xy": [
+            8.55844651431055,
+            6.988996393264615
+          ],
+          "rotation_rad": 6.258517838195783,
+          "heading_bins_10deg": 36,
+          "saved_frames": 59,
+          "translation_during_rotation_m": 0.0006866559394703389
+        },
+        {
+          "world_xy": [
+            8.404443869239707,
+            5.952293944896992
+          ],
+          "rotation_rad": 6.258401703062062,
+          "heading_bins_10deg": 36,
+          "saved_frames": 60,
+          "translation_during_rotation_m": 0.006380133107385567
+        }
+      ],
+      "failure": "AssertionError('translation stalled')",
+      "frames": 2605,
+      "saved_frames": 466,
+      "points": 31069,
+      "map_offset": [
+        11.0,
+        2.0,
+        0.06973823713479495
+      ],
+      "frontend_session": [
+        7889005915979313950,
+        0
+      ],
+      "source": "FrontendFrame cloud transformed by its atomic ZLIO posterior; no CAD occupancy or Gazebo truth",
+      "final_base_odom": [
+        -0.13756546119735338,
+        0.1367376981514734
+      ],
+      "truth_quality_scope": "diagnostic only, never used for point transforms or motion control; fixed known spawn, no trajectory fitting",
+      "truth_xy_error_peak_m": 0.012552757714023408,
+      "truth_yaw_error_peak_rad": 0.004172220064987631
+    },
+    "interior": {
+      "date": "2026-11-12",
+      "session": "interior",
+      "completed": true,
+      "known_spawn": [
+        6.9,
+        6.3
+      ],
+      "stations": [
+        [
+          6.9,
+          6.3
+        ]
+      ],
+      "reached": [
+        [
+          6.9,
+          6.3
+        ]
+      ],
+      "initial_base_odom": [
+        -4.772633674070873e-05,
+        0.0012456788170938564
+      ],
+      "rotation_checks": [
+        {
+          "world_xy": [
+            6.899801112113964,
+            6.303969938480672
+          ],
+          "rotation_rad": 6.258346019139283,
+          "heading_bins_10deg": 36,
+          "saved_frames": 59,
+          "translation_during_rotation_m": 0.002728450206360436
+        }
+      ],
+      "frames": 423,
+      "saved_frames": 76,
+      "points": 19112,
+      "map_offset": [
+        6.9,
+        6.3,
+        0.06973823713479495
+      ],
+      "frontend_session": [
+        3670528829449002891,
+        0
+      ],
+      "source": "FrontendFrame cloud transformed by its atomic ZLIO posterior; no CAD occupancy or Gazebo truth",
+      "final_base_odom": [
+        0.00029808297181196567,
+        0.0038774476643491634
+      ],
+      "truth_quality_scope": "diagnostic only, never used for point transforms or motion control; fixed known spawn, no trajectory fitting",
+      "truth_xy_error_peak_m": 0.0043491505674462935,
+      "truth_yaw_error_peak_rad": 0.001586797161115705
+    }
+  },
+  "alignments": {
+    "left": {
+      "transform": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "scope": "fixed known-spawn world anchor, no trajectory fit"
+    },
+    "right_retry": {
+      "nonfloor_source_points": 4747,
+      "overlap_points": 4116,
+      "overlap_fraction": 0.8670739414366969,
+      "before_overlap_rmse_m": 0.046866909078600284,
+      "after_overlap_rmse_m": 0.045729535450417275,
+      "correction_translation_m": 0.0103417684396223,
+      "correction_rotation_rad": 0.001951585908909541,
+      "transform": [
+        [
+          0.9999998849466618,
+          -3.699301483986958e-05,
+          0.00047826580524797254,
+          0.0004200646146331464
+        ],
+        [
+          3.789769011350589e-05,
+          0.9999982100090854,
+          -0.001891703568462246,
+          0.000454987913758387
+        ],
+        [
+          -0.0004781949693383435,
+          0.001891721475984699,
+          0.9999980963579023,
+          0.010323212008703238
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "iterations": 32
+    },
+    "interior": {
+      "nonfloor_source_points": 3017,
+      "overlap_points": 3017,
+      "overlap_fraction": 1.0,
+      "before_overlap_rmse_m": 0.0306248222940791,
+      "after_overlap_rmse_m": 0.03053624343739411,
+      "correction_translation_m": 0.0046701795499178985,
+      "correction_rotation_rad": 0.0006179329358033034,
+      "transform": [
+        [
+          0.9999999793069376,
+          -0.00018831128318913304,
+          -7.697391641450531e-05,
+          0.0006725913717733808
+        ],
+        [
+          0.00018826633799408853,
+          0.9999998120461718,
+          -0.0005834924229306864,
+          -0.0026287879472305874
+        ],
+        [
+          7.708378015385574e-05,
+          0.0005834779192590754,
+          0.9999998268057894,
+          -0.003801009313798447
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "iterations": 8
+    }
+  },
+  "acquisition_limits": [
+    "right_retry completed every planned full-rotation station, but return-to-spawn stalled; its original mission completed=false is preserved. No source-accuracy or station-coverage criterion was relaxed. Initial incomplete right session excluded."
+  ],
+  "full_rotation_stations": 11
+}

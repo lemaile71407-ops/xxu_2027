@@ -102,6 +102,7 @@ void ParameterReader::loadMapTrajectoryAndRegistration() {
     getParam("trajectory/keyframe/min_interval", parameters_.runtime.keyframes.min_interval);
     getParam("trajectory/keyframe/max_interval", parameters_.runtime.keyframes.max_interval);
     RegistrationConfig& registration = parameters_.runtime.relocalization.point_to_plane_config;
+    getParam("registration/experimental_blended_adaptive", registration.experimental_blended_adaptive);
     getParam("registration/voxel_resolution", registration.voxel_resolution);
     getParam<int>("registration/max_iterations", registration.max_iterations, 10);
     getParam("registration/max_correspondence_distance", registration.max_correspondence_distance);

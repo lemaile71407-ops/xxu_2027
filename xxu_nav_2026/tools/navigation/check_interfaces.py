@@ -55,18 +55,8 @@ def expected_reference(filename, path):
         "base_frame": "frame:ground_base", "robot_base_frame": "frame:navigation_base",
         "base_frame_id": "frame:ground_base" if owner == "amcl" else "frame:navigation_base",
         "global_frame": "frame:odom" if owner == "local_costmap" else "frame:map",
-        "odom_topic": "topic:navigation.odometry" if filename == "nav2_fake_profile.yaml" else "topic:localization.odometry",
+        "odom_topic": "topic:localization.odometry",
     }
-    if key in ("lidar_topic", "imu_topic", "lidar_frame"):
-        real = filename == "xxu_mid360_gimbal_compensated.yaml"
-        raw = filename == "xxu_gazebo_mid360.yaml"
-        return {
-            "lidar_topic": "topic:radar.pointcloud_compensated" if real else
-                           "topic:simulation.lidar_shaped" if raw else "topic:simulation.lidar_compensated",
-            "imu_topic": "topic:radar.imu_compensated" if real else
-                         "topic:simulation.imu" if raw else "topic:simulation.imu_compensated",
-            "lidar_frame": "frame:gazebo_lidar" if raw else "frame:lidar_compensated",
-        }[key]
     return rules.get(key)
 
 
@@ -80,10 +70,9 @@ def check(workspace, contract_path=None):
     errors = []
     checked = 0
     files = [src / "xxu_bringup/config" / name for name in (
-        "nav2_navigation.yaml", "nav2_exploration.yaml", "nav2_fake_profile.yaml", "rm_sim_lio.yaml")]
+        "nav2_navigation.yaml", "nav2_exploration.yaml")]
     files += [src / "xxu_slam_toolbox/config" / name for name in (
         "slam_toolbox_mapping.yaml", "explore_lite.yaml")]
-    files += sorted((src / "small_point_lio/config").glob("xxu*.yaml"))
     files += sorted((src / "xxu_bringup/rviz").glob("*.rviz"))
     files += sorted((src / "xxu_slam_toolbox/rviz").glob("*.rviz"))
     for file in files:
@@ -131,43 +120,45 @@ def check(workspace, contract_path=None):
             checked += 1
             if value[1:] not in references:
                 errors.append(f"sensor_chain.yaml:{'.'.join(path)}: unknown {value}")
-    # CAD models are static consumers too. A valid launch/bridge contract must
-    # agree with the actual Gazebo endpoints and the published URDF frames.
-    for geometry_file in sorted((src / "xxu_bringup/models").glob("*/geometry.json")):
-        geometry = json.loads(geometry_file.read_text())
-        sdf_file = geometry_file.with_name("model.sdf")
-        urdf_file = geometry_file.with_name("robot.urdf")
-        files.extend([sdf_file, urdf_file])
-        sdf, urdf = ET.parse(sdf_file), ET.parse(urdf_file)
+    # CAD models are static consumers too when simulation assets are present.
+    # A valid launch/bridge contract must agree with Gazebo endpoints and URDF frames.
+    models_root = src / "xxu_sim_bringup/models"
+    if models_root.is_dir():
+        for geometry_file in sorted(models_root.glob("*/geometry.json")):
+            geometry = json.loads(geometry_file.read_text())
+            sdf_file = geometry_file.with_name("model.sdf")
+            urdf_file = geometry_file.with_name("robot.urdf")
+            files.extend([sdf_file, urdf_file])
+            sdf, urdf = ET.parse(sdf_file), ET.parse(urdf_file)
 
-        def compare(label, actual, expected):
-            nonlocal checked
-            checked += 1
-            if label.endswith((".topic", ".command")):
-                actual = ["/" + value.lstrip("/") if value is not None else None for value in actual]
-            if actual != expected:
-                errors.append(f"{geometry_file.parent.relative_to(workspace)}:{label}: {actual!r}; expected {expected!r}")
+            def compare(label, actual, expected):
+                nonlocal checked
+                checked += 1
+                if label.endswith((".topic", ".command")):
+                    actual = ["/" + value.lstrip("/") if value is not None else None for value in actual]
+                if actual != expected:
+                    errors.append(f"{geometry_file.parent.relative_to(workspace)}:{label}: {actual!r}; expected {expected!r}")
 
-        for wheel in geometry["wheels"]:
-            controllers = [plugin for plugin in sdf.findall(".//plugin")
-                           if plugin.findtext("joint_name") == wheel["name"] + "_joint"
-                           and "JointController" in plugin.get("name", "")]
-            actual = [plugin.findtext("topic") for plugin in controllers]
-            compare(wheel["name"] + ".command", actual,
-                    [topics["simulation.wheel_command"].format(wheel=wheel["name"])])
-        rgl = [plugin for plugin in sdf.findall(".//plugin")
-               if "RGLServerPluginInstance" in plugin.get("name", "")]
-        compare("lidar.topic", [p.findtext("topic") for p in rgl], [topics["simulation.rm_lidar"]])
-        compare("lidar.frame", [p.findtext("frame") for p in rgl], [contract["frames"]["rm_lidar"]])
-        compare("imu.topic", [s.findtext("topic") for s in sdf.findall(".//sensor[@type='imu']")],
-                [topics["radar.imu"]])
-        joints = [p.findtext("topic") for p in sdf.findall(".//plugin")
-                  if "JointStatePublisher" in p.get("name", "")]
-        compare("joint_states.topic", joints, [topics["gimbal.joint_states"]])
-        urdf_links = {link.get("name") for link in urdf.findall("link")}
-        for role in ("navigation_base", "ground_base", "lidar_compensated", "rm_lidar"):
-            frame = contract["frames"][role]
-            compare("urdf.frame." + role, frame in urdf_links, True)
+            for wheel in geometry["wheels"]:
+                controllers = [plugin for plugin in sdf.findall(".//plugin")
+                               if plugin.findtext("joint_name") == wheel["name"] + "_joint"
+                               and "JointController" in plugin.get("name", "")]
+                actual = [plugin.findtext("topic") for plugin in controllers]
+                compare(wheel["name"] + ".command", actual,
+                        [topics["simulation.wheel_command"].format(wheel=wheel["name"])])
+            rgl = [plugin for plugin in sdf.findall(".//plugin")
+                   if "RGLServerPluginInstance" in plugin.get("name", "")]
+            compare("lidar.topic", [p.findtext("topic") for p in rgl], [topics["simulation.rm_lidar"]])
+            compare("lidar.frame", [p.findtext("frame") for p in rgl], [contract["frames"]["rm_lidar"]])
+            compare("imu.topic", [s.findtext("topic") for s in sdf.findall(".//sensor[@type='imu']")],
+                    [topics["radar.imu"]])
+            joints = [p.findtext("topic") for p in sdf.findall(".//plugin")
+                      if "JointStatePublisher" in p.get("name", "")]
+            compare("joint_states.topic", joints, [topics["gimbal.joint_states"]])
+            urdf_links = {link.get("name") for link in urdf.findall("link")}
+            for role in ("navigation_base", "ground_base", "lidar_compensated", "rm_lidar"):
+                frame = contract["frames"][role]
+                compare("urdf.frame." + role, frame in urdf_links, True)
     return checked, files, errors
 
 

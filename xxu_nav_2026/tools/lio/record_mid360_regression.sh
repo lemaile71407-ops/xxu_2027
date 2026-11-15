@@ -13,7 +13,7 @@ Options:
   --lidar-topic TOPIC     Raw MID360 PointCloud2 (default: /livox/lidar)
   --imu-topic TOPIC       Raw MID360 IMU (default: /livox/imu)
   --joint-topic TOPIC     Gimbal JointState (default: /joint_states)
-  --lio-odom-topic TOPIC  Small Point-LIO output (default: /odom)
+  --lio-odom-topic TOPIC  ZLIO and its base adapter output (default: /odom)
   --reference-odom TOPIC  Independent wheel/mocap odometry to include
   --include-derived-clouds  Also record deskewed/compensated point clouds
   --storage-profile NAME  MCAP profile: fastwrite, zstd_fast or zstd_small
@@ -151,7 +151,7 @@ done
 if [[ ${#missing_topics[@]} -gt 0 ]]; then
   echo "Required topics are not currently published:" >&2
   printf '  %s\n' "${missing_topics[@]}" >&2
-  echo "Start the MID360, joint-state publisher and Small Point-LIO before recording." >&2
+  echo "Start the MID360, joint-state publisher and ZLIO and its base adapter before recording." >&2
   exit 1
 fi
 if [[ ${#invalid_types[@]} -gt 0 ]]; then
@@ -254,8 +254,8 @@ fi
 if [[ -d "$bag_path" ]]; then
   mv "$manifest_tmp" "$bag_path/capture_manifest.txt"
   ros2 topic list -t >"$bag_path/ros_topics_at_end.txt" 2>/dev/null || true
-  if ros2 node list 2>/dev/null | rg -q '^/small_point_lio$'; then
-    ros2 param dump /small_point_lio >"$bag_path/small_point_lio_params.yaml" 2>/dev/null || true
+  if ros2 node list 2>/dev/null | rg -q '^/zlio$'; then
+    ros2 param dump /zlio >"$bag_path/zlio_params.yaml" 2>/dev/null || true
   fi
   echo "Saved: $bag_path"
 fi

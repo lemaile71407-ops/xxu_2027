@@ -45,6 +45,8 @@ struct KeyframePolicy {
 
 /// 点到面配准、几何验收和观测不确定度参数。
 struct RegistrationConfig {
+    /// Explicit experimental solver; baseline remains the default.
+    bool experimental_blended_adaptive = false;
     double voxel_resolution = 0.2;
     int max_iterations = 8;
     double max_correspondence_distance = 0.6;

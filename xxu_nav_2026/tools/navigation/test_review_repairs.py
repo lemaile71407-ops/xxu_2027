@@ -24,8 +24,8 @@ from geometry_msgs.msg import TwistStamped
 
 
 WORKSPACE = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(WORKSPACE / 'src/xxu_bringup'))
-from xxu_bringup.simulation_processes import Process, select_trees
+sys.path.insert(0, str(WORKSPACE / 'src/xxu_sim_bringup'))
+from xxu_sim_bringup.simulation_processes import Process, select_trees
 
 
 def load(name, path):
@@ -35,7 +35,7 @@ def load(name, path):
     return module
 
 
-watchdog = load('review_watchdog', WORKSPACE / 'src/fake_vel_transform/scripts/cmd_vel_watchdog.py')
+watchdog = load('review_watchdog', WORKSPACE / 'src/xxu_bringup/scripts/cmd_vel_watchdog.py')
 interfaces = load('review_interfaces', Path(__file__).with_name('check_interfaces.py'))
 navigation = load('review_navigation', Path(__file__).with_name('check_ega_navigation.py'))
 
@@ -93,13 +93,13 @@ class ProcessOwnershipTest(unittest.TestCase):
         def process(pid, parent, package, launch, cwd):
             return Process(pid, parent, str(pid), ('ros2', 'launch', package, launch), Path(cwd))
         processes = {
-            1: process(1, 0, 'xxu_bringup', 'rmul_navigation.launch.py', '/work'),
+            1: process(1, 0, 'xxu_sim_bringup', 'rmul_navigation.launch.py', '/work'),
             2: Process(2, 1, '2', ('chassis_controller',), Path('/other')),
-            3: process(3, 0, 'xxu_bringup', 'rmul_navigation.launch.py', '/other'),
-            4: process(4, 0, 'xxu_bringup', 'real_robot.launch.py', '/work'),
+            3: process(3, 0, 'xxu_sim_bringup', 'rmul_navigation.launch.py', '/other'),
+            4: process(4, 0, 'xxu_hardware', 'chassis_lower_bridge.launch.py', '/work'),
             5: process(5, 0, 'other_robot', 'simulation.launch.py', '/work'),
             6: process(6, 0, 'xxu_slam_toolbox', 'mapping.launch.py', '/work/src'),
-            7: Process(7, 4, '7', ('chassis_controller',), Path('/work')),
+            7: Process(7, 4, '7', ('chassis_lower_bridge.py',), Path('/work')),
         }
         self.assertEqual(select_trees(processes, Path('/work')), ({1, 6}, {1, 2, 6}))
         self.assertEqual(select_trees(processes, Path('/work'), caller=2), ({6}, {6}))

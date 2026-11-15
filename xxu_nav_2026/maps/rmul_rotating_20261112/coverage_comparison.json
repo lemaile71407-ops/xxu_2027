@@ -1,0 +1,120 @@
+{
+  "date": "2026-11-12",
+  "scope": "CAD used only as independent coverage denominator for preplanned route-safe cells; no geometry inserted into observed map",
+  "maps": {
+    "old": {
+      "free_cells": 26522,
+      "occupied_cells": 10011,
+      "unknown_cells": 11596,
+      "known_fraction_of_CAD_route_safe_cells": 0.9639179132526497,
+      "free_fraction_of_CAD_route_safe_cells": 0.9639179132526497,
+      "targets": {
+        "spawn": {
+          "xy": [
+            2,
+            2
+          ],
+          "cell": 254,
+          "free_clearance_m": 1.4008925726121901
+        },
+        "previous_localization_failure": {
+          "xy": [
+            6.9,
+            6.3
+          ],
+          "cell": 254,
+          "free_clearance_m": 0.8544003745317531
+        },
+        "upper_left": {
+          "xy": [
+            2,
+            6.3
+          ],
+          "cell": 254,
+          "free_clearance_m": 0.7000000000000001
+        },
+        "upper_right": {
+          "xy": [
+            10.7,
+            6.65
+          ],
+          "cell": 254,
+          "free_clearance_m": 1.5
+        },
+        "right_lower": {
+          "xy": [
+            11,
+            2
+          ],
+          "cell": 254,
+          "free_clearance_m": 1.1500000000000001
+        },
+        "interior_passage": {
+          "xy": [
+            6.3,
+            5.2
+          ],
+          "cell": 205,
+          "free_clearance_m": 0.0
+        }
+      }
+    },
+    "rotating": {
+      "free_cells": 27477,
+      "occupied_cells": 13076,
+      "unknown_cells": 7759,
+      "known_fraction_of_CAD_route_safe_cells": 1.0,
+      "free_fraction_of_CAD_route_safe_cells": 1.0,
+      "targets": {
+        "spawn": {
+          "xy": [
+            2,
+            2
+          ],
+          "cell": 254,
+          "free_clearance_m": 1.4150971698084907
+        },
+        "previous_localization_failure": {
+          "xy": [
+            6.9,
+            6.3
+          ],
+          "cell": 254,
+          "free_clearance_m": 1.2727922061357857
+        },
+        "upper_left": {
+          "xy": [
+            2,
+            6.3
+          ],
+          "cell": 254,
+          "free_clearance_m": 0.6670832032063168
+        },
+        "upper_right": {
+          "xy": [
+            10.7,
+            6.65
+          ],
+          "cell": 254,
+          "free_clearance_m": 1.5
+        },
+        "right_lower": {
+          "xy": [
+            11,
+            2
+          ],
+          "cell": 254,
+          "free_clearance_m": 1.1
+        },
+        "interior_passage": {
+          "xy": [
+            6.3,
+            5.2
+          ],
+          "cell": 254,
+          "free_clearance_m": 1.35
+        }
+      }
+    }
+  }
+}

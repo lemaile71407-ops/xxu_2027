@@ -222,6 +222,7 @@ RelocalizationResult Search::makeResult() const {
     result.source = best_.source;
     result.covariance = best_.covariance;
     result.covariance_valid = best_.covariance_valid;
+    result.continuity_rejections = continuity_rejections_;
     return result;
 }
 

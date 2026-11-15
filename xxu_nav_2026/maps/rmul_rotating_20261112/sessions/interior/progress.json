@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-12",
+  "session": "interior",
+  "completed": false,
+  "known_spawn": [
+    6.9,
+    6.3
+  ],
+  "stations": [
+    [
+      6.9,
+      6.3
+    ]
+  ],
+  "reached": [
+    [
+      6.9,
+      6.3
+    ]
+  ],
+  "initial_base_odom": [
+    -4.772633674070873e-05,
+    0.0012456788170938564
+  ],
+  "rotation_checks": [
+    {
+      "world_xy": [
+        6.899801112113964,
+        6.303969938480672
+      ],
+      "rotation_rad": 6.258346019139283,
+      "heading_bins_10deg": 36,
+      "saved_frames": 59,
+      "translation_during_rotation_m": 0.002728450206360436
+    }
+  ]
+}

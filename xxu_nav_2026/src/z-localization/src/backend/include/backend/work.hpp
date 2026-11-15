@@ -109,6 +109,7 @@ struct RecoveryWork {
     Keyframe runtime;
     RecoveryIdentity identity;
     Eigen::Matrix4d predicted_map_pose = Eigen::Matrix4d::Identity();
+    std::optional<RelocalizationContinuityBound> continuity_bound{};
     std::optional<RelocalizationPositionPrior> startup_hint_prior;
     std::optional<RelocalizationPositionPrior> uwb_prior;
     std::vector<FrontendFrame> source_history;
