@@ -183,8 +183,6 @@ Visualization Manager:
           Value: true
         gimbal_link:
           Value: true
-        gimbal_yaw_fake:
-          Value: true
         lio_base_sensor:
           Value: true
         livox_lidar:
@@ -232,8 +230,6 @@ Visualization Manager:
                   {}
                 wheel_rr:
                   {}
-              gimbal_yaw_fake:
-                {}
       Update Interval: 0
       Value: true
     - Alpha: 1

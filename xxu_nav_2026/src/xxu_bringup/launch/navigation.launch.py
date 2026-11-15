@@ -4,7 +4,7 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, LogInfo
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from ament_index_python.packages import get_package_share_directory
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -23,37 +23,6 @@ def map_server_node(configured_params, map_file, use_sim_time):
         parameters=[configured_params, {"yaml_filename": map_file, "use_sim_time": use_sim_time}],
     )
 
-
-def localization_nodes(configured_params, use_sim_time, enable_gicp,
-                       default_gicp_params, gicp_pcd_map, nav2_common_remaps):
-    """Construct the existing AMCL and optional GICP localization nodes."""
-    return [
-        Node(
-            package="nav2_amcl",
-            executable="amcl",
-            name="amcl",
-            output="both",
-            # AMCL remains the coarse initializer/relocalizer, but must not
-            # publish map->odom while GICP owns that transform.
-            parameters=[configured_params, {
-                "tf_broadcast": ParameterValue(PythonExpression([
-                    "'false' if '", enable_gicp, "' == 'true' else 'true'",
-                ]), value_type=bool),
-            }],
-            remappings=nav2_common_remaps,
-        ),
-        Node(
-            package="xxu_gicp_localization",
-            executable="gicp_localization_node",
-            name="gicp_localization",
-            output="both",
-            condition=IfCondition(enable_gicp),
-            parameters=[default_gicp_params, {
-                "use_sim_time": use_sim_time,
-                "pcd_map": gicp_pcd_map,
-            }],
-        ),
-    ]
 
 
 def navigation_server_nodes(selected_nav_params, nav2_common_remaps, contract):
@@ -143,7 +112,6 @@ def localization_lifecycle_manager(use_sim_time, autostart, localization_lifecyc
 def generate_launch_description():
     contract = interfaces()
     bringup_share = FindPackageShare("xxu_bringup")
-    gicp_share = FindPackageShare("xxu_gicp_localization")
 
     use_sim_time = LaunchConfiguration("use_sim_time")
     map_file = LaunchConfiguration("map")
@@ -151,11 +119,8 @@ def generate_launch_description():
     rviz = LaunchConfiguration("rviz")
     rviz_config = LaunchConfiguration("rviz_config")
     autostart = LaunchConfiguration("autostart")
-    use_fake_frame = LaunchConfiguration("use_fake_frame")
     enable_localization = LaunchConfiguration("enable_localization")
     localization_mode = LaunchConfiguration("localization_mode")
-    enable_gicp = LaunchConfiguration("enable_gicp")
-    gicp_pcd_map = LaunchConfiguration("gicp_pcd_map")
     cmd_vel_in_topic = LaunchConfiguration("cmd_vel_in_topic")
     cmd_vel_out_topic = LaunchConfiguration("cmd_vel_out_topic")
     planner_tolerance = LaunchConfiguration("planner_tolerance")
@@ -164,14 +129,6 @@ def generate_launch_description():
     default_map = PathJoinSubstitution([bringup_share, "maps", "complex_map.yaml"])
     default_params = PathJoinSubstitution([bringup_share, "config", "nav2_navigation.yaml"])
     default_rviz_config = PathJoinSubstitution([bringup_share, "rviz", "navigation.rviz"])
-    default_gicp_params = PathJoinSubstitution(
-        [gicp_share, "config", "gicp_localization.yaml"]
-    )
-
-    localization_lifecycle_nodes = [
-        "map_server",
-        "amcl",
-    ]
     navigation_lifecycle_nodes = [
         "controller_server",
         "smoother_server",
@@ -185,7 +142,7 @@ def generate_launch_description():
 
     nav2_common_remaps = [(contract.topic('system.tf'), "tf"), (contract.topic('system.tf_static'), "tf_static")]
     configured_params, selected_nav_params, _ = nav2_parameters(
-        params_file, use_sim_time, use_fake_frame,
+        params_file, use_sim_time,
         get_package_share_directory("xxu_bringup"), mode="navigation",
         robot_geometry_file=LaunchConfiguration('robot_geometry_file'),
         extra_rewrites={
@@ -197,14 +154,14 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('robot_geometry_file', default_value=''),
-        DeclareLaunchArgument('localization_mode', default_value='amcl',
-                             choices=['amcl', 'external']),
+        DeclareLaunchArgument('localization_mode', default_value='external',
+                             choices=['external']),
         DeclareLaunchArgument(
             "enable_localization",
-            default_value="false",
-            description="Re-enable paused AMCL/GICP localization and map navigation",
+            default_value="true",
+            description="Enable external localization and map navigation",
         ),
-        LogInfo(msg="Map navigation requires enable_localization:=true; external mode uses the supplied localization state and TF."),
+        LogInfo(msg="Map navigation uses external localization state and TF (ZLIO/TDT)."),
         DeclareLaunchArgument(
             "use_sim_time",
             default_value="true",
@@ -236,19 +193,8 @@ def generate_launch_description():
             description="Automatically configure and activate lifecycle nodes",
         ),
         DeclareLaunchArgument(
-            "use_fake_frame",
-            default_value="true",
-            description="Use gimbal_yaw_fake as the Nav2 robot base frame",
-        ),
-        DeclareLaunchArgument(
-            "enable_gicp",
-            default_value="false",
-            description="Use AMCL only for initialization and small_gicp for map->odom",
-        ),
-        DeclareLaunchArgument(
-            "gicp_pcd_map",
-            default_value="",
-            description="Map-frame PCD consumed by xxu_gicp_localization",
+            "idle_scan", default_value="false", choices=["false", "true"],
+            description="Opt-in collision-checked Spin while navigation is idle",
         ),
         DeclareLaunchArgument(
             "cmd_vel_in_topic",
@@ -269,16 +215,7 @@ def generate_launch_description():
             condition=IfCondition(enable_localization),
             actions=[
                 map_server_node(configured_params, map_file, use_sim_time),
-                GroupAction(condition=IfCondition(PythonExpression([
-                    "'", localization_mode, "' == 'amcl'",
-                ])), actions=[
-                    *localization_nodes(configured_params, use_sim_time, enable_gicp,
-                                        default_gicp_params, gicp_pcd_map, nav2_common_remaps),
-                    localization_lifecycle_manager(use_sim_time, autostart, localization_lifecycle_nodes),
-                ]),
-                GroupAction(condition=IfCondition(PythonExpression([
-                    "'", localization_mode, "' == 'external'",
-                ])), actions=[localization_lifecycle_manager(use_sim_time, autostart, ['map_server'])]),
+                localization_lifecycle_manager(use_sim_time, autostart, ['map_server']),
                 *navigation_server_nodes(selected_nav_params, nav2_common_remaps, contract),
                 Node(
                     package="nav2_lifecycle_manager",
@@ -299,9 +236,8 @@ def generate_launch_description():
                     name="nav2_navigation_startup",
                     output="screen",
                     parameters=[{"use_sim_time": use_sim_time,
-                                 "require_localization": ParameterValue(PythonExpression([
-                                     "'", localization_mode, "' == 'external'",
-                                 ]), value_type=bool)}],
+                                 "require_localization": True,
+                                 "idle_scan": ParameterValue(LaunchConfiguration('idle_scan'), value_type=bool)}],
                 ),
                 Node(
                     package="rviz2",

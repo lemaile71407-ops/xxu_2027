@@ -1,0 +1,5 @@
+<library path="xxu_continuous_spin_critic">
+  <class type="mppi::critics::ContinuousSpinCritic" base_class_type="mppi::critics::CriticFunction">
+    <description>Opt-in continuous rotation during holonomic navigation, released near the goal.</description>
+  </class>
+</library>

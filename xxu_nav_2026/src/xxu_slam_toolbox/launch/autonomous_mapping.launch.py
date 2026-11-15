@@ -43,11 +43,10 @@ def generate_launch_description():
     enable_explore = LaunchConfiguration("enable_explore")
     auto_save_map = LaunchConfiguration("auto_save_map")
     map_save_path = LaunchConfiguration("map_save_path")
-    use_fake_frame = LaunchConfiguration("use_fake_frame")
     rviz = LaunchConfiguration("rviz")
     rviz_config = LaunchConfiguration("rviz_config")
     _, selected_nav_params, nav2_base_frame = nav2_parameters(
-        nav2_params_file, use_sim_time, use_fake_frame,
+        nav2_params_file, use_sim_time,
         get_package_share_directory("xxu_bringup"), mode="exploration",
         robot_geometry_file=robot_geometry_file,
     )
@@ -100,11 +99,6 @@ def generate_launch_description():
         "map_save_path",
         default_value=map_save_default,
         description="Output path without .yaml/.pgm suffix for automatic map saving",
-    )
-    declare_use_fake_frame = DeclareLaunchArgument(
-        "use_fake_frame",
-        default_value="true",
-        description="Use gimbal_yaw_fake as the Nav2 robot base frame",
     )
     declare_rviz = DeclareLaunchArgument(
         "rviz",
@@ -249,7 +243,6 @@ def generate_launch_description():
         declare_enable_explore,
         declare_auto_save_map,
         declare_map_save_path,
-        declare_use_fake_frame,
         declare_rviz,
         declare_rviz_config,
         slam_toolbox,

@@ -1,8 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<sdf version="1.9"><model name="rmul_2027">
-      <static>true</static><link name="field">
-        <visual name="field_visual"><geometry><mesh><uri>meshes/rmul_2027_visual.dae</uri>
-          </mesh></geometry></visual>
-        <collision name="field"><geometry><mesh><uri>meshes/rmul_2027_m_zup.stl</uri>
-          </mesh></geometry></collision>
-      </link></model></sdf>

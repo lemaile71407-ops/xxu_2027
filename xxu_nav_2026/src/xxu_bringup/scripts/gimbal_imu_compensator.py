@@ -9,7 +9,7 @@ import math
 import numpy as np
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import QoSProfile, qos_profile_sensor_data
 from sensor_msgs.msg import Imu, JointState
 
 
@@ -46,10 +46,12 @@ def _rotate_covariance(values, rotation, scale=1.0):
 class GimbalImuCompensator(Node):
     """Remove known joint motion at a virtual frame on the gimbal axis."""
 
-    def __init__(self):
-        super().__init__('gimbal_imu_compensator')
+    def __init__(self, **kwargs):
+        super().__init__('gimbal_imu_compensator', **kwargs)
         self.declare_parameter('joint_name', 'gimbal_joint')
         self.declare_parameter('fixed_sensor', False)
+        self.declare_parameter('imu_interval_samples', 1)
+        self.declare_parameter('expected_source_frame', '')
         self.declare_parameter('target_frame', 'lio_base_sensor')
         self.declare_parameter('joint_axis', [0.0, 0.0, 1.0])
         self.declare_parameter('sensor_offset', [0.0, 0.08637, 0.0])
@@ -64,6 +66,11 @@ class GimbalImuCompensator(Node):
 
         self.joint_name = str(self.get_parameter('joint_name').value)
         self.fixed_sensor = bool(self.get_parameter('fixed_sensor').value)
+        self.imu_interval_samples = self.get_parameter('imu_interval_samples').value
+        if self.imu_interval_samples not in (1, 10) or (self.imu_interval_samples > 1 and not self.fixed_sensor):
+            raise ValueError('IMU interval mean requires a fixed sensor and 1 or 10 samples')
+        self._interval_rows = []
+        self.expected_source_frame = str(self.get_parameter('expected_source_frame').value)
         self.target_frame = str(self.get_parameter('target_frame').value)
         self.joint_axis = np.asarray(
             self.get_parameter('joint_axis').value, dtype=float
@@ -141,12 +148,18 @@ class GimbalImuCompensator(Node):
             self.create_subscription(
                 JointState, 'joint_states', self._joint_callback, qos_profile_sensor_data
             )
-        self.create_subscription(
-            Imu, 'imu_in', self._imu_callback, qos_profile_sensor_data
-        )
+        # At 1 kHz the default five-sample queue covers only 5 ms. A short
+        # executor stall can discard samples and repeatedly restart the ten-sample
+        # interval, starving the 100 Hz output. Buffer originals, never fill gaps.
+        imu_input_qos = (QoSProfile(
+            depth=4000, reliability=qos_profile_sensor_data.reliability,
+            durability=qos_profile_sensor_data.durability)
+            if self.imu_interval_samples > 1 else qos_profile_sensor_data)
+        self.create_subscription(Imu, 'imu_in', self._input_imu_callback, imu_input_qos)
         self.get_logger().info(
             f'Compensating gimbal IMU into virtual frame {self.target_frame} '
-            f'(acceleration scale={self.input_acceleration_scale:g})'
+            f'(acceleration scale={self.input_acceleration_scale:g}, '
+            f'IMU input queue={imu_input_qos.depth})'
         )
 
     def _joint_callback(self, message):
@@ -226,7 +239,44 @@ class GimbalImuCompensator(Node):
         )
         self._process_pending()
 
+    def _input_imu_callback(self, message):
+        if self.imu_interval_samples == 1:
+            return self._imu_callback(message)
+        values = [getattr(getattr(message, field), axis)
+                  for field in ('angular_velocity', 'linear_acceleration') for axis in ('x', 'y', 'z')]
+        if ((self.expected_source_frame and message.header.frame_id != self.expected_source_frame)
+                or not all(map(math.isfinite, values))):
+            self._interval_rows.clear()
+            return self._imu_callback(message)  # Preserve the existing rejection and diagnostics.
+        stamp = message.header.stamp.sec * 1000000000 + message.header.stamp.nanosec
+        if self._interval_rows:
+            previous = self._interval_rows[-1]
+            previous_ns = previous.header.stamp.sec * 1000000000 + previous.header.stamp.nanosec
+            if stamp - previous_ns != 1000000 or message.header.frame_id != previous.header.frame_id:
+                self._interval_rows.clear()
+        self._interval_rows.append(copy.deepcopy(message))
+        if len(self._interval_rows) < self.imu_interval_samples:
+            return
+        rows = self._interval_rows
+        out = copy.deepcopy(rows[-1])
+        first = rows[0].header.stamp
+        midpoint = (first.sec * 1000000000 + first.nanosec + stamp) // 2
+        out.header.stamp.sec, out.header.stamp.nanosec = divmod(midpoint, 1000000000)
+        for field in ('linear_acceleration', 'angular_velocity'):
+            for axis in ('x', 'y', 'z'):
+                setattr(getattr(out, field), axis,
+                        sum(getattr(getattr(row, field), axis) for row in rows) / self.imu_interval_samples)
+        for field in ('linear_acceleration_covariance', 'angular_velocity_covariance'):
+            covariance = list(getattr(out, field))
+            if covariance[0] >= 0:
+                setattr(out, field, [value / self.imu_interval_samples for value in covariance])
+        self._interval_rows = []
+        self._imu_callback(out)
+
     def _imu_callback(self, message):
+        if self.expected_source_frame and message.header.frame_id != self.expected_source_frame:
+            self.get_logger().error('Dropping IMU from an unexpected source frame', throttle_duration_sec=5.0)
+            return
         timestamp = _stamp_seconds(message.header.stamp)
         measurement = (
             message.angular_velocity.x,
@@ -382,7 +432,7 @@ class GimbalImuCompensator(Node):
         output.linear_acceleration.y = float(base_specific_force[1])
         output.linear_acceleration.z = float(base_specific_force[2])
 
-        # Small Point-LIO uses only angular velocity and specific force. Mark
+        # ZLIO uses only angular velocity and specific force. Mark
         # orientation unavailable instead of relabelling sensor orientation as
         # the virtual frame.
         output.orientation.x = 0.0

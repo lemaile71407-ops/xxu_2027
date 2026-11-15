@@ -3,7 +3,7 @@
   <!--
     XXU 简化模型
     TF 树：base_footprint -> base_link -> gimbal_link -> mid360_link，另含四个车轮帧。
-    gimbal_link 由关节状态动态发布；odom -> base_footprint 由 Small Point-LIO 发布。
+    gimbal_link 由关节状态动态发布；odom -> base_footprint 由 ZLIO 底盘适配器发布。
   -->
 
   <xacro:include filename="wheel.urdf.xacro"/>
@@ -19,14 +19,21 @@
   <xacro:property name="base_height" value="${base_top_z - base_link_z}"/>
   <xacro:property name="base_mass" value="4.935"/>
 
-  <!-- 云台上的雷达安装位姿，相对于 base_link：(0, 86.37, 193.8) mm。 -->
+  <!--
+    调车时按实测安装尺寸修改，长度单位为米；ROS 坐标轴通常为前 X、左 Y、上 Z。
+    云台零位时，雷达相对 base_link 的标称位置为 (0, 86.37, 193.8) mm。
+    x/y 是雷达相对云台转轴的偏移；z 是云台转轴相对 base_link 的高度，
+    同时用于 lio_base_sensor 的高度。云台转动后雷达相对底盘的位置会变化。
+    点云和 IMU 补偿也使用安装参数，调整时应核对 xxu_bringup/config/sensor_chain.yaml。
+  -->
   <xacro:property name="mid360_x" value="0"/>
   <xacro:property name="mid360_y" value="0.08637"/>
   <xacro:property name="mid360_z" value="0.1938"/>
   <xacro:property name="mid360_xyz" value="${mid360_x} ${mid360_y} ${mid360_z}"/>
   <!--
     标称姿态：雷达位于 +Y 侧并绕 X 轴向车体外侧倾斜约 17°。
-    按 ROS 右手坐标系取负 roll；云台自稳/自瞄时应由实时云台姿态发布动态 TF。
+    roll/pitch/yaw 分别绕 X/Y/Z 轴，单位为弧度，正方向遵循右手定则。
+    按 ROS 右手坐标系取负 roll；云台转角由 /joint_states 提供，不在这里手动补偿。
   -->
   <xacro:property name="mid360_roll" value="-0.2967059728"/>
   <xacro:property name="mid360_pitch" value="0"/>
@@ -141,7 +148,7 @@
     <limit effort="10" velocity="8"/>
   </joint>
 
-  <!-- Rigid, level virtual body used by gimbal-motion-compensated LIO. -->
+  <!-- 云台运动补偿后的 LIO 使用此固定于底盘的水平虚拟传感器坐标系。 -->
   <link name="lio_base_sensor"/>
   <xacro:fixed_joint
     name="lio_base_sensor_joint"
@@ -159,7 +166,7 @@
     xyz="${mid360_x} ${mid360_y} 0"
     rpy="${mid360_rpy}"/>
 
-  <!-- Official livox_ros_driver2 uses livox_frame for both MID360 streams. -->
+  <!-- 官方 livox_ros_driver2 的点云和 IMU 都使用 livox_frame；此处与雷达帧重合。 -->
   <link name="livox_frame"/>
   <xacro:fixed_joint
     name="livox_frame_joint"

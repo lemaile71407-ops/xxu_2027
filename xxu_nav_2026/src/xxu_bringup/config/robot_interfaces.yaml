@@ -8,7 +8,6 @@ frames:
   gimbal: gimbal_link
   lidar: livox_frame
   lidar_compensated: lio_base_sensor
-  fake_navigation_base: gimbal_yaw_fake
   map: map
   gazebo_lidar: mid360_link
   rm_lidar: livox_lidar
@@ -49,7 +48,7 @@ topics:
       type: nav_msgs/msg/Odometry
       header_frame_id: odom
       child_frame_id: base_footprint
-      owner: small_point_lio_or_hardware_adapter
+      owner: zlio_base_adapter_or_hardware_adapter
     scan:
       name: /scan
       type: sensor_msgs/msg/LaserScan
@@ -62,31 +61,22 @@ topics:
       name: /mid360/points_navigation
       type: sensor_msgs/msg/PointCloud2
   navigation:
-    odometry:
-      name: /odom_nav
-      type: nav_msgs/msg/Odometry
-      header_frame_id: odom
-      child_frame_id: gimbal_yaw_fake
-      owner: fake_vel_transform
     controller_output:
       name: /cmd_vel_nav
       type: geometry_msgs/msg/TwistStamped
-      frame_id: gimbal_yaw_fake
+      frame_id: base_link
     smoothed_output:
       name: /cmd_vel_smoothed
       type: geometry_msgs/msg/TwistStamped
-      frame_id: gimbal_yaw_fake
+      frame_id: base_link
     collision_output:
       name: /cmd_vel_collision
       type: geometry_msgs/msg/TwistStamped
-      frame_id: gimbal_yaw_fake
+      frame_id: base_link
     chassis_input:
       name: /cmd_vel
       type: geometry_msgs/msg/TwistStamped
       frame_id: base_link
-    transformed_output:
-      name: /cmd_vel_transformed
-      type: geometry_msgs/msg/TwistStamped
   chassis:
     wheel_command:
       name: /wheel_velocity_controller/commands
@@ -236,8 +226,6 @@ tf_contract:
   - parent: gimbal_link
     child: livox_frame
   dynamic:
-  - parent: base_footprint
-    child: gimbal_yaw_fake
   - parent: odom
     child: base_footprint
   - parent: base_link

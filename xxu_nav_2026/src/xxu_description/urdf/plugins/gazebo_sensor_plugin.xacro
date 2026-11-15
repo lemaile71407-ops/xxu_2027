@@ -231,7 +231,7 @@
   <!--
     该插件挂在 reference_link 上，通过 Gazebo Physics RaycastData 生成非重复
     MID-360 风格点云。它发布 Gazebo Transport PointCloudPacked，可由
-    ros_gz_bridge 桥接为 ROS 2 PointCloud2 后送入 Small Point-LIO。
+    ros_gz_bridge 桥接为 ROS 2 PointCloud2 后送入 ZLIO。
   -->
 
   <xacro:macro

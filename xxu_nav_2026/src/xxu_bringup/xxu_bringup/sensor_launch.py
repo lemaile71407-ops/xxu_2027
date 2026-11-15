@@ -1,10 +1,104 @@
 """Construct platform sensor preprocessing and LIO actions."""
+
 from pathlib import Path
+import math
 
 from launch_ros.actions import Node
 import yaml
 
 from .interfaces import interfaces
+
+
+def load_rigid_mount(path):
+    """Load measured rigid extrinsics independently of CAD/chassis kinematics.
+
+    The virtual sensor origin is the physical IMU origin. Point clouds and IMU
+    vectors are both expressed in this frame before entering an identity-
+    extrinsic LIO frontend. No gimbal state or lever-arm differentiation is used.
+    """
+    data = yaml.safe_load(Path(path).read_text())
+    if not isinstance(data, dict) or data.get("version") != 1:
+        raise ValueError("Rigid mount requires version: 1")
+    if data.get("mounting") != "rigid":
+        raise ValueError("This entry requires mounting: rigid")
+    if data.get("calibration_confirmed") is not True:
+        raise ValueError("Rigid mount extrinsics are pending; measure them and set calibration_confirmed: true")
+
+    def vector(value, name):
+        if (not isinstance(value, list) or len(value) != 3
+                or any(type(v) not in (int, float) or not math.isfinite(v) for v in value)):
+            raise ValueError(f"{name} must contain three measured finite numbers")
+        return [float(v) for v in value]
+
+    frames = data.get("frames", {})
+    if not isinstance(frames, dict):
+        raise ValueError("Rigid mount frames must be a mapping")
+    for key in ("base", "sensor", "lidar", "imu_source"):
+        value = frames.get(key)
+        if (not isinstance(value, str) or not value or value.startswith("/")
+                or any(c.isspace() for c in value)):
+            raise ValueError(f"frames.{key} must be a nonempty TF frame without a leading slash or whitespace")
+    if len({frames[key] for key in ("base", "sensor", "lidar")}) != 3:
+        raise ValueError("Rigid mount base, sensor and lidar frames must be distinct")
+    for key in ("base_to_sensor", "sensor_to_lidar"):
+        transform = data.get(key)
+        if not isinstance(transform, dict):
+            raise ValueError(f"Missing measured transform {key}")
+        data[key] = {axis: vector(transform.get(axis), f"{key}.{axis}") for axis in ("xyz", "rpy")}
+    data["sensor_from_imu_rpy"] = vector(data.get("sensor_from_imu_rpy"), "sensor_from_imu_rpy")
+    scale = data.get("imu_acceleration_scale")
+    if type(scale) not in (int, float) or not math.isfinite(scale) or scale <= 0:
+        raise ValueError("imu_acceleration_scale must be a positive conversion to m/s^2")
+    topics = data.get("topics", {})
+    if not isinstance(topics, dict):
+        raise ValueError("Rigid mount topics must be a mapping")
+    for key in ("points_in", "points_out", "imu_in", "imu_out"):
+        value = topics.get(key)
+        if (not isinstance(value, str) or not value.startswith("/") or len(value) < 2
+                or any(c.isspace() for c in value)):
+            raise ValueError(f"topics.{key} must be an absolute ROS topic")
+    if len(set(topics[key] for key in ("points_in", "points_out", "imu_in", "imu_out"))) != 4:
+        raise ValueError("Rigid mount input/output topics must be distinct (no republishing loops)")
+    return data
+
+
+def rigid_sensor_actions(mount, *, use_sim_time, publish_mount_tf=True):
+    """Build the same rigid extrinsics into static TF and preprocessing."""
+    frames = mount["frames"]
+    actions = []
+    if publish_mount_tf:
+        for key, parent, child in (
+                ("base_to_sensor", frames["base"], frames["sensor"]),
+                ("sensor_to_lidar", frames["sensor"], frames["lidar"])):
+            transform = mount[key]
+            arguments = ["--frame-id", parent, "--child-frame-id", child]
+            for name, value in zip(("x", "y", "z", "roll", "pitch", "yaw"),
+                                   transform["xyz"] + transform["rpy"]):
+                arguments.extend(["--" + name, str(value)])
+            actions.append(Node(package="tf2_ros", executable="static_transform_publisher",
+                                name="rigid_mount_" + key, arguments=arguments,
+                                parameters=[{"use_sim_time": use_sim_time}], output="screen"))
+    # Fixed TF is identical for every acquisition time, so one lookup per cloud
+    # preserves all point-time fields without the dynamic TF group limit.
+    actions.append(Node(
+        package="xxu_bringup", executable="pointcloud_frame_republisher.py",
+        name="rigid_pointcloud_transform", output="screen", parameters=[{
+            "use_sim_time": use_sim_time, "target_frame": frames["sensor"],
+            "expected_source_frame": frames["lidar"],
+            "use_point_timestamps": False, "use_joint_interpolation": False,
+        }], remappings=[("points_in", mount["topics"]["points_in"]),
+                        ("points_out", mount["topics"]["points_out"])]))
+    actions.append(Node(
+        package="xxu_bringup", executable="gimbal_imu_compensator.py",
+        name="rigid_imu_transform", output="screen", parameters=[{
+            "use_sim_time": use_sim_time, "target_frame": frames["sensor"],
+            "fixed_sensor": True, "sensor_offset": [0.0, 0.0, 0.0],
+            "expected_source_frame": frames["imu_source"],
+            "sensor_rpy": mount["sensor_from_imu_rpy"], "joint_position_offset": 0.0,
+            "input_acceleration_scale": float(mount["imu_acceleration_scale"]),
+        }], remappings=[("imu_in", mount["topics"]["imu_in"]),
+                        ("imu_out", mount["topics"]["imu_out"])]))
+    return actions
 
 
 def sensor_chain_defaults(platform):
@@ -46,43 +140,3 @@ def sensor_preprocessing(platform, *, use_sim_time, profile=None,
                             name=definition["name"], output="screen", parameters=[parameters],
                             remappings=list(mappings.items()), condition=conditions.get(key)))
     return actions
-
-
-def small_point_lio(platform, *, use_sim_time, config_file, profile=None,
-                    lio_overrides=None, condition=None):
-    """Construct the existing estimator independently of sensor preprocessing."""
-    geometry = profile.geometry if profile else {}
-    parameters = dict(lio_overrides or {})
-    if geometry:
-        parameters["planar_z"] = geometry["base_height"]
-    # The simulator's LIO YAML already owns use_sim_time. Preserve its exact
-    # parameter layering; the other platforms expose it as a launch override.
-    files = [config_file]
-    if platform == "rm_sim" and geometry:
-        model_lio_file = Path(profile.geometry_file).with_name('lio_profile.yaml')
-        if model_lio_file.is_file():
-            files.append(str(model_lio_file))
-    if platform != "rm_sim":
-        parameters["use_sim_time"] = use_sim_time
-    if parameters:
-        files.append(parameters)
-    return Node(package="small_point_lio", executable="small_point_lio_node",
-                name="small_point_lio", output="screen", parameters=files,
-                condition=condition)
-
-
-def lio_preprocessing(platform, *, use_sim_time, config_file, profile=None,
-                      pointcloud_overrides=None, imu_overrides=None,
-                      pointcloud_remappings=None, imu_remappings=None,
-                      lio_overrides=None, conditions=None):
-    """Compatibility wrapper for the original combined launch construction."""
-    conditions = conditions or {}
-    return sensor_preprocessing(
-        platform, use_sim_time=use_sim_time, profile=profile,
-        pointcloud_overrides=pointcloud_overrides, imu_overrides=imu_overrides,
-        pointcloud_remappings=pointcloud_remappings, imu_remappings=imu_remappings,
-        conditions=conditions,
-    ) + [small_point_lio(
-        platform, use_sim_time=use_sim_time, config_file=config_file,
-        profile=profile, lio_overrides=lio_overrides, condition=conditions.get("lio"),
-    )]

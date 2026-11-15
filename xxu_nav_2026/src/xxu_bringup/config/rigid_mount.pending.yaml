@@ -1,0 +1,28 @@
+# Copy one file per chassis/mount. null means unmeasured, never zero.
+# Transforms: parent <- child; xyz in metres, fixed-axis RPY in radians.
+version: 1
+mounting: rigid
+calibration_confirmed: false
+frames:
+  base: base_footprint
+  sensor: lio_base_sensor
+  lidar: livox_frame
+  imu_source: livox_frame
+# Virtual sensor origin MUST coincide with the physical IMU origin.
+# Its axes can be chosen independently; account for them in every RPY below.
+base_to_sensor:
+  xyz: [null, null, null]
+  rpy: [null, null, null]
+sensor_to_lidar:
+  xyz: [null, null, null]
+  rpy: [null, null, null]
+# Rotation from the incoming IMU measurement axes into the virtual sensor axes.
+# Do not infer this from header.frame_id alone; check the driver/device convention.
+sensor_from_imu_rpy: [null, null, null]
+# 9.81 for acceleration in g, 1.0 for m/s^2; confirm with the actual driver.
+imu_acceleration_scale: null
+topics:
+  points_in: /livox/lidar
+  points_out: /livox/lidar_compensated
+  imu_in: /livox/imu
+  imu_out: /livox/imu_lio_compensated

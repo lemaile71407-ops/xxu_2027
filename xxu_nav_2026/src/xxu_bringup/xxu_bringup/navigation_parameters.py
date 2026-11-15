@@ -1,16 +1,40 @@
 """Nav2 parameter construction and vehicle navigation geometry."""
 import json
+import copy
 import math
 from pathlib import Path
 import tempfile
 
 from launch import Substitution
 from launch.utilities import normalize_to_list_of_substitutions, perform_substitutions
-from launch.substitutions import PathJoinSubstitution, PythonExpression
 from nav2_common.launch import RewrittenYaml
 import yaml
 
 from .interfaces import interfaces
+
+
+def continuous_spin_parameters(source, *, rate=0.5):
+    """Explicit Omni-only trial; retain collision, freshness and stopping limits."""
+    if not math.isfinite(rate) or not 0 < abs(rate) <= 0.5:
+        raise ValueError('Continuous spin trial requires 0 < abs(rate) <= 0.5 rad/s')
+    params = copy.deepcopy(source)
+    controller = params['controller_server']['ros__parameters']
+    follow = controller['FollowPath']
+    if follow['motion_model'] != 'Omni':
+        raise ValueError('Continuous spin requires MPPI Omni')
+    if 'ContinuousSpinCritic' not in follow['critics']:
+        follow['critics'].append('ContinuousSpinCritic')
+    follow['ContinuousSpinCritic'] = {
+        'enabled': True, 'target_angular_velocity': rate, 'cost_weight': 64.0,
+        'release_distance': 0.65, 'transition_distance': 0.35}
+    follow['PathAngleCritic']['enabled'] = False
+    follow['TwirlingCritic']['enabled'] = False
+    follow['wz_max'] = abs(rate)
+    follow['visualize'] = True
+    smoother = params['velocity_smoother']['ros__parameters']
+    smoother['max_velocity'][2] = abs(rate)
+    smoother['min_velocity'][2] = -abs(rate)
+    return params
 
 
 class RobotGeometryParameters(Substitution):
@@ -37,10 +61,13 @@ class RobotGeometryParameters(Substitution):
         if not isinstance(profile, dict):
             raise ValueError('Vehicle navigation mode settings must be a mapping')
         for key, value in profile.items():
-            if key not in {'minimum_inflation_radius', 'translation_velocity_limit', 'goal_xy_tolerance'}:
+            if key not in {'minimum_inflation_radius', 'translation_velocity_limit',
+                           'goal_xy_tolerance', 'goal_yaw_tolerance'}:
                 raise ValueError(f'Unknown vehicle navigation setting: {key}')
             if not math.isfinite(float(value)) or float(value) <= 0:
                 raise ValueError(f'Invalid vehicle navigation setting: {key}')
+            if key == 'goal_yaw_tolerance' and float(value) > math.pi:
+                raise ValueError('Invalid vehicle navigation setting: goal_yaw_tolerance')
         radius = float(geometry['robot_radius'])
         if not math.isfinite(radius) or not 0 < radius < 2:
             raise ValueError('Invalid vehicle navigation radius')
@@ -80,10 +107,16 @@ class RobotGeometryParameters(Substitution):
             checker = controller['goal_checker']
             checker['xy_goal_tolerance'] = min(
                 checker['xy_goal_tolerance'], float(profile['goal_xy_tolerance']))
+        if 'goal_yaw_tolerance' in profile:
+            checker = controller['goal_checker']
+            checker['yaw_goal_tolerance'] = min(
+                checker['yaw_goal_tolerance'], float(profile['goal_yaw_tolerance']))
         if geometry.get('require_stopped_goal', False):
             checker = params['controller_server']['ros__parameters']['goal_checker']
+            yaw_tolerance = (checker['yaw_goal_tolerance']
+                             if 'goal_yaw_tolerance' in profile else math.pi)
             checker.update(plugin='nav2_controller::StoppedGoalChecker', stateful=False,
-                           yaw_goal_tolerance=math.pi, trans_stopped_velocity=.05,
+                           yaw_goal_tolerance=yaw_tolerance, trans_stopped_velocity=.05,
                            rot_stopped_velocity=.05)
         with tempfile.NamedTemporaryFile(mode='w', prefix='xxu_robot_nav_', suffix='.yaml', delete=False) as handle:
             yaml.safe_dump(params, handle)
@@ -91,14 +124,12 @@ class RobotGeometryParameters(Substitution):
         return self.output
 
 
-def nav2_parameters(source_file, use_sim_time, use_fake_frame, bringup_share,
-                    *, mode, extra_rewrites=None, robot_geometry_file=None):
-    """Resolve base YAML plus the explicitly selected fake-frame profile."""
+def nav2_parameters(source_file, use_sim_time, bringup_share=None,
+                    *, mode="navigation", extra_rewrites=None, robot_geometry_file=None):
+    """Resolve Nav2 parameters for the standard robot base frame."""
+    del bringup_share
     contract = interfaces()
-    base_frame = PythonExpression([
-        "'", contract.frame("fake_navigation_base"), "' if '", use_fake_frame,
-        "' == 'true' else '", contract.frame("navigation_base"), "'",
-    ])
+    base_frame = contract.frame("navigation_base")
     rewrites = {"use_sim_time": use_sim_time}
     for key in (
         "bt_navigator.ros__parameters.robot_base_frame",
@@ -111,22 +142,7 @@ def nav2_parameters(source_file, use_sim_time, use_fake_frame, bringup_share,
     rewrites.update(extra_rewrites or {})
     configured = RewrittenYaml(source_file=source_file, root_key="",
                                param_rewrites=rewrites, convert_types=True)
-    profile = yaml.safe_load((Path(bringup_share) / "config/nav2_fake_profile.yaml").read_text())
-    fake_rewrites = dict(profile["common"])
-    fake_rewrites.update(profile[mode])
-    fake_rewrites = {key: value if isinstance(value, str) else json.dumps(value)
-                     for key, value in fake_rewrites.items()}
-    for key in (
-        "bt_navigator.ros__parameters.default_nav_to_pose_bt_xml",
-        "bt_navigator.ros__parameters.default_nav_through_poses_bt_xml",
-    ):
-        fake_rewrites[key] = PathJoinSubstitution([bringup_share, "config", fake_rewrites[key]])
-    fake_params = RewrittenYaml(source_file=configured, root_key="",
-                                param_rewrites=fake_rewrites, convert_types=True)
-    selected = PythonExpression([
-        "'", fake_params, "' if '", use_fake_frame,
-        "' == 'true' else '", configured, "'",
-    ])
+    selected = configured
     if robot_geometry_file is not None:
         selected = RobotGeometryParameters(selected, robot_geometry_file, mode=mode)
     return configured, selected, base_frame
