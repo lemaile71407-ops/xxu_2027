@@ -11,13 +11,15 @@
   <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <exec_depend>builtin_interfaces</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
+  <depend>geometry_msgs</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
+  <depend>nlohmann_json</depend>
+  <test_depend>ament_cmake_gtest</test_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
-  <exec_depend>nav_msgs</exec_depend>
-  <exec_depend>python3-serial</exec_depend>
-  <exec_depend>rclpy</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
+  <depend>nav_msgs</depend>
+  <depend>std_msgs</depend>
   <exec_depend>xxu_bringup</exec_depend>
 
   <export>

@@ -27,6 +27,8 @@ def test_overrides_reach_correct_package_without_starting_processes(mode):
         'coordinated_reset': 'false',
         'point_time_field': 'timestamp', 'point_time_scale': '1e-9',
         'point_time_absolute': 'true', 'publish_tf': 'false',
+        'deskewed_cloud_frame': 'lio_base_sensor',
+        'backend_tf_topic': '/sentry/tf/localization',
     }
     context.launch_configurations.update(overrides)
     for action in description.entities:
@@ -48,9 +50,10 @@ def test_overrides_reach_correct_package_without_starting_processes(mode):
                                          'imu_acceleration_scale', 'use_sim_time',
                                          'wait_for_start', 'reset_mode', 'coordinated_reset',
                                          'point_time_field', 'point_time_scale',
-                                         'point_time_absolute', 'publish_tf')},
+                                         'point_time_absolute', 'publish_tf', 'deskewed_cloud_frame')},
     }
     assert backend == {'config_file': overrides['backend_config'],
+                       'tf_output_topic': overrides['backend_tf_topic'],
                        **{key: overrides[key]
                           for key in ('use_sim_time', 'mode', 'prior_map', 'rviz')}}
     # 解析子 launch 的声明，保证组合入口传递的参数仍被目标包接受。

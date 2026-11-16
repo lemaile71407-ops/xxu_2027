@@ -31,7 +31,7 @@ def setup(context):
                 "sensor_frame": mount["frames"]["sensor"],
                 "base_frame": mount["frames"]["base"],
                 **{name: lc(name) for name in ("source_child_frame", "odom_frame", "input_topic",
-                                              "output_topic", "publish_deskewed_cloud")},
+                                              "output_topic")},
             }.items()))
     return actions
 
@@ -47,6 +47,6 @@ def generate_launch_description():
         *(DeclareLaunchArgument(name, default_value=value) for name, value in defaults.items()),
         *(DeclareLaunchArgument(name, default_value=value, choices=["true", "false"])
           for name, value in {"use_sim_time": "false", "publish_mount_tf": "true",
-                              "start_base_adapter": "true", "publish_deskewed_cloud": "false"}.items()),
+                              "start_base_adapter": "true"}.items()),
         OpaqueFunction(function=setup),
     ])

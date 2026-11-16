@@ -4,7 +4,7 @@ version: 1
 frames:
   odom: odom
   navigation_base: base_link
-  ground_base: base_footprint
+  ground_base: base_link
   gimbal: gimbal_link
   lidar: livox_frame
   lidar_compensated: lio_base_sensor
@@ -47,12 +47,12 @@ topics:
       name: /odom
       type: nav_msgs/msg/Odometry
       header_frame_id: odom
-      child_frame_id: base_footprint
+      child_frame_id: base_link
       owner: zlio_base_adapter_or_hardware_adapter
     scan:
       name: /scan
       type: sensor_msgs/msg/LaserScan
-      frame_id: base_footprint
+      frame_id: base_link
       owner: pointcloud_to_laserscan_or_hardware_adapter
     deskewed_cloud:
       name: /cloud_deskewed
@@ -216,20 +216,16 @@ topics:
       name: /explore/frontiers
       type: visualization_msgs/msg/MarkerArray
 tf_contract:
-  static_or_dynamic:
-  - parent: base_footprint
-    child: base_link
+  static:
   - parent: base_link
     child: lio_base_sensor
-  - parent: base_link
-    child: gimbal_link
-  - parent: gimbal_link
-    child: livox_frame
+  # Physical rigid sensor siblings are composed from the measured mount or URDF.
+  # Moving sensors use analytical joint compensation; no mechanical TF broadcast.
   dynamic:
+  - parent: map
+    child: odom
   - parent: odom
-    child: base_footprint
-  - parent: base_link
-    child: gimbal_link
+    child: base_link
 safety:
   final_gate: /cmd_vel_watchdog
   health_topic: /cmd_vel_watchdog/healthy

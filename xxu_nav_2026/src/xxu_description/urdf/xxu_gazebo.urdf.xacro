@@ -2,8 +2,8 @@
 <robot name="xxu" xmlns:xacro="http://www.ros.org/wiki/xacro">
   <!--
     XXU Gazebo 仿真模型
-    TF 树：base_footprint -> base_link -> gimbal_link -> mid360_link + 4 wheels。
-    gimbal_link 的偏航由云台自稳节点动态控制；odom -> base_footprint 由里程计发布。
+    TF 树：odom -> base_link -> gimbal_link -> mid360_link；base_link -> 4 wheels（仅模型展示）。
+    gimbal_link 的偏航由云台自稳节点动态控制；odom -> base_link 由里程计发布。
   -->
 
   <xacro:include filename="wheel.urdf.xacro"/>
@@ -127,8 +127,6 @@
     </link>
   </xacro:macro>
 
-  <!-- base_footprint：地面投影原点。odom -> base_footprint 由 LIO 动态发布，base_link 在其上方。 -->
-  <link name="base_footprint"/>
 
   <!-- base_link -->
   <xacro:cylinder_link
@@ -142,7 +140,6 @@
     material="chassis_blue"
     origin_z="${base_height / 2}"/>
 
-  <xacro:fixed_joint name="base_footprint_joint" parent="base_footprint" child="base_link" xyz="0 0 ${base_link_z}"/>
 
 
   <!--

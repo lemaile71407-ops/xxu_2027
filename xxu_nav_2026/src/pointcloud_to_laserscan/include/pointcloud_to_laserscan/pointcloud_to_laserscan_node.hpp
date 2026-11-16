@@ -46,10 +46,10 @@
 #include <string>
 #include <thread>
 
-#include "message_filters/subscriber.h"
-#include "tf2_ros/buffer.h"
-#include "tf2_ros/message_filter.h"
-#include "tf2_ros/transform_listener.h"
+#include "message_filters/subscriber.hpp"
+#include "tf2_ros/buffer.hpp"
+#include <Eigen/Geometry>
+#include "tf2_msgs/msg/tf_message.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/laser_scan.hpp"
@@ -59,7 +59,6 @@
 
 namespace pointcloud_to_laserscan
 {
-typedef tf2_ros::MessageFilter<sensor_msgs::msg::PointCloud2> MessageFilter;
 
 /**
 * Class to process incoming pointclouds into laserscans.
@@ -81,11 +80,12 @@ private:
   void publishProcessedCloud(sensor_msgs::msg::PointCloud2::ConstSharedPtr cloud_msg);
 
   std::unique_ptr<tf2_ros::Buffer> tf2_;
-  std::unique_ptr<tf2_ros::TransformListener> tf2_listener_;
+  rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr static_subscription_;
+  Eigen::Isometry3d target_from_source_ = Eigen::Isometry3d::Identity();
+  std::string cached_source_frame_;
   message_filters::Subscriber<sensor_msgs::msg::PointCloud2> sub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::LaserScan>> pub_;
   std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::PointCloud2>> processed_cloud_pub_;
-  std::unique_ptr<MessageFilter> message_filter_;
 
   std::thread subscription_listener_thread_;
   std::atomic_bool alive_{true};

@@ -12,20 +12,19 @@ def generate_launch_description():
         'sensor_frame': 'lio_base_sensor',
         'source_child_frame': 'imu',
         'odom_frame': 'odom',
-        'base_frame': 'base_footprint',
+        'base_frame': 'base_link',
         'input_topic': '/odometry',
         'output_topic': '/odom',
-        'frontend_frame_topic': '/frontend/frame',
-        'frontend_session_topic': '/frontend/session',
-        'deskewed_cloud_topic': '/cloud_deskewed',
+        'tf_output_topic': '/tf',
+        'tf_publish_rate': '30.0',
     }
-    params = {name: LaunchConfiguration(name) for name in defaults if name != 'use_sim_time'}
+    params = {name: LaunchConfiguration(name) for name in defaults
+              if name not in ('use_sim_time', 'tf_output_topic', 'tf_publish_rate')}
     params['use_sim_time'] = ParameterValue(LaunchConfiguration('use_sim_time'), value_type=bool)
+    params['tf_publish_rate'] = ParameterValue(LaunchConfiguration('tf_publish_rate'), value_type=float)
     return LaunchDescription([
         *(DeclareLaunchArgument(name, default_value=value) for name, value in defaults.items()),
-        DeclareLaunchArgument('publish_deskewed_cloud', default_value='false', choices=['true', 'false']),
-        Node(package='xxu_bringup', executable='zlio_base_odometry.py',
-             name='zlio_base_odometry', parameters=[params, {
-                 'publish_deskewed_cloud': ParameterValue(LaunchConfiguration('publish_deskewed_cloud'), value_type=bool),
-             }], output='screen'),
+        Node(package='xxu_bringup', executable='zlio_base_odometry',
+             name='zlio_base_odometry', parameters=[params], output='screen',
+             remappings=[('/tf', LaunchConfiguration('tf_output_topic'))]),
     ])

@@ -9,6 +9,7 @@ import time
 import unittest
 
 from domain_coordinator import domain_id
+from itertools import count
 import launch
 import launch_testing
 import launch_testing.actions
@@ -22,12 +23,14 @@ import rclpy
 from rclpy.qos import DurabilityPolicy, QoSProfile
 from std_srvs.srv import SetBool, Trigger
 
+# Avoid the live application domain (1); reserve each test domain as before.
+_test_domains = count(186)
 _resources = ExitStack()
 atexit.register(_resources.close)
 
 
 def generate_test_description():
-    os.environ['ROS_DOMAIN_ID'] = str(_resources.enter_context(domain_id()))
+    os.environ['ROS_DOMAIN_ID'] = str(_resources.enter_context(domain_id(selector=lambda: next(_test_domains))))
     os.environ['ROS_LOCALHOST_ONLY'] = '1'
     os.environ['ROS_LOG_DIR'] = _resources.enter_context(tempfile.TemporaryDirectory())
     entry = Path(__file__).resolve().parents[2] / 'launch/frontend.launch.py'

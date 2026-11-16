@@ -19,7 +19,7 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from xxu_bringup.interfaces import interfaces
 from xxu_bringup.robot_profiles import robot_profile
-from xxu_bringup.sensor_launch import sensor_preprocessing
+from xxu_bringup.sensor_launch import navigation_static_actions, sensor_preprocessing
 from xxu_bringup.velocity_launch import velocity_chain
 from xxu_sim_bringup.sim_profiles import chassis_parameters
 
@@ -125,11 +125,6 @@ def prepare_assets(share, directory, lidar_mode='gpu_lidar', field_model='', rob
     model.write(model_path)
     urdf = ET.parse(os.path.join(share, 'models', 'sentry', 'robot.urdf'))
     root = urdf.getroot()
-    ET.SubElement(root, 'link', name=contract.frame('ground_base'))
-    joint = ET.SubElement(root, 'joint', name='footprint_joint', type='fixed')
-    ET.SubElement(joint, 'parent', link=contract.frame('ground_base'))
-    ET.SubElement(joint, 'child', link=contract.frame('navigation_base'))
-    ET.SubElement(joint, 'origin', xyz='0 0 0.096', rpy='0 0 0')
     ET.SubElement(root, 'link', name=contract.frame('lidar_compensated'))
     joint = ET.SubElement(root, 'joint', name='lio_sensor_joint', type='fixed')
     ET.SubElement(joint, 'parent', link=contract.frame('navigation_base'))
@@ -238,8 +233,10 @@ def launch_setup(context):
             launch_arguments={'gz_args': ('-r ' if lc('gazebo_gui').perform(context) == 'true'
                                          else '-r -s --headless-rendering ') + world,
                               'on_exit_shutdown': 'true'}.items()),
-        node('robot_state_publisher', 'robot_state_publisher', 'robot_state_publisher',
-             {'robot_description': robot, 'publish_frequency': 100.0}),
+        *navigation_static_actions(robot, contract.frame('navigation_base'),
+            [contract.frame('lidar_compensated')] +
+            ([contract.frame('rm_lidar'), 'livox_lidar_imu'] if custom_robot else []),
+            use_sim_time=True),
         TimerAction(period=3.0, actions=[node('ros_gz_sim', 'create', 'spawn_sentry',
             arguments=['-file', model, '-name', 'sentry_bot',
                        '-x', lc('spawn_x'), '-y', lc('spawn_y'), '-z', '0.3',
@@ -259,10 +256,10 @@ def launch_setup(context):
                           ('wheel_fl', 'wheel_rl', 'wheel_rr', 'wheel_fr'))
         ] + ([] if custom_robot else [contract.topic(f'simulation.gimbal_{axis}') + '@std_msgs/msg/Float64]gz.msgs.Double'
              for axis in ('big_yaw', 'small_yaw', 'pitch')])),
-        *([] if custom_robot else [node('rm_sim_26', 'omni_drive.py', 'omni_drive')]),
+        *([] if custom_robot else [node('xxu_sim_bringup', 'omni_drive', 'omni_drive')]),
         *([node('xxu_chassis_controller', 'chassis_controller', 'chassis_controller',
                  chassis_parameters(profile))] if custom_robot else
-           [node('xxu_sim_bringup', 'rm_sim_adapter.py', 'rm_sim_adapter')]),
+           [node('xxu_sim_bringup', 'rm_sim_adapter', 'rm_sim_adapter')]),
         node('xxu_livox_sim', 'livox_pointcloud_shaper', 'rm_lidar_shaper', {
             'target_frame': contract.frame('rm_lidar'), 'scan_period': 0.0, 'max_points': 12000,
             'input_time_offset_field': 'offset_time' if rgl_point_timing == 'uniform' else ''},
@@ -273,15 +270,16 @@ def launch_setup(context):
                               pointcloud_overrides={'use_point_timestamps': False}
                               if custom_robot and rgl_point_timing == 'uniform' else None),
         node('pointcloud_to_laserscan', 'pointcloud_to_laserscan_node', 'pointcloud_to_laserscan', {
-            'target_frame': contract.frame('ground_base'), 'transform_tolerance': 0.05,
-            'min_height': ParameterValue(lc('scan_min_height'), value_type=float),
-            'max_height': geometry['collision_height'] + .02 if custom_robot else 0.50,
+            'target_frame': contract.frame('navigation_base'), 'transform_tolerance': 0.05,
+            'min_height': float(lc('scan_min_height').perform(context)) - geometry['base_height']
+                          if custom_robot else ParameterValue(lc('scan_min_height'), value_type=float),
+            'max_height': geometry['collision_height'] + .02 - geometry['base_height'] if custom_robot else 0.50,
             'angle_min': -3.1415926, 'angle_max': 3.1415926,
             'angle_increment': 0.0087266, 'scan_time': 0.1, 'range_min': 0.3,
             'range_max': 40.0,
             'robot_self_filter_radius': geometry['robot_radius'] if custom_robot else ParameterValue(lc('scan_self_filter_radius'), value_type=float),
-            'use_inf': True, 'scan_qos_reliability': 'reliable',
-            'publish_processed_cloud': True, 'processed_cloud_frame': contract.frame('ground_base'),
+            'use_inf': True, 'scan_qos_reliability': 'best_effort',
+            'publish_processed_cloud': True, 'processed_cloud_frame': contract.frame('navigation_base'),
             'processed_cloud_project_to_2d': True, 'processed_cloud_z_value': 0.0},
             remappings=[('cloud_in', contract.topic('localization.deskewed_cloud')), ('scan', contract.topic('localization.scan')),
                         ('processed_cloud', contract.topic('localization.navigation_cloud'))]),
@@ -292,8 +290,8 @@ def launch_setup(context):
             # The sensor is fixed: check its TF chain exists, but require a
             # fresh stream only for the dynamic odometry edge.
             watchdog_parameters={
-                **({'required_tf_pairs': [f"{contract.frame('odom')}->{contract.frame('ground_base')}"],
-                    'tf_source_frame': contract.frame('rm_lidar')} if custom_robot else {}),
+                'required_tf_pairs': [f"{contract.frame('odom')}->{contract.frame('navigation_base')}"],
+                'tf_source_frame': contract.frame('lidar_compensated'),
                 'require_localization': ParameterValue(lc('require_localization'), value_type=bool),
                 'localization_state_topic': lc('localization_state_topic'),
                 'localization_pose_topic': lc('localization_pose_topic'),
@@ -318,6 +316,7 @@ def generate_launch_description():
     }
     return LaunchDescription([DeclareLaunchArgument(key, default_value=value)
                               for key, value in defaults.items()] + [
+        SetEnvironmentVariable(name='OMP_NUM_THREADS', value='2'),
         DeclareLaunchArgument('lidar_mode', default_value='rgl',
                               choices=['rgl', 'gpu_lidar']),
         DeclareLaunchArgument('imu_sampling', default_value='direct', choices=['direct', 'interval_mean']),

@@ -2,8 +2,8 @@
 <robot name="xxu" xmlns:xacro="http://www.ros.org/wiki/xacro">
   <!--
     XXU 简化模型
-    TF 树：base_footprint -> base_link -> gimbal_link -> mid360_link，另含四个车轮帧。
-    gimbal_link 由关节状态动态发布；odom -> base_footprint 由 ZLIO 底盘适配器发布。
+    TF 树：odom -> base_link -> gimbal_link -> mid360_link；另含四个车轮帧（仅模型展示）。
+    gimbal_link 由关节状态动态发布；odom -> base_link 由 C++ ZLIO 底盘适配器发布。
   -->
 
   <xacro:include filename="wheel.urdf.xacro"/>
@@ -118,8 +118,6 @@
     </link>
   </xacro:macro>
 
-  <!-- base_footprint：地面投影原点，odom 直接连接到该帧。base_link 在其上方 -->
-  <link name="base_footprint"/>
 
   <!-- base_link -->
   <xacro:cylinder_link
@@ -133,7 +131,6 @@
     material="chassis_blue"
     origin_z="${base_height / 2}"/>
 
-  <xacro:fixed_joint name="base_footprint_joint" parent="base_footprint" child="base_link" xyz="0 0 ${base_link_z}"/>
 
   <!--
     gimbal_link 位于车体中心的云台转轴，角度由实机 /joint_states 驱动。

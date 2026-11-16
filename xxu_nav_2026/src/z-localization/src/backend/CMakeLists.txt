@@ -29,7 +29,7 @@ find_package(pcl_conversions REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(localization_interfaces REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common io kdtree filters)
-find_package(Eigen3 REQUIRED)
+find_package(Eigen3 3.4 REQUIRED NO_MODULE)
 find_path(NANOFLANN_INCLUDE_DIR nanoflann.hpp REQUIRED)
 find_package(Threads REQUIRED)
 find_package(TBB REQUIRED COMPONENTS tbb)
@@ -37,6 +37,30 @@ find_package(OpenMP REQUIRED COMPONENTS CXX)
 find_package(GTSAM 4.2 CONFIG REQUIRED)
 if(GTSAM_VERSION VERSION_GREATER_EQUAL 4.3)
     message(FATAL_ERROR "backend targets GTSAM 4.2.x; select its GTSAM_DIR")
+endif()
+
+# GTSAM's Eigen ABI must match the system Eigen selected by PCL and frontend.
+# Refuse a bundled-Eigen GTSAM rather than hiding alignment faults at runtime.
+include(CheckCXXSourceCompiles)
+set(CMAKE_REQUIRED_LIBRARIES gtsam Eigen3::Eigen)
+check_cxx_source_compiles("
+  #include <gtsam/config.h>
+  #include <Eigen/Core>
+  #ifndef GTSAM_USE_SYSTEM_EIGEN
+  #error GTSAM must be rebuilt with GTSAM_USE_SYSTEM_EIGEN=ON
+  #endif
+  static_assert(GTSAM_EIGEN_VERSION_WORLD == EIGEN_WORLD_VERSION);
+  static_assert(GTSAM_EIGEN_VERSION_MAJOR == EIGEN_MAJOR_VERSION);
+  #ifdef GTSAM_EIGEN_VERSION_MINOR
+  static_assert(GTSAM_EIGEN_VERSION_MINOR == EIGEN_MINOR_VERSION);
+  #else
+  static_assert(EIGEN_MINOR_VERSION == 0);
+  #endif
+  int main() { return 0; }
+" BACKEND_SYSTEM_EIGEN_COMPATIBLE)
+unset(CMAKE_REQUIRED_LIBRARIES)
+if(NOT BACKEND_SYSTEM_EIGEN_COMPATIBLE)
+  message(FATAL_ERROR "GTSAM/system Eigen ABI mismatch; rebuild GTSAM with system Eigen")
 endif()
 
 # 核心库不依赖 ROS，节点和工具按各自接口链接。
@@ -110,7 +134,7 @@ add_library(backend_core STATIC
 target_include_directories(backend_core
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${PCL_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR}
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${NANOFLANN_INCLUDE_DIR})
-target_link_libraries(backend_core PUBLIC ${PCL_LIBRARIES} gtsam Threads::Threads
+target_link_libraries(backend_core PUBLIC ${PCL_LIBRARIES} gtsam Eigen3::Eigen Threads::Threads
     TBB::tbb OpenMP::OpenMP_CXX)
 # Linux 核心消费者优先使用构建选中的库，避免同 SONAME 的其他版本覆盖。
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")

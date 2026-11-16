@@ -46,7 +46,7 @@ void LocalizationNode::configureZlioInputs(std::uint64_t subscription_epoch) {
             });
         });
     zlio_frames_ = create_subscription<Frame>(
-        parameters_.input.frame_topic, rclcpp::QoS(parameters_.input.subscription_queue),
+        parameters_.input.frame_topic, rclcpp::SensorDataQoS().keep_last(parameters_.input.subscription_queue),
         // 同时验收帧布局、坐标系、时间和会话身份后交给同步帧入口。
         [this, subscription_epoch](Frame::ConstSharedPtr m) {
             invoke("front-end frame", [&] {
@@ -81,7 +81,7 @@ void LocalizationNode::configureZlioInputs(std::uint64_t subscription_epoch) {
     rclcpp::SubscriptionOptions options;
     options.callback_group = high_rate_callback_group_;
     zlio_predictions_ = create_subscription<Prediction>(
-        parameters_.input.prediction_topic, rclcpp::QoS(200),
+        parameters_.input.prediction_topic, rclcpp::SensorDataQoS(),
         // 高频预测经过相同会话屏障，保持其独立发布回调组。
         [this, subscription_epoch](Prediction::ConstSharedPtr m) {
             invoke("front-end prediction", [&] {

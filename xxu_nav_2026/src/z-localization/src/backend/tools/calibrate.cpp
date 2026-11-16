@@ -3,7 +3,7 @@
  * @brief 采集时间对齐的定位位姿，分阶段估计机体旋转外参与平面杆臂。
  */
 
-#include <tf2/exceptions.h>
+#include <tf2/exceptions.hpp>
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>

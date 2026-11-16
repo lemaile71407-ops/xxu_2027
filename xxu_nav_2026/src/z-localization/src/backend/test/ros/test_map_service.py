@@ -12,6 +12,7 @@ import time
 import unittest
 
 from domain_coordinator import domain_id
+from itertools import count
 import launch
 import launch_testing
 import launch_testing.actions
@@ -20,19 +21,22 @@ from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from localization_interfaces.msg import FrontendFrame, FrontendOdometry
 from nav_msgs.msg import Odometry
+from rclpy.qos import qos_profile_sensor_data
 import rclpy
 from sensor_msgs_py import point_cloud2
 from std_msgs.msg import Header
 from std_srvs.srv import Trigger
 import yaml
 
+# Avoid the live application domain (1); reserve each test domain as before.
+_test_domains = count(186)
 _resources = ExitStack()
 atexit.register(_resources.close)
 
 
 def generate_test_description():
     """在独立 ROS 域中通过生产 launch 启动被测节点。"""
-    os.environ['ROS_DOMAIN_ID'] = str(_resources.enter_context(domain_id()))
+    os.environ['ROS_DOMAIN_ID'] = str(_resources.enter_context(domain_id(selector=lambda: next(_test_domains))))
     os.environ['ROS_LOCALHOST_ONLY'] = '1'
     root = Path(_resources.enter_context(tempfile.TemporaryDirectory(prefix='backend-ros-')))
     (root / 'logs').mkdir()
@@ -126,7 +130,7 @@ class TestMapService(unittest.TestCase):
         predictor = self.node.create_publisher(FrontendOdometry, '/frontend/odometry', 10)
         received = []
         subscription = self.node.create_subscription(
-            Odometry, '/localization/odometry', received.append, 20)
+            Odometry, '/localization/odometry', received.append, qos_profile_sensor_data)
         try:
             self.assertTrue(client.wait_for_service(timeout_sec=10))
             self.assertFalse(self.save(client).success,

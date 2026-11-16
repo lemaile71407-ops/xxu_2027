@@ -11,6 +11,7 @@ import time
 import unittest
 
 from domain_coordinator import domain_id
+from itertools import count
 import launch
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -21,13 +22,15 @@ import launch_testing.asserts
 from localization_interfaces.msg import FrontendFrame, FrontendOdometry, FrontendSession
 from nav_msgs.msg import Odometry
 import rclpy
-from rclpy.qos import DurabilityPolicy, QoSProfile
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import Imu, PointCloud2, PointField
 from sensor_msgs_py import point_cloud2
 from std_msgs.msg import Header, String
 from std_srvs.srv import Trigger
 import yaml
 
+# Avoid the live application domain (1); reserve each test domain as before.
+_test_domains = count(186)
 _resources = ExitStack()
 atexit.register(_resources.close)
 
@@ -35,7 +38,7 @@ atexit.register(_resources.close)
 @launch_testing.parametrize('scenario', ['cold', 'moving', 'recovery', 'startup'])
 def generate_test_description(scenario):
     """为停车、实际运动、运行恢复和启动中断分别启动独立的前后端进程。"""
-    os.environ['ROS_DOMAIN_ID'] = str(_resources.enter_context(domain_id()))
+    os.environ['ROS_DOMAIN_ID'] = str(_resources.enter_context(domain_id(selector=lambda: next(_test_domains))))
     os.environ['ROS_LOCALHOST_ONLY'] = '1'
     root = Path(_resources.enter_context(tempfile.TemporaryDirectory(prefix='bringup-protocol-')))
     os.environ['ROS_LOG_DIR'] = str(root / 'logs')
@@ -91,10 +94,11 @@ class TestResetProtocol(unittest.TestCase):
             FrontendSession, '/frontend/session', self.sessions.append, retained)
         self.node.create_subscription(
             String, '/backend_node/localization_state', self.observe_state, retained)
-        self.node.create_subscription(Odometry, '/localization/odometry', self.odometry.append, 20)
+        self.node.create_subscription(Odometry, '/localization/odometry', self.odometry.append, qos_profile_sensor_data)
         self.observed_frames = []
         self.node.create_subscription(
-            FrontendFrame, '/frontend/frame', self.observed_frames.append, 100)
+            FrontendFrame, '/frontend/frame', self.observed_frames.append,
+            QoSProfile(depth=100, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.frames = self.node.create_publisher(FrontendFrame, '/frontend/frame', 20)
         self.predictions = self.node.create_publisher(FrontendOdometry, '/frontend/odometry', 20)
 

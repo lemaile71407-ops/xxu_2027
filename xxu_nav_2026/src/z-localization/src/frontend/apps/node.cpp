@@ -5,6 +5,7 @@
 #include "node.hpp"
 
 #include <chrono>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -117,19 +118,28 @@ void OdometryNode::loadParameters() {
 
 /// 创建里程计和坐标变换发布器。
 void OdometryNode::setupPublishers() {
-    odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("odometry", rclcpp::QoS(200));
-    posterior_pub_ = create_publisher<nav_msgs::msg::Odometry>("lidar_odometry", rclcpp::QoS(100));
+    odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("odometry", rclcpp::SensorDataQoS());
+    posterior_pub_ = create_publisher<nav_msgs::msg::Odometry>("lidar_odometry", rclcpp::SensorDataQoS());
     frame_pub_ = create_publisher<localization_interfaces::msg::FrontendFrame>("frontend/frame",
-                                                                               rclcpp::QoS(64));
+                                                                               rclcpp::SensorDataQoS().keep_last(64));
     prediction_pub_ = create_publisher<localization_interfaces::msg::FrontendOdometry>(
-        "frontend/odometry", rclcpp::QoS(200));
+        "frontend/odometry", rclcpp::SensorDataQoS());
+    deskewed_cloud_timeout_ = declare_parameter<double>("deskewed_cloud_timeout", .5);
+    deskewed_cloud_frame_ = declare_parameter<std::string>("deskewed_cloud_frame", "");
+    if (deskewed_cloud_frame_.empty())
+        deskewed_cloud_frame_ = frames_.body;
+    if (!std::isfinite(deskewed_cloud_timeout_) || deskewed_cloud_timeout_ <= 0)
+        throw std::invalid_argument("deskewed_cloud_timeout must be finite and positive");
+    if (declare_parameter<bool>("publish_deskewed_cloud", true))
+        deskewed_cloud_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
+            "cloud_deskewed", rclcpp::SensorDataQoS());
     session_pub_ = create_publisher<localization_interfaces::msg::FrontendSession>(
         "frontend/session", rclcpp::QoS(1).transient_local());
     if (publish_lidar_diagnostics_)
         diagnostic_pub_ = create_publisher<localization_interfaces::msg::FrontendLidarDiagnostic>(
             "frontend/lidar_diagnostics", rclcpp::QoS(64).best_effort());
-    if (declare_parameter<bool>("publish_tf", true))
-        broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+    if (declare_parameter<bool>("publish_tf", false))
+        throw std::invalid_argument("publish_tf=true is unsupported: use the C++ base odometry bridge for odom -> base_link");
 }
 
 /// 创建输入启用、停止和幂等重置服务。
@@ -397,6 +407,27 @@ void OdometryNode::collect(bool flush) {
         message.cloud = makePointCloudMessage(result.cloud, message.odometry.header, frames_.body);
         posterior_pub_->publish(message.odometry);
         frame_pub_->publish(message);
+        // Keep the posterior's local coordinates and original acquisition stamp.
+        // An explicit frame alias is permitted only when preprocessing has
+        // already expressed both sensors in that same rigid virtual frame.
+        if (deskewed_cloud_pub_ && message.lidar_updated && !message.cloud.data.empty()) {
+            if (deskewed_epoch_ != epoch_) {
+                deskewed_epoch_ = epoch_;
+                deskewed_stamp_ = 0;
+            }
+            const auto stamp = rclcpp::Time(message.cloud.header.stamp).nanoseconds();
+            const auto age = now().nanoseconds() - stamp;
+            const bool finite = std::all_of(result.cloud.begin(), result.cloud.end(), [](const Vec3& p) {
+                return p.allFinite() && p.cwiseAbs().maxCoeff() <= std::numeric_limits<float>::max();
+            });
+            if (stamp > deskewed_stamp_ && age >= -50000000 &&
+                static_cast<double>(age) <= deskewed_cloud_timeout_ * 1e9 && finite) {
+                // The atomic backend frame was already published in frames_.body.
+                message.cloud.header.frame_id = deskewed_cloud_frame_;
+                deskewed_cloud_pub_->publish(message.cloud);
+                deskewed_stamp_ = stamp;
+            }
+        }
         if (diagnostic_pub_) {
             try {
                 auto diagnostic = makeLidarDiagnosticMessage(result, frames_, config_.noise.gyro_sample_variance);
@@ -452,16 +483,6 @@ void OdometryNode::publish(const Estimate& estimate, const Vec3& angular_velocit
     message.epoch = epoch_;
     message.odometry = odometry;
     prediction_pub_->publish(message);
-    if (broadcaster_) {
-        geometry_msgs::msg::TransformStamped transform;
-        transform.header = odometry.header;
-        transform.child_frame_id = frames_.body;
-        transform.transform.translation.x = odometry.pose.pose.position.x;
-        transform.transform.translation.y = odometry.pose.pose.position.y;
-        transform.transform.translation.z = odometry.pose.pose.position.z;
-        transform.transform.rotation = odometry.pose.pose.orientation;
-        broadcaster_->sendTransform(transform);
-    }
 }
 
 /// 发布当前会话身份，通知失败不改变已经完成的重置终态。

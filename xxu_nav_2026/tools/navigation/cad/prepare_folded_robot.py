@@ -271,7 +271,6 @@ def prepare(source, decoded, reader, upstream, output, cover_mode='closed'):
     add_inertial(body, body_mass, body_center, body_inertia)
     links = {'base_link': body}
     urdf = ET.Element('robot', name='ega_folded')
-    ET.SubElement(urdf, 'link', name='base_footprint')
 
     def urdf_link(name, mass, com, tensor):
         link = ET.SubElement(urdf, 'link', name=name)
@@ -297,7 +296,6 @@ def prepare(source, decoded, reader, upstream, output, cover_mode='closed'):
         return j
 
     urdf_link('base_link', body_mass, body_center, body_inertia)
-    urdf_joint('footprint_joint', 'base_footprint', 'base_link', [0, 0, base_height], [0, 0, 0])
     upstream_model = ET.parse(upstream / 'models/sentry/model.sdf').getroot().find('model')
     for item in children:
         name = item['name']

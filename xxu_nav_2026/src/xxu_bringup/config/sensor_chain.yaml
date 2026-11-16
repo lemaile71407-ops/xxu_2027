@@ -1,7 +1,7 @@
 # Sensor preprocessing only; ZLIO is composed by the localization entry.
 real:
   pointcloud:
-    executable: pointcloud_frame_republisher.py
+    executable: pointcloud_frame_republisher
     name: pointcloud_motion_compensator
     parameters:
       target_frame: '@frame:lidar_compensated'
@@ -28,7 +28,7 @@ real:
     remappings:
       points_out: '@topic:radar.pointcloud_compensated'
   imu:
-    executable: gimbal_imu_compensator.py
+    executable: gimbal_imu_compensator
     name: gimbal_imu_compensator
     parameters:
       target_frame: '@frame:lidar_compensated'
@@ -54,7 +54,7 @@ real:
       imu_out: '@topic:radar.imu_compensated'
 rm_sim:
   pointcloud:
-    executable: pointcloud_frame_republisher.py
+    executable: pointcloud_frame_republisher
     name: pointcloud_motion_compensator
     parameters:
       target_frame: '@frame:lidar_compensated'
@@ -83,7 +83,7 @@ rm_sim:
       points_in: '@topic:simulation.lidar_shaped'
       points_out: '@topic:simulation.lidar_compensated'
   imu:
-    executable: gimbal_imu_compensator.py
+    executable: gimbal_imu_compensator
     name: gimbal_imu_compensator
     parameters:
       target_frame: '@frame:lidar_compensated'

@@ -11,7 +11,7 @@ def generate_launch_description():
             remappings=[('cloud_in',  '/livox/lidar/pointcloud'),
                         ('scan', '/scan')],
             parameters=[{
-                'target_frame': 'chassis',
+                'target_frame': 'base_link',
                 'transform_tolerance': 0.01,
                 'min_height': 0.0,
                 'max_height': 0.65,

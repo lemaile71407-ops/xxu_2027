@@ -149,7 +149,7 @@ public:
         map_period_ns_ = static_cast<std::int64_t>(map_period * 1e9);
         path_.header.frame_id = "odom";
         cloud_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>("frontend/cloud_registered",
-                                                                     rclcpp::QoS(1));
+                                                                     rclcpp::SensorDataQoS().keep_last(1));
         path_pub_ = create_publisher<nav_msgs::msg::Path>("frontend/path",
                                                           rclcpp::QoS(1).transient_local());
         map_pub_ = create_publisher<sensor_msgs::msg::PointCloud2>(
@@ -158,7 +158,7 @@ public:
             "frontend/session", rclcpp::QoS(1).transient_local(),
             [this](Session::ConstSharedPtr message) { onSession(*message); });
         frame_sub_ = create_subscription<Frame>(
-            "frontend/frame", rclcpp::QoS(5).best_effort(),
+            "frontend/frame", rclcpp::SensorDataQoS(),
             [this](Frame::ConstSharedPtr message) { onFrame(*message); });
     }
 

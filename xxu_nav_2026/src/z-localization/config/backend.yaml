@@ -405,8 +405,8 @@ output:
     publish_twist: true
     # 兼容接口是否发布有界历史路径。
     publish_path: false
-    # 兼容接口是否发布 map 到 body TF。
-    publish_tf: true
+    # ZLIO 仅发布 map -> odom，禁止兼容 map -> body 分支。
+    publish_tf: false
     # INITIALIZING 时兼容接口是否发布输出。
     publish_initializing: false
     # SUSPECT/LOST 时兼容接口是否发布冻结输出。

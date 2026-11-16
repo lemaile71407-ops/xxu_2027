@@ -15,7 +15,7 @@ def generate_launch_description():
         "wheel_vel_topic": "/chassis/wheel_vel",
         "wheel_odom_topic": "/wheel_odom",
         "wheel_odom_frame": "wheel_odom",
-        "base_frame": "base_footprint",
+        "base_frame": "base_link",
     }
     int_defaults = {
         "baudrate": "115200",
@@ -70,7 +70,7 @@ def generate_launch_description():
             ),
             Node(
                 package="xxu_hardware",
-                executable="chassis_lower_bridge.py",
+                executable="chassis_lower_bridge",
                 name="chassis_lower_bridge",
                 parameters=[params],
                 output="screen",

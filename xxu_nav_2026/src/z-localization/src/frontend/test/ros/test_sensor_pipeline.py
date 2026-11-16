@@ -10,6 +10,7 @@ import time
 import unittest
 
 from domain_coordinator import domain_id
+from itertools import count
 import launch
 from launch.actions import ExecuteProcess
 from launch.substitutions import LaunchConfiguration
@@ -20,11 +21,14 @@ from localization_interfaces.msg import FrontendFrame, FrontendOdometry, Fronten
 from localization_interfaces.srv import ResetFrontend
 from livox_ros_driver2.msg import CustomMsg, CustomPoint
 import rclpy
-from rclpy.qos import DurabilityPolicy, QoSProfile
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import Imu, PointCloud2, PointField
+from rosgraph_msgs.msg import Clock
 from sensor_msgs_py import point_cloud2
 from std_srvs.srv import SetBool, Trigger
 
+# Avoid the live application domain (1); reserve each test domain as before.
+_test_domains = count(186)
 _resources = ExitStack()
 atexit.register(_resources.close)
 
@@ -32,7 +36,7 @@ atexit.register(_resources.close)
 @launch_testing.parametrize('scenario', ['pointcloud2', 'livox', 'standalone', 'startup'])
 def generate_test_description(scenario):
     """分别启动协调输入、独立运行和启动中断场景。"""
-    os.environ['ROS_DOMAIN_ID'] = str(_resources.enter_context(domain_id()))
+    os.environ['ROS_DOMAIN_ID'] = str(_resources.enter_context(domain_id(selector=lambda: next(_test_domains))))
     os.environ['ROS_LOCALHOST_ONLY'] = '1'
     os.environ['ROS_LOG_DIR'] = _resources.enter_context(tempfile.TemporaryDirectory())
     input_type = 'livox' if scenario == 'livox' else 'pointcloud2'
@@ -41,7 +45,8 @@ def generate_test_description(scenario):
         '-p', ['config_file:=', LaunchConfiguration('config')],
         '-p', 'input_type:=' + input_type, '-p', 'lidar_topic:=/test/lidar',
         '-p', 'imu_topic:=/test/imu', '-p', 'imu_acceleration_scale:=1.0',
-        '-p', 'reset_mode:=warm', '-p', 'publish_tf:=false',
+        '-p', 'reset_mode:=warm', '-p', 'publish_tf:=false', '-p', 'use_sim_time:=true',
+        '-p', 'deskewed_cloud_frame:=navigation_sensor',
         '-p', 'coordinated_reset:=' + ('true' if scenario in ('pointcloud2', 'livox') else 'false'),
     ], output='screen')
     return launch.LaunchDescription([process, launch_testing.actions.ReadyToTest()]), {
@@ -90,10 +95,16 @@ class TestSensorPipeline(unittest.TestCase):
         self.node = rclpy.create_node('sensor_pipeline_observer')
         self.addCleanup(self.node.destroy_node)
         self.imus = self.node.create_publisher(Imu, '/test/imu', 1000)
+        self.clocks = self.node.create_publisher(Clock, '/clock', 10)
+        self.local_clouds = []
+        self.node.create_subscription(PointCloud2, '/cloud_deskewed', self.local_clouds.append,
+                                     QoSProfile(depth=100, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.frames, self.predictions, self.sessions = [], [], []
-        self.node.create_subscription(FrontendFrame, '/frontend/frame', self.frames.append, 100)
+        self.node.create_subscription(FrontendFrame, '/frontend/frame', self.frames.append,
+                                     QoSProfile(depth=100, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.node.create_subscription(
-            FrontendOdometry, '/frontend/odometry', self.predictions.append, 1000)
+            FrontendOdometry, '/frontend/odometry', self.predictions.append,
+            QoSProfile(depth=1000, reliability=ReliabilityPolicy.BEST_EFFORT))
         self.node.create_subscription(
             FrontendSession, '/frontend/session', self.sessions.append,
             QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL))
@@ -113,6 +124,9 @@ class TestSensorPipeline(unittest.TestCase):
             """发布惯性采样，并按当前场景选择是否同步发送扫描。"""
             self.step += 1
             timestamp = 1_000_000_000 + self.step * 10_000_000
+            clock = Clock()
+            set_stamp(clock.clock, timestamp)
+            self.clocks.publish(clock)
             imu = Imu()
             set_stamp(imu.header.stamp, timestamp)
             imu.linear_acceleration.z = 9.81
@@ -232,6 +246,16 @@ class TestSensorPipeline(unittest.TestCase):
         # 初始化可能晚于输入发布完成；用新 IMU 预测确认当前会话已消费输入。
         self.feed(1, lidar=False)
         self.wait_for_prediction(epoch)
+        self.wait_until(lambda: self.local_clouds, 10)
+        by_stamp = {stamp_ns(frame.cloud.header.stamp): frame.cloud for frame in self.frames}
+        shared = [cloud for cloud in self.local_clouds if stamp_ns(cloud.header.stamp) in by_stamp]
+        self.assertTrue(shared, 'standalone deskewed cloud must share a posterior stamp')
+        for cloud in shared:
+            reference = by_stamp[stamp_ns(cloud.header.stamp)]
+            self.assertEqual(cloud.header.frame_id, 'navigation_sensor')
+            self.assertEqual(reference.header.frame_id, 'imu')
+            self.assertEqual(cloud.fields, reference.fields)
+            self.assertEqual(cloud.data, reference.data)
 
     def wait_for_prediction(self, epoch):
         """等待最后一条已发送惯性采样的同代次预测。"""

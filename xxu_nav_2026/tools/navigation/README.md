@@ -19,7 +19,7 @@ python3 tools/navigation/recolor_rmul_field.py src/xxu_sim_bringup/models/rmul_2
 
 调色板在脚本 `PALETTE`；生成分组和原网格哈希见模型的 `materials/appearance.json`。
 
-RMUL ZLIO 主线与独立导航统一使用真实底盘坐标（`base_link` / `base_footprint`），`fake_vel_transform` 与虚拟参考帧分支已撤除。
+RMUL ZLIO 主线与独立导航统一使用真实底盘坐标（`base_link`），`fake_vel_transform` 与虚拟参考帧分支已撤除。
 仿真入口的 `cmd_vel_out_topic`（默认 `/cmd_vel_collision`）由 `collision_monitor` 输出后直接送入 `cmd_vel_watchdog`（`xxu_bringup`），经门控后输出 `/rm_sim/cmd_vel_safe`。
 
 `enable_lio:=false enable_cmd_vel_odom:=true` 仅用于诊断：扫描改用云台补偿点云，
@@ -97,7 +97,7 @@ EGA 仿真使用 [start_rmul.sh](start_rmul.sh) 统一准备安装环境和匹�
 
 该新图配置仅适用于已知出生点 `(2,2,0)`；默认只启动系统，不自动下发目标。现有 `check_ega_navigation.py --external-localization` 在隔离域内监督本轮测试，定位失信时取消动作并持续向平滑前话题发送零速度，随后结束测试，不自动重发目标。这是测试客户端行为，未把暂停的新请求门或任务联锁候选接入正式链；本轮正常导航未注入故障验证此分支。
 
-固定虚拟传感器的 ZLIO 适配入口为 [zlio_base_adapter.launch.py](../../src/xxu_bringup/launch/zlio_base_adapter.launch.py)，可显式启用 `publish_deskewed_cloud`；它要求前端 `imu` 与补偿后的 `lio_base_sensor` 表示同一个固定虚拟传感器坐标。底盘转换、点云转发及状态/时间校验由适配器负责。定位失信保护参数见 [cmd_vel_watchdog.py](../../src/xxu_bringup/scripts/cmd_vel_watchdog.py)；这些部件不等于外部定位 Nav2 已正式接入。
+固定虚拟传感器的 C++ 适配入口为 [zlio_base_adapter.launch.py](../../src/xxu_bringup/launch/zlio_base_adapter.launch.py)，前端现在直接发布 `/cloud_deskewed`。它要求前端 `imu` 与补偿后的 `lio_base_sensor` 表示同一个固定虚拟传感器坐标；桥接输出 `base_link` 里程计与 TF。定位可信度、源时间、新鲜度和恢复保护由 [C++ 看门狗](../../src/xxu_bringup/src/cmd_vel_watchdog.cpp)统一执行，Python 启动/空闲补扫监督只接收低频就绪信号。专用 TF 数据流、实车入口和本次验证范围见 [C++ 集成核验](../../../docs/validation/zlocalization_cpp_integration_20261116.md)；代码接入不代表实车定位或性能验收通过。
 
 [sensor_chain.yaml](../../src/xxu_bringup/config/sensor_chain.yaml) 保存 `gazebo`、`rm_sim`、`real` 的校准及补偿默认参数，话题/坐标系使用 [robot_interfaces.yaml](../../src/xxu_bringup/config/robot_interfaces.yaml) 的语义引用。仿真 CAD 车型按 `xxu_sim_bringup/models/<robot_model>/geometry.json` 选择，模型目录须同时提供 `model.sdf` 和 `robot.urdf`；当前 CAD 接口约定为固定传感器、四个独立驱动轮和 RGL。
 
@@ -133,12 +133,12 @@ CAD 底盘共用原控制器：`wheel_radii` 可选逐轮半径，`wheel_command
 当前主线统一使用真实底盘坐标，不再维护 `gimbal_yaw_fake` 虚拟坐标系、`/odom_nav` 或 `fake_vel_transform` 节点：
 
 ```text
-map -> odom -> base_footprint -> base_link (-> 固定传感器 / gimbal_link)
+map --动态--> odom --动态 30 Hz--> base_link --静态--> 传感器（直接子帧）
 ```
 
-- `/odom`：真实 `odom -> base_footprint`，twist 表达在真实底盘坐标系。
+- `/odom`：真实 `odom -> base_link`，twist 表达在真实底盘坐标系。导航不启动机械模型 TF，扫描只用一次静态传感器外参；完整盘点和当前验证见 [TF 瘦身核验](../../../docs/validation/tf_tree_audit_20261116.md)。
 - 速度链路：`MPPI -> /cmd_vel_nav -> velocity_smoother -> /cmd_vel_smoothed -> collision_monitor -> /cmd_vel_collision -> cmd_vel_watchdog (xxu_bringup) -> /cmd_vel（默认）或 /rm_sim/cmd_vel_safe（rm_sim 仿真）`。
-- `cmd_vel_watchdog`（定义见 [velocity_launch.py](../../src/xxu_bringup/xxu_bringup/velocity_launch.py) 与 [cmd_vel_watchdog.py](../../src/xxu_bringup/scripts/cmd_vel_watchdog.py)）以 `100 Hz` 输出、基于单调稳态时钟检查指令超时（默认 `0.3 s`）、`/odom` / `/scan` / `joint_states` / 必需 TF 对超时（默认 `0.5 s`）以及可选外部定位健康状态（含 `localization_recovery_hold`），任一条件不满足即发布零速。
+- `cmd_vel_watchdog`（定义见 [velocity_launch.py](../../src/xxu_bringup/xxu_bringup/velocity_launch.py) 与 [cmd_vel_watchdog.cpp](../../src/xxu_bringup/src/cmd_vel_watchdog.cpp)）以 `100 Hz` 输出、基于单调稳态时钟检查指令超时（默认 `0.3 s`）、`/odom` / `/scan` / `joint_states` / 必需 TF 对超时（默认 `0.5 s`）以及可选外部定位健康状态（含 `localization_recovery_hold`），任一条件不满足即发布零速。TF 发布者使用专用输入流，保护节点不订阅全局 `/tf`。
 - 车型碰撞与到点配置：常规配置叠加 `robot_geometry_file` 的圆形外包络与八边形近场急停多边形；折叠 EGA 车型通过自身 `geometry.json` 保留 `StoppedGoalChecker`。
 - 小陀螺自旋策略已不再通过 `/fake_vel_transform/set_parameters` 动态叠加：普通导航默认不附加自旋，显式 `--spin` 试验模式由 MPPI 自身预测并输出角速度（见上文 `--spin` 说明）。
 

@@ -4,7 +4,7 @@ version: 1
 mounting: rigid
 calibration_confirmed: false
 frames:
-  base: base_footprint
+  base: base_link
   sensor: lio_base_sensor
   lidar: livox_frame
   imu_source: livox_frame

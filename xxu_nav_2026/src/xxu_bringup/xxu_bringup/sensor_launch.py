@@ -2,11 +2,73 @@
 
 from pathlib import Path
 import math
+import xml.etree.ElementTree as ET
 
 from launch_ros.actions import Node
 import yaml
 
 from .interfaces import interfaces
+
+
+def _pose(xyz, rpy):
+    """Homogeneous pose as (translation, rotation), using URDF Rz Ry Rx."""
+    r, p, y = rpy
+    cr, sr, cp, sp, cy, sy = math.cos(r), math.sin(r), math.cos(p), math.sin(p), math.cos(y), math.sin(y)
+    return list(xyz), [[cy*cp, cy*sp*sr-sy*cr, cy*sp*cr+sy*sr],
+                       [sy*cp, sy*sp*sr+cy*cr, sy*sp*cr-cy*sr],
+                       [-sp, cp*sr, cp*cr]]
+
+
+def _compose(a, b):
+    t, r = a
+    u, s = b
+    return ([t[i] + sum(r[i][j]*u[j] for j in range(3)) for i in range(3)],
+            [[sum(r[i][k]*s[k][j] for k in range(3)) for j in range(3)] for i in range(3)])
+
+
+def _static_action(parent, child, pose, use_sim_time):
+    xyz, r = pose
+    pitch = math.atan2(-r[2][0], math.hypot(r[0][0], r[1][0]))
+    if math.hypot(r[0][0], r[1][0]) > 1.e-10:
+        roll, yaw = math.atan2(r[2][1], r[2][2]), math.atan2(r[1][0], r[0][0])
+    else:
+        roll, yaw = math.atan2(-r[1][2], r[1][1]), 0.0
+    arguments = ['--frame-id', parent, '--child-frame-id', child]
+    for name, value in zip(('x', 'y', 'z', 'roll', 'pitch', 'yaw'), xyz + [roll, pitch, yaw]):
+        arguments.extend(['--' + name, str(value)])
+    return Node(package='tf2_ros', executable='static_transform_publisher',
+                name='mount_' + child, arguments=arguments,
+                parameters=[{'use_sim_time': use_sim_time}], output='screen')
+
+
+def navigation_static_actions(robot_description, base, sensors, *, use_sim_time):
+    """Collapse only fixed URDF chains into direct base-to-sensor edges.
+
+    Mechanical joints remain in the simulation model, not in navigation TF.
+    A moving sensor must use the existing analytical joint compensation;
+    this function refuses to freeze a moving joint into a static transform.
+    """
+    root = ET.fromstring(robot_description)
+    joints = {j.find('child').get('link'): j for j in root.findall('joint')}
+    actions = []
+    for sensor in dict.fromkeys(sensors):
+        chain, child, seen = [], sensor, set()
+        while child != base:
+            if child in seen or child not in joints:
+                raise ValueError(f'No unique fixed mount from {base} to {sensor}')
+            seen.add(child)
+            joint = joints[child]
+            if joint.get('type') != 'fixed':
+                raise ValueError(f'Moving mount for {sensor}: {joint.get("name")}')
+            origin = joint.find('origin')
+            vector = lambda key: [float(v) for v in (origin.get(key, '0 0 0') if origin is not None else '0 0 0').split()]
+            chain.append(_pose(vector('xyz'), vector('rpy')))
+            child = joint.find('parent').get('link')
+        pose = _pose([0., 0., 0.], [0., 0., 0.])
+        for part in reversed(chain):
+            pose = _compose(pose, part)
+        actions.append(_static_action(base, sensor, pose, use_sim_time))
+    return actions
 
 
 def load_rigid_mount(path):
@@ -67,21 +129,14 @@ def rigid_sensor_actions(mount, *, use_sim_time, publish_mount_tf=True):
     frames = mount["frames"]
     actions = []
     if publish_mount_tf:
-        for key, parent, child in (
-                ("base_to_sensor", frames["base"], frames["sensor"]),
-                ("sensor_to_lidar", frames["sensor"], frames["lidar"])):
-            transform = mount[key]
-            arguments = ["--frame-id", parent, "--child-frame-id", child]
-            for name, value in zip(("x", "y", "z", "roll", "pitch", "yaw"),
-                                   transform["xyz"] + transform["rpy"]):
-                arguments.extend(["--" + name, str(value)])
-            actions.append(Node(package="tf2_ros", executable="static_transform_publisher",
-                                name="rigid_mount_" + key, arguments=arguments,
-                                parameters=[{"use_sim_time": use_sim_time}], output="screen"))
+        sensor = _pose(**mount['base_to_sensor'])
+        lidar = _compose(sensor, _pose(**mount['sensor_to_lidar']))
+        actions += [_static_action(frames['base'], frames['sensor'], sensor, use_sim_time),
+                    _static_action(frames['base'], frames['lidar'], lidar, use_sim_time)]
     # Fixed TF is identical for every acquisition time, so one lookup per cloud
     # preserves all point-time fields without the dynamic TF group limit.
     actions.append(Node(
-        package="xxu_bringup", executable="pointcloud_frame_republisher.py",
+        package="xxu_bringup", executable="pointcloud_frame_republisher",
         name="rigid_pointcloud_transform", output="screen", parameters=[{
             "use_sim_time": use_sim_time, "target_frame": frames["sensor"],
             "expected_source_frame": frames["lidar"],
@@ -89,7 +144,7 @@ def rigid_sensor_actions(mount, *, use_sim_time, publish_mount_tf=True):
         }], remappings=[("points_in", mount["topics"]["points_in"]),
                         ("points_out", mount["topics"]["points_out"])]))
     actions.append(Node(
-        package="xxu_bringup", executable="gimbal_imu_compensator.py",
+        package="xxu_bringup", executable="gimbal_imu_compensator",
         name="rigid_imu_transform", output="screen", parameters=[{
             "use_sim_time": use_sim_time, "target_frame": frames["sensor"],
             "fixed_sensor": True, "sensor_offset": [0.0, 0.0, 0.0],

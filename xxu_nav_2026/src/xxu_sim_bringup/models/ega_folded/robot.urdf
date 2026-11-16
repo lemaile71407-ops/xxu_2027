@@ -1,6 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
 <robot name="ega_folded">
-  <link name="base_footprint" />
   <link name="base_link">
     <inertial>
       <origin xyz="-0.0022458322791901464 -0.0040420362301584285 0.06278421073377255" rpy="0 0 0" />
@@ -33,11 +32,6 @@
       </geometry>
     </collision>
   </link>
-  <joint name="footprint_joint" type="fixed">
-    <parent link="base_footprint" />
-    <child link="base_link" />
-    <origin xyz="0 0 0.06973823713479495" rpy="0 0 0" />
-  </joint>
   <link name="wheel_rr">
     <inertial>
       <origin xyz="0.0 0.0 0.0" rpy="0 0 0" />

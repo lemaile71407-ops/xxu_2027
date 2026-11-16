@@ -60,7 +60,6 @@ def _load_module(name: str, path: Path):
     return mod
 
 
-bridge_mod = _load_module("chassis_bridge_mod", SHARE / "scripts/chassis_lower_bridge.py")
 launch_mod = _load_module(
     "chassis_bridge_launch", SHARE / "launch/chassis_lower_bridge.launch.py"
 )
@@ -461,260 +460,72 @@ class FakeSTM32Firmware:
             pass
 
 
-class RosPtyLoopbackTest(unittest.TestCase):
-    def test_launch_file_constructs_node(self):
+from test_cpp_bridge_pipeline import CppHarness
+
+
+class RosPtyLoopbackTest(CppHarness):
+    def test_launch_selects_cpp_component_executable(self):
         captured = []
-        with patch.object(launch_mod, "Node", side_effect=lambda **kw: captured.append(kw) or kw):
-            desc = launch_mod.generate_launch_description()
-        self.assertEqual(len(captured), 1)
-        self.assertEqual(captured[0]["package"], "xxu_hardware")
-        self.assertEqual(captured[0]["executable"], "chassis_lower_bridge.py")
-        self.assertEqual(captured[0]["name"], "chassis_lower_bridge")
-        self.assertGreater(len(desc.entities), 1)
+        with patch.object(launch_mod, 'Node', side_effect=lambda **kw: captured.append(kw) or kw):
+            launch_mod.generate_launch_description()
+        self.assertEqual(captured[0]['executable'], 'chassis_lower_bridge')
 
-    def test_end_to_end_pty_loopback(self):
-        master_fd, slave_fd = pty.openpty()
-        slave_name = os.ttyname(slave_fd)
-        firmware = FakeSTM32Firmware(master_fd)
+    def test_end_to_end_cpp_pty_loopback(self):
+        master, slave = pty.openpty()
+        firmware = FakeSTM32Firmware(master)
         firmware.start()
-
-        with patch.dict(os.environ, {"ROS_DOMAIN_ID": "195", "ROS_LOCALHOST_ONLY": "1"}):
-            rclpy.init(
-                args=[
-                    "--ros-args",
-                    "-p",
-                    f"port:={slave_name}",
-                    "-p",
-                    "cmd_vel_topic:=/test_chassis/cmd_vel",
-                    "-p",
-                    "status_topic:=/test_chassis/status",
-                    "-p",
-                    "wheel_vel_topic:=/test_chassis/wheel_vel",
-                    "-p",
-                    "wheel_odom_topic:=/test_chassis/wheel_odom",
-                    "-p",
-                    "cmd_timeout:=0.25",
-                ]
-            )
-            tester = rclpy.create_node(
-                "chassis_bridge_tester", enable_rosout=False, start_parameter_services=False
-            )
-            statuses = []
-            wheel_vels = []
-            wheel_odoms = []
-            tester.create_subscription(
-                String,
-                "/test_chassis/status",
-                lambda m: statuses.append(json.loads(m.data)),
-                10,
-            )
-            tester.create_subscription(
-                TwistStamped,
-                "/test_chassis/wheel_vel",
-                lambda m: wheel_vels.append(m),
-                20,
-            )
-            tester.create_subscription(
-                Odometry,
-                "/test_chassis/wheel_odom",
-                lambda m: wheel_odoms.append(m),
-                20,
-            )
-            cmd_pub = tester.create_publisher(TwistStamped, "/test_chassis/cmd_vel", 10)
-            bridge = bridge_mod.ChassisLowerBridge()
-
-            executor = SingleThreadedExecutor()
-            executor.add_node(tester)
-            executor.add_node(bridge)
-
-            def spin_until(predicate, timeout=2.0):
-                deadline = time.monotonic() + timeout
-                while time.monotonic() < deadline:
-                    executor.spin_once(timeout_sec=0.01)
-                    if predicate():
-                        return True
-                return False
-
-            def publish_cmd(vx: float, vy: float = 0.0, wz: float = 0.0):
-                msg = TwistStamped()
-                msg.header.frame_id = "base_link"
-                msg.header.stamp = tester.get_clock().now().to_msg()
-                msg.twist.linear.x = vx
-                msg.twist.linear.y = vy
-                msg.twist.angular.z = wz
-                cmd_pub.publish(msg)
-
-            try:
-                # 1. Handshake unlocks RUNNING automatically, and bit5=0 publishes no wheel_odom.
-                self.assertTrue(
-                    spin_until(lambda: statuses and statuses[-1]["state"] == "RUNNING")
-                )
-                self.assertEqual(len(wheel_vels), 0)
-                self.assertEqual(len(wheel_odoms), 0)
-
-                # 2. Fresh non-zero command sends mode=1 and moves simulated STM32.
-                def send_drive():
-                    publish_cmd(0.4, -0.2, 0.1)
-                    return any(
-                        mode == MODE_RUN and q_vx == 400 and q_vy == -200 and q_wz == 100
-                        for _seq, mode, q_vx, q_vy, q_wz in firmware.received_cmds
-                    )
-
-                self.assertTrue(spin_until(send_drive))
-
-                # 3. Enable wheel feedback (bit5=1) and check monotonic /wheel_odom & /chassis/wheel_vel.
-                with firmware.lock:
-                    firmware.wheel_valid = True
-                spin_until(lambda: (publish_cmd(0.4, -0.2, 0.1) or True) and len(wheel_odoms) >= 4)
-                self.assertGreaterEqual(len(wheel_vels), 4)
-                stamps_ns = [
-                    m.header.stamp.sec * 1_000_000_000 + m.header.stamp.nanosec
-                    for m in wheel_odoms
-                ]
-                self.assertEqual(stamps_ns, sorted(set(stamps_ns)))
-                self.assertGreater(wheel_odoms[-1].pose.pose.position.x, 0.0)
-
-                # 4. E-stop triggers WAIT_STOP_ACK; clearing E-stop recovers cleanly even while driving.
-                with firmware.lock:
-                    firmware.estop = True
-                    firmware.waiting_for_stop = True
-                self.assertTrue(
-                    spin_until(
-                        lambda: (publish_cmd(0.4, 0.0, 0.0) or True)
-                        and statuses[-1]["state"] == "WAIT_STOP_ACK"
-                    )
-                )
-                with firmware.lock:
-                    firmware.estop = False
-                self.assertTrue(
-                    spin_until(
-                        lambda: (publish_cmd(0.4, 0.0, 0.0) or True)
-                        and statuses[-1]["state"] == "RUNNING"
-                    )
-                )
-
-                # 5. One-way 0x10 drop >150ms triggers STM32 bit4=1 and recovers cleanly once restored.
-                with firmware.lock:
-                    firmware.drop_rx = True
-                self.assertTrue(
-                    spin_until(
-                        lambda: (publish_cmd(0.4, 0.0, 0.0) or True)
-                        and statuses[-1]["state"] == "WAIT_STOP_ACK"
-                        and statuses[-1]["chassis"] is not None
-                        and statuses[-1]["chassis"]["comm_timeout"]
-                    )
-                )
-                with firmware.lock:
-                    firmware.drop_rx = False
-                self.assertTrue(
-                    spin_until(
-                        lambda: (publish_cmd(0.4, 0.0, 0.0) or True)
-                        and statuses[-1]["state"] == "RUNNING"
-                    )
-                )
-
-                # 6. Letting /cmd_vel go stale forces bridge back to mode=0.
-                firmware.received_cmds.clear()
-                self.assertTrue(
-                    spin_until(
-                        lambda: len(firmware.received_cmds) > 3
-                        and firmware.received_cmds[-1][1] == MODE_STOP,
-                        timeout=1.0,
-                    )
-                )
-            finally:
-                firmware.close()
-                try:
-                    bridge.close()
-                except Exception:
-                    pass
-                executor.shutdown()
-                bridge.destroy_node()
-                tester.destroy_node()
-                rclpy.shutdown()
-                os.close(slave_fd)
-                os.close(master_fd)
-
-    def test_shutdown_sends_stop_frame_before_closing_port(self):
-        events = []
-
-        class RecordingSerial:
-            def __init__(self):
-                self.parser_buf = bytearray()
-
-            def read(self, _n):
-                time.sleep(0.01)
-                return b""
-
-            def write(self, data):
-                events.append(("write", bytes(data)))
-                return len(data)
-
-            def flush(self):
-                events.append(("flush", None))
-
-            def close(self):
-                events.append(("close", None))
-
-        with patch.dict(os.environ, {"ROS_DOMAIN_ID": "196", "ROS_LOCALHOST_ONLY": "1"}):
-            rclpy.init()
-            bridge = bridge_mod.ChassisLowerBridge(
-                serial_factory=lambda _port, _baud: RecordingSerial()
-            )
-            try:
-                bridge._open_serial_if_due(time.monotonic())
-                bridge.close()
-            finally:
-                bridge.destroy_node()
-                rclpy.shutdown()
-
-        write_events = [data for kind, data in events if kind == "write"]
-        self.assertGreaterEqual(len(write_events), 1)
-        last_frame = write_events[-1]
-        self.assertEqual(last_frame[:4], b"\xAA\x55\x02\x10")
-        mode, q_vx, q_vy, q_wz = struct.unpack_from("<Bhhh", last_frame, HEADER_LEN)
-        self.assertEqual((mode, q_vx, q_vy, q_wz), (MODE_STOP, 0, 0, 0))
-        self.assertLess(
-            events.index(("write", last_frame)),
-            events.index(("close", None)),
-        )
-
-    def test_disconnected_timer_does_not_advance_seq_and_reports_null_tx(self):
-        with patch.dict(os.environ, {"ROS_DOMAIN_ID": "197", "ROS_LOCALHOST_ONLY": "1"}):
-            rclpy.init()
-            try:
-                tester = rclpy.create_node(
-                    "chassis_disconnect_tester", enable_rosout=False, start_parameter_services=False
-                )
-                statuses = []
-                tester.create_subscription(
-                    String, "/chassis/status", lambda m: statuses.append(json.loads(m.data)), 10
-                )
-
-                def fail_serial(_port, _baud):
-                    raise OSError("port absent")
-
-                bridge = bridge_mod.ChassisLowerBridge(serial_factory=fail_serial)
-                executor = SingleThreadedExecutor()
-                executor.add_node(tester)
-                executor.add_node(bridge)
-                try:
-                    for _ in range(10):
-                        bridge._on_send_timer()
-                        executor.spin_once(timeout_sec=0.01)
-                    self.assertEqual(bridge._sm._seq, 1)
-                    self.assertTrue(statuses)
-                    self.assertFalse(statuses[-1]["connected"])
-                    self.assertEqual(statuses[-1]["state"], "WAIT_STOP_ACK")
-                    self.assertIsNone(statuses[-1]["tx"])
-                finally:
-                    bridge.close()
-                    executor.shutdown()
-                    bridge.destroy_node()
-                    tester.destroy_node()
-            finally:
-                rclpy.shutdown()
+        try:
+            process = self.start('chassis_lower_bridge', {
+                'port': os.ttyname(slave), 'cmd_vel_topic': '/probe/chassis_cmd',
+                'status_topic': '/probe/chassis_status',
+                'wheel_vel_topic': '/probe/wheel_vel', 'wheel_odom_topic': '/probe/wheel_odom'},
+                package='xxu_hardware')
+            statuses = self.received(String, '/probe/chassis_status')
+            odoms = self.received(Odometry, '/probe/wheel_odom')
+            pub = self.node.create_publisher(TwistStamped, '/probe/chassis_cmd', 10)
+            def drive():
+                command = TwistStamped(); command.header.frame_id = 'base_link'
+                command.header.stamp = self.node.get_clock().now().to_msg()
+                command.twist.linear.x = .4; command.twist.linear.y = -.2; command.twist.angular.z = .1
+                pub.publish(command)
+            self.spin(1.3, drive)
+            self.assertTrue(statuses)
+            self.assertEqual(json.loads(statuses[-1].data)['state'], 'RUNNING')
+            self.assertTrue(any(mode == MODE_RUN and vx == 400 and vy == -200 and wz == 100
+                                for _,mode,vx,vy,wz in firmware.received_cmds))
+            self.assertEqual(odoms, [])
+            with firmware.lock: firmware.wheel_valid = True
+            self.spin(.3, drive)
+            self.assertGreater(len(odoms), 3)
+            self.assertGreater(odoms[-1].pose.pose.position.x, 0.)
+            self.assertEqual(odoms[-1].child_frame_id, 'base_link')
+            stamps = [m.header.stamp.sec * 1000000000 + m.header.stamp.nanosec for m in odoms]
+            self.assertEqual(stamps, sorted(set(stamps)))
+            with firmware.lock:
+                firmware.estop = True
+                firmware.waiting_for_stop = True
+            self.spin(.12, drive)
+            self.assertEqual(json.loads(statuses[-1].data)['state'], 'WAIT_STOP_ACK')
+            self.assertTrue(all(mode == MODE_STOP for _,mode,*_ in firmware.received_cmds[-3:]))
+            with firmware.lock: firmware.estop = False
+            self.spin(.3, drive)
+            self.assertEqual(json.loads(statuses[-1].data)['state'], 'RUNNING')
+            self.spin(.4)
+            self.assertTrue(all(mode == MODE_STOP for _,mode,*_ in firmware.received_cmds[-3:]))
+            with firmware.lock: firmware.drop_rx = True
+            self.spin(.4, drive)
+            self.assertEqual(json.loads(statuses[-1].data)['state'], 'WAIT_STOP_ACK')
+            with firmware.lock: firmware.drop_rx = False
+            self.spin(.4, drive)
+            self.assertEqual(json.loads(statuses[-1].data)['state'], 'RUNNING')
+            # Shutdown must emit an explicit stop even after ROS context shutdown.
+            process.send_signal(__import__('signal').SIGINT)
+            process.wait(timeout=5)
+            time.sleep(.05)
+            self.assertEqual(firmware.received_cmds[-1][1], MODE_STOP)
+        finally:
+            firmware.close(); os.close(master); os.close(slave)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

@@ -8,6 +8,7 @@ import tempfile
 import unittest
 
 from domain_coordinator import domain_id
+from itertools import count
 import launch
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -18,13 +19,15 @@ from rcl_interfaces.msg import ParameterType
 from rcl_interfaces.srv import GetParameters
 import rclpy
 
+# Avoid the live application domain (1); reserve each test domain as before.
+_test_domains = count(186)
 _resources = ExitStack()
 atexit.register(_resources.close)
 
 
 def generate_test_description():
     """在独立 ROS 域中通过生产 launch 启动被测节点。"""
-    os.environ['ROS_DOMAIN_ID'] = str(_resources.enter_context(domain_id()))
+    os.environ['ROS_DOMAIN_ID'] = str(_resources.enter_context(domain_id(selector=lambda: next(_test_domains))))
     os.environ['ROS_LOCALHOST_ONLY'] = '1'
     os.environ['ROS_LOG_DIR'] = _resources.enter_context(tempfile.TemporaryDirectory())
     path = Path(__file__).resolve().parents[2] / 'launch/body_calibration.launch.py'

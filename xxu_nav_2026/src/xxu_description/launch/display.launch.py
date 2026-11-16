@@ -16,6 +16,9 @@ def generate_launch_description():
     model = LaunchConfiguration("model")
     rviz_config = LaunchConfiguration("rviz_config")
     use_sim_time = LaunchConfiguration("use_sim_time")
+    # Mechanical model inspection has a private TF graph. It may run beside
+    # navigation without reintroducing wheel/gimbal frames into global /tf.
+    model_tf = [("/tf", "/model_display/tf"), ("/tf_static", "/model_display/tf_static")]
 
     return LaunchDescription(
         [
@@ -37,6 +40,7 @@ def generate_launch_description():
             Node(
                 package="robot_state_publisher",
                 executable="robot_state_publisher",
+                remappings=[*model_tf, ("/joint_states", "/model_display/joint_states")],
                 parameters=[
                     {
                         "robot_description": Command(["xacro ", model]),
@@ -48,6 +52,7 @@ def generate_launch_description():
             Node(
                 package="joint_state_publisher",
                 executable="joint_state_publisher",
+                remappings=[("/joint_states", "/model_display/joint_states")],
                 parameters=[
                     {
                         "robot_description": Command(["xacro ", model]),
@@ -59,6 +64,7 @@ def generate_launch_description():
             Node(
                 package="rviz2",
                 executable="rviz2",
+                remappings=model_tf,
                 arguments=["-d", rviz_config],
                 output="screen",
             ),

@@ -4,8 +4,6 @@
  */
 #pragma once
 
-#include <tf2_ros/transform_broadcaster.h>
-
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -129,6 +127,11 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub_;
     rclcpp::Subscription<livox_ros_driver2::msg::CustomMsg>::SharedPtr livox_sub_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_, posterior_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr deskewed_cloud_pub_;
+    double deskewed_cloud_timeout_ = .5;
+    std::string deskewed_cloud_frame_;
+    std::uint64_t deskewed_epoch_ = 0;
+    std::int64_t deskewed_stamp_ = 0;
     rclcpp::Publisher<localization_interfaces::msg::FrontendFrame>::SharedPtr frame_pub_;
     rclcpp::Publisher<localization_interfaces::msg::FrontendOdometry>::SharedPtr prediction_pub_;
     rclcpp::Publisher<localization_interfaces::msg::FrontendSession>::SharedPtr session_pub_;
@@ -137,7 +140,6 @@ private:
     rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr start_service_;
     rclcpp::Service<localization_interfaces::srv::ResetFrontend>::SharedPtr reset_service_;
     rclcpp::TimerBase::SharedPtr recovery_timer_;
-    std::unique_ptr<tf2_ros::TransformBroadcaster> broadcaster_;
 };
 
 }  // namespace zlio::ros

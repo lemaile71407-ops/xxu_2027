@@ -53,8 +53,6 @@
 #include <utility>
 
 #include "sensor_msgs/point_cloud2_iterator.hpp"
-#include "tf2_sensor_msgs/tf2_sensor_msgs.hpp"
-#include "tf2_ros/create_timer_ros.h"
 
 namespace pointcloud_to_laserscan
 {
@@ -69,21 +67,28 @@ struct PointFields
 
 bool findXYZFields(const sensor_msgs::msg::PointCloud2 & msg, PointFields & fields)
 {
+  if (msg.point_step < 4 || static_cast<std::uint64_t>(msg.row_step) <
+    static_cast<std::uint64_t>(msg.width) * msg.point_step ||
+    static_cast<std::uint64_t>(msg.row_step) * msg.height != msg.data.size()) {return false;}
   bool has_x = false;
   bool has_y = false;
   bool has_z = false;
 
   for (const auto & field : msg.fields) {
     const bool valid_float =
-      field.datatype == sensor_msgs::msg::PointField::FLOAT32 && field.count == 1;
+      field.datatype == sensor_msgs::msg::PointField::FLOAT32 && field.count == 1 &&
+      field.offset <= msg.point_step - sizeof(float);
 
     if (field.name == "x" && valid_float) {
+      if (has_x) {return false;}
       fields.x_offset = field.offset;
       has_x = true;
     } else if (field.name == "y" && valid_float) {
+      if (has_y) {return false;}
       fields.y_offset = field.offset;
       has_y = true;
     } else if (field.name == "z" && valid_float) {
+      if (has_z) {return false;}
       fields.z_offset = field.offset;
       has_z = true;
     }
@@ -159,6 +164,9 @@ PointCloudToLaserScanNode::PointCloudToLaserScanNode(const rclcpp::NodeOptions &
   use_inf_ = this->declare_parameter("use_inf", true);
   publish_processed_cloud_ = this->declare_parameter("publish_processed_cloud", false);
   processed_cloud_frame_ = this->declare_parameter("processed_cloud_frame", target_frame_);
+  if (publish_processed_cloud_ && !processed_cloud_frame_.empty() && processed_cloud_frame_ != target_frame_) {
+    throw std::invalid_argument("processed cloud must use the cached static target_frame");
+  }
   processed_cloud_project_to_2d_ =
     this->declare_parameter("processed_cloud_project_to_2d", true);
   processed_cloud_z_value_ = this->declare_parameter("processed_cloud_z_value", 0.0);
@@ -167,14 +175,12 @@ PointCloudToLaserScanNode::PointCloudToLaserScanNode(const rclcpp::NodeOptions &
   crop_min_y_ = this->declare_parameter("crop_min_y", -std::numeric_limits<double>::max());
   crop_max_y_ = this->declare_parameter("crop_max_y", std::numeric_limits<double>::max());
   const auto scan_qos_reliability =
-    this->declare_parameter<std::string>("scan_qos_reliability", "reliable");
+    this->declare_parameter<std::string>("scan_qos_reliability", "best_effort");
 
-  auto scan_qos = rclcpp::QoS(10);
-  if (scan_qos_reliability == "best_effort") {
-    scan_qos.best_effort();
-  } else {
-    scan_qos.reliable();
+  if (scan_qos_reliability != "best_effort") {
+    throw std::invalid_argument("navigation scan requires best_effort SensorDataQoS");
   }
+  auto scan_qos = rclcpp::SensorDataQoS();
 
   pub_ = this->create_publisher<sensor_msgs::msg::LaserScan>("scan", scan_qos);
   RCLCPP_INFO(
@@ -183,7 +189,7 @@ PointCloudToLaserScanNode::PointCloudToLaserScanNode(const rclcpp::NodeOptions &
 
   if (publish_processed_cloud_) {
     processed_cloud_pub_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(
-      "processed_cloud", rclcpp::QoS(10).reliable());
+      "processed_cloud", rclcpp::SensorDataQoS());
     RCLCPP_INFO(
       this->get_logger(),
       "Publishing processed cloud frame=%s, crop_x=[%.3f, %.3f], crop_y=[%.3f, %.3f], "
@@ -194,22 +200,20 @@ PointCloudToLaserScanNode::PointCloudToLaserScanNode(const rclcpp::NodeOptions &
   }
 
   using std::placeholders::_1;
-  // if pointcloud target frame specified, we need to filter by transform availability
+  // Navigation receives a deskewed cloud in one rigid sensor frame. Collect
+  // static edges only at startup; never listen to the global dynamic TF stream.
   if (!target_frame_.empty()) {
     tf2_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
-    auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
-      this->get_node_base_interface(), this->get_node_timers_interface());
-    tf2_->setCreateTimerInterface(timer_interface);
-    tf2_listener_ = std::make_unique<tf2_ros::TransformListener>(*tf2_);
-    message_filter_ = std::make_unique<MessageFilter>(
-      sub_, *tf2_, target_frame_, input_queue_size_,
-      this->get_node_logging_interface(),
-      this->get_node_clock_interface());
-    message_filter_->registerCallback(
-      std::bind(&PointCloudToLaserScanNode::cloudCallback, this, _1));
-  } else {  // otherwise setup direct subscription
-    sub_.registerCallback(std::bind(&PointCloudToLaserScanNode::cloudCallback, this, _1));
+    static_subscription_ = create_subscription<tf2_msgs::msg::TFMessage>(
+      "/tf_static", rclcpp::QoS(100).transient_local().reliable(),
+      [this](tf2_msgs::msg::TFMessage::ConstSharedPtr message) {
+        if (!tf2_) {return;}
+        for (const auto & transform : message->transforms) {
+          tf2_->setTransform(transform, "static_mount", true);
+        }
+      });
   }
+  sub_.registerCallback(std::bind(&PointCloudToLaserScanNode::cloudCallback, this, _1));
 
   subscription_listener_thread_ = std::thread(
     std::bind(&PointCloudToLaserScanNode::subscriptionListenerThreadLoop, this));
@@ -257,6 +261,12 @@ void PointCloudToLaserScanNode::subscriptionListenerThreadLoop()
 void PointCloudToLaserScanNode::cloudCallback(
   sensor_msgs::msg::PointCloud2::ConstSharedPtr cloud_msg)
 {
+  PointFields validated_fields;
+  if (!findXYZFields(*cloud_msg, validated_fields)) {return;}
+  if (cached_source_frame_.empty() && cloud_msg->header.frame_id == target_frame_) {
+    cached_source_frame_ = target_frame_; static_subscription_.reset(); tf2_.reset();
+  }
+  if (!cached_source_frame_.empty() && cached_source_frame_ != cloud_msg->header.frame_id) {return;}
   // build laserscan output
   auto scan_msg = std::make_unique<sensor_msgs::msg::LaserScan>();
   scan_msg->header = cloud_msg->header;
@@ -289,8 +299,38 @@ void PointCloudToLaserScanNode::cloudCallback(
   // Transform cloud if necessary
   if (scan_msg->header.frame_id != cloud_msg->header.frame_id) {
     try {
-      auto cloud = std::make_shared<sensor_msgs::msg::PointCloud2>();
-      tf2_->transform(*cloud_msg, *cloud, target_frame_, tf2::durationFromSec(tolerance_));
+      if (cached_source_frame_.empty()) {
+        const auto transform = tf2_->lookupTransform(
+          target_frame_, cloud_msg->header.frame_id, tf2::TimePointZero).transform;
+        Eigen::Quaterniond q(transform.rotation.w, transform.rotation.x,
+          transform.rotation.y, transform.rotation.z);
+        if (!q.coeffs().allFinite() || q.norm() < 1.e-12) {return;}
+        target_from_source_.linear() = q.normalized().toRotationMatrix();
+        target_from_source_.translation() = Eigen::Vector3d(transform.translation.x,
+          transform.translation.y, transform.translation.z);
+        if (!target_from_source_.matrix().allFinite()) {return;}
+        cached_source_frame_ = cloud_msg->header.frame_id;
+        static_subscription_.reset();
+        tf2_.reset();
+      }
+      if (cached_source_frame_ != cloud_msg->header.frame_id) {return;}
+      PointFields fields;
+      if (!findXYZFields(*cloud_msg, fields)) {return;}
+      auto cloud = std::make_shared<sensor_msgs::msg::PointCloud2>(*cloud_msg);
+      cloud->header.frame_id = target_frame_;
+      for (std::uint32_t row = 0; row < cloud->height; ++row) {
+        for (std::uint32_t col = 0; col < cloud->width; ++col) {
+          const std::size_t offset = static_cast<std::size_t>(row) * cloud->row_step + col * cloud->point_step;
+          float x, y, z;
+          if (!readFloat32(cloud->data, offset + fields.x_offset, cloud->is_bigendian, x) ||
+            !readFloat32(cloud->data, offset + fields.y_offset, cloud->is_bigendian, y) ||
+            !readFloat32(cloud->data, offset + fields.z_offset, cloud->is_bigendian, z)) {return;}
+          const Eigen::Vector3d p = target_from_source_ * Eigen::Vector3d(x, y, z);
+          writeFloat32(cloud->data, offset + fields.x_offset, cloud->is_bigendian, p.x());
+          writeFloat32(cloud->data, offset + fields.y_offset, cloud->is_bigendian, p.y());
+          writeFloat32(cloud->data, offset + fields.z_offset, cloud->is_bigendian, p.z());
+        }
+      }
       cloud_msg = cloud;
     } catch (tf2::TransformException & ex) {
       RCLCPP_ERROR_STREAM(this->get_logger(), "Transform failure: " << ex.what());
@@ -298,65 +338,24 @@ void PointCloudToLaserScanNode::cloudCallback(
     }
   }
 
-  // Iterate through pointcloud
-  for (sensor_msgs::PointCloud2ConstIterator<float> iter_x(*cloud_msg, "x"),
-    iter_y(*cloud_msg, "y"), iter_z(*cloud_msg, "z");
-    iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z)
-  {
-    if (std::isnan(*iter_x) || std::isnan(*iter_y) || std::isnan(*iter_z)) {
-      RCLCPP_DEBUG(
-        this->get_logger(),
-        "rejected for nan in point(%f, %f, %f)\n",
-        *iter_x, *iter_y, *iter_z);
-      continue;
-    }
-
-    if (*iter_z > max_height_ || *iter_z < min_height_) {
-      RCLCPP_DEBUG(
-        this->get_logger(),
-        "rejected for height %f not in range (%f, %f)\n",
-        *iter_z, min_height_, max_height_);
-      continue;
-    }
-
-    double range = hypot(*iter_x, *iter_y);
-    // The cloud is in base_footprint.  Suppress returns from the chassis and
-    // wheels before creating the shared navigation/safety LaserScan.  This is
-    // a physical sensor self-filter, not a controller-specific safety rule.
-    if (range < robot_self_filter_radius_) {
-      continue;
-    }
-    if (range < range_min_) {
-      RCLCPP_DEBUG(
-        this->get_logger(),
-        "rejected for range %f below minimum value %f. Point: (%f, %f, %f)",
-        range, range_min_, *iter_x, *iter_y, *iter_z);
-      continue;
-    }
-    if (range > range_max_) {
-      RCLCPP_DEBUG(
-        this->get_logger(),
-        "rejected for range %f above maximum value %f. Point: (%f, %f, %f)",
-        range, range_max_, *iter_x, *iter_y, *iter_z);
-      continue;
-    }
-
-    double angle = atan2(*iter_y, *iter_x);
-    if (angle < scan_msg->angle_min || angle > scan_msg->angle_max) {
-      RCLCPP_DEBUG(
-        this->get_logger(),
-        "rejected for angle %f not in range (%f, %f)\n",
-        angle, scan_msg->angle_min, scan_msg->angle_max);
-      continue;
-    }
-
-    // overwrite range at laserscan ray if new range is smaller
-    int index = (angle - scan_msg->angle_min) / scan_msg->angle_increment;
-    if (index < 0 || static_cast<size_t>(index) >= scan_msg->ranges.size()) {
-      continue;
-    }
-    if (range < scan_msg->ranges[index]) {
-      scan_msg->ranges[index] = range;
+  // Respect row padding and byte order; never interpret padding as points.
+  PointFields fields;
+  if (!findXYZFields(*cloud_msg, fields)) {return;}
+  for (std::uint32_t row = 0; row < cloud_msg->height; ++row) {
+    for (std::uint32_t col = 0; col < cloud_msg->width; ++col) {
+      const std::size_t offset = static_cast<std::size_t>(row) * cloud_msg->row_step + col * cloud_msg->point_step;
+      float x, y, z;
+      if (!readFloat32(cloud_msg->data, offset + fields.x_offset, cloud_msg->is_bigendian, x) ||
+        !readFloat32(cloud_msg->data, offset + fields.y_offset, cloud_msg->is_bigendian, y) ||
+        !readFloat32(cloud_msg->data, offset + fields.z_offset, cloud_msg->is_bigendian, z)) {return;}
+      if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) || z > max_height_ || z < min_height_) {continue;}
+      const double range = std::hypot(x, y);
+      if (range < robot_self_filter_radius_ || range < range_min_ || range > range_max_) {continue;}
+      const double angle = std::atan2(y, x);
+      if (angle < scan_msg->angle_min || angle > scan_msg->angle_max) {continue;}
+      const int index = (angle - scan_msg->angle_min) / scan_msg->angle_increment;
+      if (index < 0 || static_cast<std::size_t>(index) >= scan_msg->ranges.size()) {continue;}
+      if (range < scan_msg->ranges[index]) {scan_msg->ranges[index] = range;}
     }
   }
 
@@ -373,23 +372,6 @@ void PointCloudToLaserScanNode::publishProcessedCloud(
   }
 
   auto processed_input = cloud_msg;
-  if (!processed_cloud_frame_.empty() &&
-    processed_cloud_frame_ != cloud_msg->header.frame_id)
-  {
-    try {
-      auto transformed_cloud = std::make_shared<sensor_msgs::msg::PointCloud2>();
-      tf2_->transform(
-        *cloud_msg, *transformed_cloud, processed_cloud_frame_,
-        tf2::durationFromSec(tolerance_));
-      processed_input = transformed_cloud;
-    } catch (tf2::TransformException & ex) {
-      RCLCPP_WARN_THROTTLE(
-        this->get_logger(), *this->get_clock(), 2000,
-        "Processed cloud transform failure: %s", ex.what());
-      return;
-    }
-  }
-
   PointFields fields{};
   if (!findXYZFields(*processed_input, fields)) {
     RCLCPP_WARN_THROTTLE(

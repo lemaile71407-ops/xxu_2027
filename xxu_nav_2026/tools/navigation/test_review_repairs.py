@@ -35,57 +35,14 @@ def load(name, path):
     return module
 
 
-watchdog = load('review_watchdog', WORKSPACE / 'src/xxu_bringup/scripts/cmd_vel_watchdog.py')
 interfaces = load('review_interfaces', Path(__file__).with_name('check_interfaces.py'))
 navigation = load('review_navigation', Path(__file__).with_name('check_ega_navigation.py'))
 
 
 class FreshnessTest(unittest.TestCase):
-    def setUp(self):
-        self.clock = SimpleNamespace(nanoseconds=100_000_000_000)
-        self.clock.to_msg = lambda: Time(sec=self.clock.nanoseconds // 1_000_000_000,
-                                        nanosec=self.clock.nanoseconds % 1_000_000_000)
-        self.node = SimpleNamespace(
-            last_cmd=TwistStamped(), last_cmd_receive_time=None, timeout=.3,
-            require_odom=False, require_scan=False, require_joint_states=False, require_tf=False,
-            require_localization=False,
-            output_frame_id='base_link', _last_health_state=None,
-            publisher=Mock(), status_publisher=Mock(), get_logger=lambda: Mock(),
-            get_clock=lambda: SimpleNamespace(now=lambda: self.clock))
-        self.node._fresh = watchdog.CmdVelWatchdog._fresh
-        self.node._health = lambda now: watchdog.CmdVelWatchdog._health(self.node, now)
-
-    def send(self, sec=100, nanosec=0, received=10.0):
-        message = TwistStamped()
-        message.header.stamp = Time(sec=sec, nanosec=nanosec)
-        message.twist.linear.x = 1.0
-        with patch.object(watchdog.time, 'monotonic', return_value=received):
-            watchdog.CmdVelWatchdog.cmd_callback(self.node, message)
-        return message
-
-    def publish(self, now=10.0):
-        with patch.object(watchdog.time, 'monotonic', return_value=now):
-            watchdog.CmdVelWatchdog.publish_cmd(self.node)
-        return self.node.publisher.publish.call_args.args[0]
-
-    def test_output_does_not_renew_source_stamp(self):
-        message = self.send()
-        self.clock.nanoseconds += 200_000_000
-        self.assertEqual(self.publish(10.2).twist.linear.x, 1.0)
-        self.assertEqual(message.header.stamp, Time(sec=100))
-        self.clock.nanoseconds += 110_000_000
-        self.assertEqual(self.publish(10.21).twist.linear.x, 0.0)
-
-    def test_old_future_and_invalid_stamps_fail_closed(self):
-        for sec, nanos in [(1, 0), (101, 0), (-1, 0), (99, 1_000_000_000)]:
-            with self.subTest(sec=sec, nanos=nanos):
-                self.send(sec, nanos)
-                self.assertEqual(self.publish().twist.linear.x, 0.0)
-                self.assertFalse(self.node.status_publisher.publish.call_args.args[0].data)
-
-    def test_paused_ros_clock_still_times_out(self):
-        self.send()
-        self.assertEqual(self.publish(10.31).twist.linear.x, 0.0)
+    def test_installed_cpp_gate_source_stamp_and_steady_timeout(self):
+        subprocess.run([sys.executable, str(Path(__file__).with_name('test_cpp_bridge_pipeline.py')),
+                        'CppPipelineTest.test_watchdog_source_stamp_and_paused_clock_fail_closed'], check=True)
 
 
 class ProcessOwnershipTest(unittest.TestCase):

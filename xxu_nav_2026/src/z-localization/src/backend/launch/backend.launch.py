@@ -51,7 +51,8 @@ def generate_launch_description():
         'use_sim_time': 'false',
         'rviz': 'false',
         'mode': 'config',
-        'prior_map': ''
+        'prior_map': '',
+        'tf_output_topic': '/tf',
     }
 
     # 解析启动上下文，生成后端与可视化组件动作。
@@ -84,7 +85,8 @@ def generate_launch_description():
                 executable='backend_node',
                 name='backend_node',
                 output='screen',
-                parameters=[params, {'use_sim_time': launch_bool(args['use_sim_time'])}]
+                parameters=[params, {'use_sim_time': launch_bool(args['use_sim_time'])}],
+                remappings=[('/tf', args['tf_output_topic'])],
             )
         ]
         if launch_bool(args['rviz']):

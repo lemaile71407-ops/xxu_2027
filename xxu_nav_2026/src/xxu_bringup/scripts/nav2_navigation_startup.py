@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 """Start the Nav2 navigation lifecycle only after localization is usable."""
 
-import importlib.util
 import math
-from pathlib import Path
 import signal
 import time
 import uuid
 
 import rclpy
-from ament_index_python.packages import get_package_prefix
-from nav_msgs.msg import Odometry
-from std_msgs.msg import String
+from std_msgs.msg import Bool
 from nav2_msgs.srv import ManageLifecycleNodes
 from nav2_msgs.action import Spin
 from action_msgs.msg import GoalStatusArray
@@ -20,10 +16,25 @@ from lifecycle_msgs.srv import GetState
 from rclpy.action import ActionClient
 from rclpy.qos import QoSProfile, DurabilityPolicy
 from rclpy.signals import SignalHandlerOptions
-from rclpy.duration import Duration
 from rclpy.node import Node
-from rclpy.time import Time
-from tf2_ros import Buffer, TransformListener
+
+
+class BridgeReadiness:
+    """Low-rate readiness from the C++ gate; no sensor or TF deserialization."""
+
+    def __init__(self, timeout):
+        self.timeout = timeout
+        self.received = None
+        self.ready = False
+
+    def observe(self, message):
+        self.ready = message.data
+        self.received = time.monotonic()
+
+    def check(self, now, _ros_now_ns):
+        fresh = self.received is not None and 0 <= now - self.received <= self.timeout
+        return ((True, []) if self.ready and fresh else
+                (False, ['C++ localization/TF readiness unavailable or expired']))
 
 
 class IdleScan:
@@ -187,28 +198,17 @@ class NavigationStartup(Node):
         self.declare_parameter('localization_recovery_hold', 1.0)
         self.declare_parameter('idle_scan', False)
         self.declare_parameter('idle_scan_only', False)
-        self.localization_health = None
-        if self.get_parameter('require_localization').value:
-            # Reuse the final gate's source-time/trust contract without copying it.
-            path = Path(get_package_prefix('xxu_bringup')) / 'lib/xxu_bringup/cmd_vel_watchdog.py'
-            spec = importlib.util.spec_from_file_location('navigation_localization_health', path)
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            self.localization_health = module.LocalizationHealth(
-                float(self.get_parameter('localization_timeout').value),
-                float(self.get_parameter('localization_recovery_hold').value))
-            self.state_subscription = self.create_subscription(
-                String, str(self.get_parameter('localization_state_topic').value),
-                lambda m: self.localization_health.observe_state(m.data, time.monotonic()), 100)
-            self.pose_subscription = self.create_subscription(
-                Odometry, str(self.get_parameter('localization_pose_topic').value),
-                lambda m: self.localization_health.observe_pose(m, time.monotonic()), 100)
-
+        self.readiness = BridgeReadiness(
+            float(self.get_parameter('localization_timeout').value))
+        require_localization = self.get_parameter('require_localization').value
+        self.localization_health = self.readiness if require_localization else None
+        self.declare_parameter('readiness_topic', '/cmd_vel_watchdog/localization_ready'
+                               if require_localization else '/cmd_vel_watchdog/tf_ready')
+        self.ready_subscription = self.create_subscription(
+            Bool, str(self.get_parameter('readiness_topic').value),
+            self.readiness.observe,
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.manager_service = self.get_parameter("manager_service").value
-        self.global_frame = self.get_parameter("global_frame").value
-        self.odom_frame = self.get_parameter("odom_frame").value
-        self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
         self.client = self.create_client(ManageLifecycleNodes, self.manager_service)
         self.request_sent = False
         self.timer = self.create_timer(
@@ -227,22 +227,12 @@ class NavigationStartup(Node):
                 throttle_duration_sec=5.0,
             )
             return
-        if self.localization_health is not None:
-            ready, reasons = self.localization_health.check(
-                time.monotonic(), self.get_clock().now().nanoseconds)
-            if not ready:
-                self.get_logger().info('Waiting for trusted external localization: ' + '; '.join(reasons),
-                                       throttle_duration_sec=5.0)
-                return
-        if not self.tf_buffer.can_transform(
-            self.global_frame, self.odom_frame, Time(), timeout=Duration(seconds=0.0)
-        ):
-            self.get_logger().info(
-                f"Waiting for localization transform {self.global_frame} -> {self.odom_frame}",
-                throttle_duration_sec=5.0,
-            )
+        ready, reasons = self.readiness.check(
+            time.monotonic(), self.get_clock().now().nanoseconds)
+        if not ready:
+            self.get_logger().info('Waiting for C++ localization/TF readiness: ' + '; '.join(reasons),
+                                   throttle_duration_sec=5.0)
             return
-
         self.request_sent = True
         request = ManageLifecycleNodes.Request()
         request.command = ManageLifecycleNodes.Request.STARTUP

@@ -9,6 +9,7 @@ import time
 import unittest
 
 from domain_coordinator import domain_id
+from itertools import count
 import launch
 from launch.actions import ExecuteProcess
 from launch.substitutions import LaunchConfiguration
@@ -18,17 +19,19 @@ import launch_testing.asserts
 from localization_interfaces.msg import FrontendFrame, FrontendSession
 from nav_msgs.msg import Path
 import rclpy
-from rclpy.qos import DurabilityPolicy, QoSProfile
+from rclpy.qos import DurabilityPolicy, QoSProfile, qos_profile_sensor_data
 from sensor_msgs.msg import PointCloud2
 from sensor_msgs_py import point_cloud2
 from std_msgs.msg import Header
 
+# Avoid the live application domain (1); reserve each test domain as before.
+_test_domains = count(186)
 _resources = ExitStack()
 atexit.register(_resources.close)
 
 
 def generate_test_description():
-    os.environ['ROS_DOMAIN_ID'] = str(_resources.enter_context(domain_id()))
+    os.environ['ROS_DOMAIN_ID'] = str(_resources.enter_context(domain_id(selector=lambda: next(_test_domains))))
     os.environ['ROS_LOCALHOST_ONLY'] = '1'
     os.environ['ROS_LOG_DIR'] = _resources.enter_context(tempfile.TemporaryDirectory())
     process = ExecuteProcess(cmd=[
@@ -69,7 +72,7 @@ class TestVisualization(unittest.TestCase):
         self.frames = self.node.create_publisher(FrontendFrame, '/frontend/frame', 10)
         self.clouds, self.maps, self.paths = [], [], []
         self.node.create_subscription(
-            PointCloud2, '/frontend/cloud_registered', self.clouds.append, 10)
+            PointCloud2, '/frontend/cloud_registered', self.clouds.append, qos_profile_sensor_data)
         self.node.create_subscription(
             PointCloud2, '/frontend/cloud_map', self.maps.append, retained)
         self.node.create_subscription(Path, '/frontend/path', self.paths.append, retained)

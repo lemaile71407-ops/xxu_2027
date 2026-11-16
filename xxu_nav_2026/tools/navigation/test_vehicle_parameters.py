@@ -381,7 +381,10 @@ class VehicleParametersTest(unittest.TestCase):
             nodes.append(kwargs)
             return Node(**kwargs)
 
-        with patch.object(module, 'prepare_assets', return_value=('/world', '/model', '<robot/>')), \
+        robot = '''<robot name="probe"><link name="base_link"/><link name="lio_base_sensor"/>
+          <joint name="sensor" type="fixed"><parent link="base_link"/>
+          <child link="lio_base_sensor"/><origin xyz="0 0 .0845"/></joint></robot>'''
+        with patch.object(module, 'prepare_assets', return_value=('/world', '/model', robot)), \
                 patch.object(module, 'Node', side_effect=capture), \
                 patch('xxu_bringup.sensor_launch.Node', side_effect=capture):
             module.launch_setup(context)
@@ -389,6 +392,12 @@ class VehicleParametersTest(unittest.TestCase):
                          {node['package'] for node in nodes})
         self.assertEqual(sum(node['name'] == 'gimbal_imu_compensator' for node in nodes), 1)
         self.assertEqual(sum(node['name'] == 'pointcloud_motion_compensator' for node in nodes), 1)
+        self.assertNotIn('robot_state_publisher', {node['package'] for node in nodes})
+        statics = [node for node in nodes if node.get('executable') == 'static_transform_publisher']
+        self.assertEqual(len(statics), 1)
+        arguments = dict(zip(statics[0]['arguments'][::2], statics[0]['arguments'][1::2]))
+        self.assertEqual(arguments['--frame-id'], 'base_link')
+        self.assertEqual(arguments['--child-frame-id'], 'lio_base_sensor')
 
 
 if __name__ == '__main__':

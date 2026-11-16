@@ -11,13 +11,19 @@
   <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>bringup</exec_depend>
   <exec_depend>rmw_cyclonedds_cpp</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>lifecycle_msgs</exec_depend>
   <exec_depend>localization_interfaces</exec_depend>
-  <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>nav_msgs</exec_depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
+  <depend>eigen</depend>
+  <depend>yaml-cpp</depend>
+  <depend>tf2</depend>
   <exec_depend>nav2_msgs</exec_depend>
   <exec_depend>action_msgs</exec_depend>
   <exec_depend>unique_identifier_msgs</exec_depend>
@@ -42,12 +48,11 @@
   <exec_depend>pb_nav2_plugins</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>rviz2</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>std_msgs</exec_depend>
-  <exec_depend>tf2_ros</exec_depend>
-  <exec_depend>python3-numpy</exec_depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>tf2_ros</depend>
   <exec_depend>python3-yaml</exec_depend>
-  <exec_depend>tf2_msgs</exec_depend>
+  <depend>tf2_msgs</depend>
   <exec_depend>pointcloud_to_laserscan</exec_depend>
 
 

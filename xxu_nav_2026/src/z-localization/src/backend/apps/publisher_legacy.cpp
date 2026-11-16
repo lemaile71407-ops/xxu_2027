@@ -70,7 +70,10 @@ void Publisher::publishLegacyOutput(const nav_msgs::msg::Odometry& odom,
     if (legacy_pose_pub_) {
         legacy_pose_pub_->publish(pose);
     }
-    if (projection.global_pose_available && parameters_.legacy.publish_tf && tf_broadcaster_ &&
+    // ZLIO owns only map -> odom; the base bridge owns odom -> base_link.
+    // Legacy message outputs must not introduce a second map -> body branch.
+    if (parameters_.input.frontend != "zlio" &&
+        projection.global_pose_available && parameters_.legacy.publish_tf && tf_broadcaster_ &&
         !parameters_.input.body_frame.empty()) {
         tf_broadcaster_->sendTransform(toRosTransform(T_map_body, parameters_.input.map_frame,
                                                       parameters_.input.body_frame,

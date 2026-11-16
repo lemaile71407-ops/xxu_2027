@@ -121,11 +121,11 @@ def main():
         Parameter('use_sim_time', value=True)] if args.external_localization else [])
     localization_health = None
     if args.external_localization:
-        path = Path(__file__).resolve().parents[2] / 'src/xxu_bringup/scripts/cmd_vel_watchdog.py'
+        path = Path(__file__).resolve().parents[2] / 'src/xxu_bringup/scripts/nav2_navigation_startup.py'
         spec = importlib.util.spec_from_file_location('test_localization_health', path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        localization_health = module.LocalizationHealth(.5, 1.)
+        localization_health = module.BridgeReadiness(.5)
     zero_pub = n.create_publisher(TwistStamped, '/cmd_vel_nav', 10) if args.external_localization else None
     zero_mode = args.external_localization
     guard_armed = False
@@ -159,13 +159,15 @@ def main():
                     evidence_name, values = 'truth', [a.x, a.y, current['truth_yaw']]
                     stamp = t.header.stamp
         elif isinstance(m, Odometry) and topic == '/localization/odometry':
-            localization_health.observe_pose(m, time.monotonic())
+            pass  # Pose remains recorded; readiness is computed by the C++ gate.
         elif isinstance(m, Odometry) and topic == '/odometry':
             t = m.twist.twist
             evidence_name, values, stamp = 'source_odom', [t.linear.x, t.linear.y, t.angular.z], m.header.stamp
         elif isinstance(m, String):
             current['localization_state'] = m.data
-            localization_health.observe_state(m.data, time.monotonic())
+
+        elif topic == '/cmd_vel_watchdog/localization_ready':
+            localization_health.observe(m)
         elif isinstance(m, OccupancyGrid):
             current.setdefault('costmaps', {})[topic] = {
                 'frame': m.header.frame_id, 'lethal_cells': sum(v == 100 for v in m.data),
@@ -205,7 +207,7 @@ def main():
              ('/cmd_vel_watchdog/healthy', Bool), ('/collision_monitor_state', CollisionMonitorState),
              ('/joint_states', JointState), ('/plan', NavPath)]
     if args.external_localization:
-        items += [('/backend_node/localization_state', String), ('/localization/odometry', Odometry),
+        items += [('/cmd_vel_watchdog/localization_ready', Bool), ('/backend_node/localization_state', String), ('/localization/odometry', Odometry),
                   ('/odometry', Odometry), ('/local_costmap/costmap', OccupancyGrid),
                   ('/global_costmap/costmap', OccupancyGrid)]
     subs = [n.create_subscription(typ, topic, lambda m, t=topic: cb(t, m), qos_profile_sensor_data)
@@ -243,7 +245,7 @@ def main():
         return future.result()
     def pose():
         try:
-            t = buf.lookup_transform('map', 'base_footprint', rclpy.time.Time()).transform.translation
+            t = buf.lookup_transform('map', 'base_link', rclpy.time.Time()).transform.translation
             return [t.x, t.y]
         except Exception:
             return None
@@ -389,7 +391,7 @@ def main():
                                    'truth_stamp': current['truth_stamp'],
                                    'truth': [*current['truth'], current['truth_yaw']]}
                     try:
-                        transform = buf.lookup_transform('map', 'base_footprint', rclpy.time.Time())
+                        transform = buf.lookup_transform('map', 'base_link', rclpy.time.Time())
                         t = transform.transform.translation
                         observation.update(map=[t.x, t.y, yaw(transform.transform.rotation)],
                                            map_stamp=transform.header.stamp.sec + transform.header.stamp.nanosec / 1e9)

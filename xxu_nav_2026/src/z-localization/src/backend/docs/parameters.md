@@ -342,7 +342,7 @@
 | `publish_pose` | 布尔 | `true` | 是否发布兼容车体位姿 |
 | `publish_twist` | 布尔 | `true` | 是否发布兼容车体速度，速度在 map 系表达 |
 | `publish_path` | 布尔 | `false` | 是否发布兼容车体轨迹 |
-| `publish_tf` | 布尔 | `true` | 是否发布 map → body TF |
+| `publish_tf` | 布尔 | 主 YAML 为 `false` | 仅 legacy 输入可选发布 map → body；ZLIO 输入始终禁止该分支 |
 | `publish_initializing` | 布尔 | `false` | 是否允许初始化期间发布兼容位姿、速度和路径；TF 还需已有全局位姿 |
 | `publish_untrusted` | 布尔 | `false` | 是否允许 `SUSPECT` / `LOST` 时发布兼容运动输出；发布时位姿冻结、速度清零 |
 | `pose_topic` | 字符串 | `/tdt_lio_pose` | 兼容车体位姿话题名 |

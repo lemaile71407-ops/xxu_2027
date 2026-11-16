@@ -1,7 +1,7 @@
 """统一启动 ZLIO 前端、定位后端及可选的 Livox 驱动。"""
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
@@ -23,7 +23,9 @@ def generate_launch_description():
         'point_time_field': 'offset_time',
         'point_time_scale': '1e-9',
         'point_time_absolute': 'false',
-        'publish_tf': 'true',
+        'publish_tf': 'false',
+        'deskewed_cloud_frame': '',
+        'backend_tf_topic': '/tf',
         'use_sim_time': 'false',
         'wait_for_start': 'false',
         'reset_mode': 'warm',
@@ -37,6 +39,7 @@ def generate_launch_description():
     return LaunchDescription(
         [
             *(DeclareLaunchArgument(key, default_value=value) for key, value in defaults.items()),
+            SetEnvironmentVariable(name='OMP_NUM_THREADS', value='2'),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
                     PathJoinSubstitution([
@@ -63,6 +66,7 @@ def generate_launch_description():
                             'point_time_scale',
                             'point_time_absolute',
                             'publish_tf',
+                            'deskewed_cloud_frame',
                             'use_sim_time',
                             'wait_for_start',
                             'reset_mode',
@@ -77,6 +81,7 @@ def generate_launch_description():
                 ),
                 launch_arguments={
                     'config_file': args['backend_config'],
+                    'tf_output_topic': args['backend_tf_topic'],
                     **{key: args[key] for key in ('use_sim_time', 'mode', 'prior_map', 'rviz')}
                 }.items()
             )

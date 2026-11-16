@@ -50,9 +50,12 @@ def external_setup(context):
             'imu_acceleration_scale': '1.0', 'point_time_field': 'timestamp',
             'point_time_scale': '1e-9', 'point_time_absolute': 'true', 'publish_tf': 'false',
             'rviz': 'false',
+            'deskewed_cloud_frame': contract.frame('lidar_compensated'),
+            'backend_tf_topic': '/sentry/tf/localization',
         }),
         include(Path(bringup_share) / 'launch/zlio_base_adapter.launch.py', {
-            'use_sim_time': 'true', 'publish_deskewed_cloud': 'true',
+            'use_sim_time': 'true',
+            'tf_output_topic': '/sentry/tf/odometry',
         }),
         include(Path(bringup_share) / 'launch/navigation.launch.py', {
             'idle_scan': lc('idle_scan'),

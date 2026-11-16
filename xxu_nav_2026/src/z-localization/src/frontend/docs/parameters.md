@@ -183,7 +183,7 @@
 | `maximum_buffered_points` | 整数，`1000000` | 点数容量上限，分别作用于单包、ROS 待处理队列和核心点云缓存；须 `>0` |
 | `maximum_queue_events` | 整数，`8192` | ROS 待处理队列的消息数上限；一条 IMU 或一次扫描各计一个事件，须 `>0` |
 | `output_resolution` | 浮点，`0.10` m | 导出去畸变点云的采样体素边长；允许 `0` 或 `≥1e-4 m`，`0` 输出空点云 |
-| `publish_tf` | 布尔，`true` | 是否发布 `world_frame → body_frame` 的高频预测 TF |
+| `publish_tf` | 布尔，`false` | 仅接受 `false`；使用 C++ 底盘桥发布限频的 `odom → base_link`，拒绝 `true` 以消除 IMU 频率的额外 TF |
 | `publish_lidar_diagnostics` | 布尔，`false` | 启动时启用 `/frontend/lidar_diagnostics`；输出初始化后的逐观测诊断，格式见 [接口说明](../README.md#可选-lidar-更新诊断)；不支持运行中切换 |
 | `wait_for_start` | 布尔，`false` | 是否等待 `/localization_start` 的 `data=true` 请求后再接收输入；等待期间丢弃数据 |
 | `reset_mode` | 字符串，`warm` | `warm` 保留速度、倾角和 IMU 零偏，重设位置与航向；条件不满足时冷启动。`cold` 始终重新初始化 |

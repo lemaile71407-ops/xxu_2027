@@ -22,7 +22,7 @@
 #include <limits>
 
 #include "nav2_costmap_2d/cost_values.hpp"
-#include "tf2/utils.h"
+#include "tf2/utils.hpp"
 #include "nav2_util/node_utils.hpp"
 
 namespace pb_nav2_behaviors

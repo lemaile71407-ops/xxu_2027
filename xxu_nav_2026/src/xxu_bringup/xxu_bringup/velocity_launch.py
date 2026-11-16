@@ -21,10 +21,9 @@ def velocity_chain(*, use_sim_time, cmd_vel_topic,
         "require_joint_states": True, "joint_states_topic": joint_states_topic,
         "joint_states_timeout": 0.5, "require_tf": True,
         "tf_target_frame": contract.frame('odom'), "tf_source_frame": contract.frame('navigation_base'), "tf_timeout": 0.5,
-        "required_tf_pairs": [f"{contract.frame('odom')}->{contract.frame('ground_base')}",
-                              f"{contract.frame('navigation_base')}->{contract.frame('gimbal')}"],
+        "required_tf_pairs": [f"{contract.frame('odom')}->{contract.frame('navigation_base')}"],
     }
     parameters.update(watchdog_parameters or {})
-    watchdog = Node(package="xxu_bringup", executable="cmd_vel_watchdog.py",
+    watchdog = Node(package="xxu_bringup", executable="cmd_vel_watchdog",
                     name="cmd_vel_watchdog", output="screen", parameters=[parameters])
     return (watchdog,)

@@ -43,7 +43,8 @@ def generate_launch_description():
             DeclareLaunchArgument('point_time_field', default_value='offset_time'),
             DeclareLaunchArgument('point_time_scale', default_value='1e-9'),
             DeclareLaunchArgument('point_time_absolute', default_value='false'),
-            DeclareLaunchArgument('publish_tf', default_value='true'),
+            DeclareLaunchArgument('publish_tf', default_value='false'),
+            DeclareLaunchArgument('deskewed_cloud_frame', default_value=''),
             DeclareLaunchArgument(
                 'publish_lidar_diagnostics', default_value='false',
                 description='发布初始化后每次 LiDAR 观测的匹配、信息矩阵与先验/后验诊断'
@@ -64,6 +65,7 @@ def generate_launch_description():
                 parameters=[
                     {
                         'config_file': LaunchConfiguration('config'),
+                        'deskewed_cloud_frame': LaunchConfiguration('deskewed_cloud_frame'),
                         'input_type': LaunchConfiguration('input_type'),
                         'lidar_topic': LaunchConfiguration('lidar_topic'),
                         'imu_topic': LaunchConfiguration('imu_topic'),
