@@ -82,7 +82,7 @@ class TestMapService(unittest.TestCase):
     def tearDownClass(cls):
         """释放测试节点并关闭 ROS 上下文。"""
         cls.node.destroy_node()
-        rclpy.shutdown()
+        rclpy.try_shutdown()
 
     def wait_until(self, predicate, timeout=10, drive=None):
         """在截止时间内处理 ROS 回调，并可持续驱动输入直到条件满足。"""

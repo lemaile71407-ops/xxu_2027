@@ -52,8 +52,6 @@
 #include <thread>
 #include <utility>
 
-#include "sensor_msgs/point_cloud2_iterator.hpp"
-
 namespace pointcloud_to_laserscan
 {
 namespace
@@ -103,42 +101,26 @@ bool isHostBigendian()
   return *reinterpret_cast<const uint8_t *>(&value) == 0x01;
 }
 
-bool readFloat32(
-  const std::vector<uint8_t> & data,
-  const size_t offset,
-  const bool is_bigendian,
-  float & value)
+float readFloat32(const uint8_t * data, bool swap_bytes)
 {
-  if (offset + sizeof(float) > data.size()) {
-    return false;
-  }
-
   uint8_t bytes[sizeof(float)];
-  std::memcpy(bytes, data.data() + offset, sizeof(float));
-  if (isHostBigendian() != is_bigendian) {
+  std::memcpy(bytes, data, sizeof(float));
+  if (swap_bytes) {
     std::reverse(bytes, bytes + sizeof(float));
   }
+  float value;
   std::memcpy(&value, bytes, sizeof(float));
-  return true;
+  return value;
 }
 
-bool writeFloat32(
-  std::vector<uint8_t> & data,
-  const size_t offset,
-  const bool is_bigendian,
-  const float value)
+void writeFloat32(uint8_t * data, bool swap_bytes, float value)
 {
-  if (offset + sizeof(float) > data.size()) {
-    return false;
-  }
-
   uint8_t bytes[sizeof(float)];
   std::memcpy(bytes, &value, sizeof(float));
-  if (isHostBigendian() != is_bigendian) {
+  if (swap_bytes) {
     std::reverse(bytes, bytes + sizeof(float));
   }
-  std::memcpy(data.data() + offset, bytes, sizeof(float));
-  return true;
+  std::memcpy(data, bytes, sizeof(float));
 }
 }  // namespace
 
@@ -261,8 +243,12 @@ void PointCloudToLaserScanNode::subscriptionListenerThreadLoop()
 void PointCloudToLaserScanNode::cloudCallback(
   sensor_msgs::msg::PointCloud2::ConstSharedPtr cloud_msg)
 {
-  PointFields validated_fields;
-  if (!findXYZFields(*cloud_msg, validated_fields)) {return;}
+  PointFields fields;
+  if (!findXYZFields(*cloud_msg, fields)) {
+    RCLCPP_WARN_THROTTLE(
+      this->get_logger(), steady_clock_, 2000, "Invalid PointCloud2 layout or FLOAT32 x/y/z fields");
+    return;
+  }
   if (cached_source_frame_.empty() && cloud_msg->header.frame_id == target_frame_) {
     cached_source_frame_ = target_frame_; static_subscription_.reset(); tf2_.reset();
   }
@@ -296,8 +282,8 @@ void PointCloudToLaserScanNode::cloudCallback(
     scan_msg->ranges.assign(ranges_size, scan_msg->range_max + inf_epsilon_);
   }
 
-  // Transform cloud if necessary
-  if (scan_msg->header.frame_id != cloud_msg->header.frame_id) {
+  const bool transform_cloud = scan_msg->header.frame_id != cloud_msg->header.frame_id;
+  if (transform_cloud) {
     try {
       if (cached_source_frame_.empty()) {
         const auto transform = tf2_->lookupTransform(
@@ -314,43 +300,62 @@ void PointCloudToLaserScanNode::cloudCallback(
         tf2_.reset();
       }
       if (cached_source_frame_ != cloud_msg->header.frame_id) {return;}
-      PointFields fields;
-      if (!findXYZFields(*cloud_msg, fields)) {return;}
-      auto cloud = std::make_shared<sensor_msgs::msg::PointCloud2>(*cloud_msg);
-      cloud->header.frame_id = target_frame_;
-      for (std::uint32_t row = 0; row < cloud->height; ++row) {
-        for (std::uint32_t col = 0; col < cloud->width; ++col) {
-          const std::size_t offset = static_cast<std::size_t>(row) * cloud->row_step + col * cloud->point_step;
-          float x, y, z;
-          if (!readFloat32(cloud->data, offset + fields.x_offset, cloud->is_bigendian, x) ||
-            !readFloat32(cloud->data, offset + fields.y_offset, cloud->is_bigendian, y) ||
-            !readFloat32(cloud->data, offset + fields.z_offset, cloud->is_bigendian, z)) {return;}
-          const Eigen::Vector3d p = target_from_source_ * Eigen::Vector3d(x, y, z);
-          writeFloat32(cloud->data, offset + fields.x_offset, cloud->is_bigendian, p.x());
-          writeFloat32(cloud->data, offset + fields.y_offset, cloud->is_bigendian, p.y());
-          writeFloat32(cloud->data, offset + fields.z_offset, cloud->is_bigendian, p.z());
-        }
-      }
-      cloud_msg = cloud;
     } catch (tf2::TransformException & ex) {
       RCLCPP_ERROR_STREAM(this->get_logger(), "Transform failure: " << ex.what());
       return;
     }
   }
 
+  sensor_msgs::msg::PointCloud2::UniquePtr processed_cloud;
+  if (processed_cloud_pub_ && (processed_cloud_pub_->get_subscription_count() > 0 ||
+    processed_cloud_pub_->get_intra_process_subscription_count() > 0))
+  {
+    processed_cloud = std::make_unique<sensor_msgs::msg::PointCloud2>();
+    processed_cloud->header = scan_msg->header;
+    if (!processed_cloud_frame_.empty()) {
+      processed_cloud->header.frame_id = processed_cloud_frame_;
+    }
+    processed_cloud->height = 1;
+    processed_cloud->fields = cloud_msg->fields;
+    processed_cloud->is_bigendian = cloud_msg->is_bigendian;
+    processed_cloud->point_step = cloud_msg->point_step;
+    processed_cloud->is_dense = false;
+    processed_cloud->data.reserve(
+      static_cast<std::size_t>(cloud_msg->height) * cloud_msg->width * cloud_msg->point_step);
+  }
+
   // Respect row padding and byte order; never interpret padding as points.
-  PointFields fields;
-  if (!findXYZFields(*cloud_msg, fields)) {return;}
+  const bool swap_bytes = isHostBigendian() != cloud_msg->is_bigendian;
   for (std::uint32_t row = 0; row < cloud_msg->height; ++row) {
     for (std::uint32_t col = 0; col < cloud_msg->width; ++col) {
-      const std::size_t offset = static_cast<std::size_t>(row) * cloud_msg->row_step + col * cloud_msg->point_step;
-      float x, y, z;
-      if (!readFloat32(cloud_msg->data, offset + fields.x_offset, cloud_msg->is_bigendian, x) ||
-        !readFloat32(cloud_msg->data, offset + fields.y_offset, cloud_msg->is_bigendian, y) ||
-        !readFloat32(cloud_msg->data, offset + fields.z_offset, cloud_msg->is_bigendian, z)) {return;}
+      const auto * point = cloud_msg->data.data() +
+        static_cast<std::size_t>(row) * cloud_msg->row_step + col * cloud_msg->point_step;
+      float x = readFloat32(point + fields.x_offset, swap_bytes);
+      float y = readFloat32(point + fields.y_offset, swap_bytes);
+      float z = readFloat32(point + fields.z_offset, swap_bytes);
+      if (transform_cloud) {
+        const Eigen::Vector3d transformed = target_from_source_ * Eigen::Vector3d(x, y, z);
+        // Retain the FLOAT32 rounding of a transformed PointCloud2 record.
+        x = static_cast<float>(transformed.x());
+        y = static_cast<float>(transformed.y());
+        z = static_cast<float>(transformed.z());
+      }
       if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) || z > max_height_ || z < min_height_) {continue;}
       const double range = std::hypot(x, y);
       if (range < robot_self_filter_radius_ || range < range_min_ || range > range_max_) {continue;}
+      if (processed_cloud && !(x < crop_min_x_ || x > crop_max_x_ ||
+        y < crop_min_y_ || y > crop_max_y_))
+      {
+        auto & data = processed_cloud->data;
+        const std::size_t start = data.size();
+        data.insert(data.end(), point, point + cloud_msg->point_step);
+        auto * record = data.data() + start;
+        writeFloat32(record + fields.x_offset, swap_bytes, x);
+        writeFloat32(record + fields.y_offset, swap_bytes, y);
+        writeFloat32(
+          record + fields.z_offset, swap_bytes,
+          processed_cloud_project_to_2d_ ? static_cast<float>(processed_cloud_z_value_) : z);
+      }
       const double angle = std::atan2(y, x);
       if (angle < scan_msg->angle_min || angle > scan_msg->angle_max) {continue;}
       const int index = (angle - scan_msg->angle_min) / scan_msg->angle_increment;
@@ -359,100 +364,13 @@ void PointCloudToLaserScanNode::cloudCallback(
     }
   }
 
-  this->publishProcessedCloud(cloud_msg);
-
+  if (processed_cloud) {
+    processed_cloud->width = static_cast<uint32_t>(
+      processed_cloud->data.size() / processed_cloud->point_step);
+    processed_cloud->row_step = static_cast<uint32_t>(processed_cloud->data.size());
+    processed_cloud_pub_->publish(std::move(processed_cloud));
+  }
   pub_->publish(std::move(scan_msg));
-}
-
-void PointCloudToLaserScanNode::publishProcessedCloud(
-  sensor_msgs::msg::PointCloud2::ConstSharedPtr cloud_msg)
-{
-  if (!publish_processed_cloud_ || !processed_cloud_pub_) {
-    return;
-  }
-
-  auto processed_input = cloud_msg;
-  PointFields fields{};
-  if (!findXYZFields(*processed_input, fields)) {
-    RCLCPP_WARN_THROTTLE(
-      this->get_logger(), *this->get_clock(), 2000,
-      "PointCloud2 x/y/z fields must exist and be FLOAT32");
-    return;
-  }
-
-  sensor_msgs::msg::PointCloud2 output;
-  output.header = processed_input->header;
-  if (!processed_cloud_frame_.empty()) {
-    output.header.frame_id = processed_cloud_frame_;
-  }
-  output.height = 1;
-  output.fields = processed_input->fields;
-  output.is_bigendian = processed_input->is_bigendian;
-  output.point_step = processed_input->point_step;
-  output.is_dense = false;
-  output.data.reserve(processed_input->data.size());
-
-  for (uint32_t row = 0; row < processed_input->height; ++row) {
-    const size_t row_start = static_cast<size_t>(row) * processed_input->row_step;
-    for (uint32_t column = 0; column < processed_input->width; ++column) {
-      const size_t point_start =
-        row_start + static_cast<size_t>(column) * processed_input->point_step;
-      if (point_start + processed_input->point_step > processed_input->data.size()) {
-        continue;
-      }
-
-      float x = 0.0F;
-      float y = 0.0F;
-      float z = 0.0F;
-      if (!readFloat32(
-          processed_input->data, point_start + fields.x_offset,
-          processed_input->is_bigendian, x) ||
-        !readFloat32(
-          processed_input->data, point_start + fields.y_offset,
-          processed_input->is_bigendian, y) ||
-        !readFloat32(
-          processed_input->data, point_start + fields.z_offset,
-          processed_input->is_bigendian, z))
-      {
-        continue;
-      }
-
-      if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
-        continue;
-      }
-
-      if (z < min_height_ || z > max_height_) {
-        continue;
-      }
-      if (x < crop_min_x_ || x > crop_max_x_ || y < crop_min_y_ || y > crop_max_y_) {
-        continue;
-      }
-
-      const double range = std::hypot(x, y);
-      if (range < robot_self_filter_radius_ || range < range_min_ || range > range_max_) {
-        continue;
-      }
-
-      const size_t output_start = output.data.size();
-      output.data.insert(
-        output.data.end(),
-        processed_input->data.begin() +
-        static_cast<std::vector<uint8_t>::difference_type>(point_start),
-        processed_input->data.begin() +
-        static_cast<std::vector<uint8_t>::difference_type>(
-          point_start + processed_input->point_step));
-
-      writeFloat32(output.data, output_start + fields.x_offset, output.is_bigendian, x);
-      writeFloat32(output.data, output_start + fields.y_offset, output.is_bigendian, y);
-      writeFloat32(
-        output.data, output_start + fields.z_offset, output.is_bigendian,
-        processed_cloud_project_to_2d_ ? static_cast<float>(processed_cloud_z_value_) : z);
-    }
-  }
-
-  output.width = static_cast<uint32_t>(output.data.size() / output.point_step);
-  output.row_step = static_cast<uint32_t>(output.data.size());
-  processed_cloud_pub_->publish(output);
 }
 
 }  // namespace pointcloud_to_laserscan

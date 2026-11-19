@@ -39,7 +39,7 @@ def external_setup(context):
         include(Path(sim_share) / 'launch/rm_sim_gazebo.launch.py', {
             **{key: lc(key) for key in ('field_model', 'spawn_x', 'spawn_y', 'spawn_yaw',
                                        'gazebo_gui', 'lidar_mode', 'rgl_plugin_dir', 'robot_model', 'imu_sampling',
-                                       'dynamic_test_vehicle')},
+                                       'dynamic_test_vehicle', 'clock_publish_rate')},
             'rgl_point_timing': 'uniform', 'require_localization': 'true',
         }),
         include(Path(get_package_share_directory('bringup')) / 'launch/bringup.launch.py', {
@@ -75,6 +75,7 @@ def generate_launch_description():
         'gazebo_gui': 'true', 'rviz': 'true',
         'start_navigation': 'true', 'enable_localization': 'true', 'dynamic_test_vehicle': 'false',
         'idle_scan': 'false',
+        'clock_publish_rate': '200.0',
         'lidar_mode': 'rgl', 'rgl_plugin_dir': '',
         'robot_model': 'ega_folded',
         'robot_geometry_file': RobotGeometryFile(LaunchConfiguration('robot_model'), sim_share),

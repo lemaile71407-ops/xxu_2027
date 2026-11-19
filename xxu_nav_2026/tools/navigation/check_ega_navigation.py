@@ -16,6 +16,7 @@ import subprocess
 import time
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.action import ActionClient
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.parameter import Parameter
@@ -435,6 +436,9 @@ def main():
                 g['localization_stability']['passed'] and g['parking_after_stability']['passed']
                 and g['stationary_velocity']['passed']))
             for g in report['goals'])
+    except (KeyboardInterrupt, ExternalShutdownException):
+        report['interrupted'] = True
+        report['passed'] = False
     except Exception as e:
         report['error'] = repr(e)
         print(args.name, 'ERROR', repr(e), flush=True)

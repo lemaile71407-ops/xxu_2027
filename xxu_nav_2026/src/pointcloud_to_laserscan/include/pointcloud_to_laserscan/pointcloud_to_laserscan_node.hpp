@@ -77,8 +77,7 @@ private:
 
   void subscriptionListenerThreadLoop();
 
-  void publishProcessedCloud(sensor_msgs::msg::PointCloud2::ConstSharedPtr cloud_msg);
-
+  rclcpp::Clock steady_clock_{RCL_STEADY_TIME};
   std::unique_ptr<tf2_ros::Buffer> tf2_;
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr static_subscription_;
   Eigen::Isometry3d target_from_source_ = Eigen::Isometry3d::Identity();

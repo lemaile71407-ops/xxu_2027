@@ -7,6 +7,7 @@ import time
 import uuid
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from std_msgs.msg import Bool
 from nav2_msgs.srv import ManageLifecycleNodes
 from nav2_msgs.action import Spin
@@ -264,13 +265,17 @@ def main():
     node = NavigationStartup()
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
-        if node.idle_scan is not None and rclpy.ok():
-            node.idle_scan.stop()
-        node.destroy_node()
-        rclpy.try_shutdown()
+        try:
+            if node.idle_scan is not None and rclpy.ok():
+                node.idle_scan.stop()
+        except (KeyboardInterrupt, ExternalShutdownException):
+            pass
+        finally:
+            node.destroy_node()
+            rclpy.try_shutdown()
 
 
 if __name__ == "__main__":

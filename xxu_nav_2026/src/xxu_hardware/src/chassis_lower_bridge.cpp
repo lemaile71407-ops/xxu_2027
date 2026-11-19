@@ -56,6 +56,14 @@ public:
     if (fd_ >= 0) {write_frame(state_.shutdown_stop()); ::close(fd_);}
   }
 private:
+  struct PublishedStatus
+  {
+    double time;
+    bool connected, running, tx_run;
+    std::string reason;
+    std::optional<std::uint16_t> chassis_flags;
+  };
+
   double parameter(const char * name, double initial, bool allow_zero = false)
   {
     const double value = declare_parameter(name, initial);
@@ -95,7 +103,6 @@ private:
     const double time = steady_seconds();
     reconnect_at_ = time + reconnect_; parser_.clear();
     sample_ms_.reset(); x_ = y_ = yaw_ = 0.; state_.link_reset(time, reason);
-    tx_.reset();
   }
   void open_serial()
   {
@@ -180,17 +187,36 @@ private:
         (!fresh_stamp_ || (age >= 0 && age <= command_timeout_));
       const auto & t = command_.twist;
       const auto bytes = state_.next(time, t.linear.x, t.linear.y, t.angular.z, valid);
-      tx_ = nlohmann::json{{"seq", state_.last_tx_seq}, {"mode", state_.last_tx_run ? 1 : 0},
-        {"state", state_.running ? "RUNNING" : "WAIT_STOP_ACK"}, {"stop_reason", state_.reason}, {"invalid_reason", ""}};
       if (!write_frame(bytes)) {reset_link("serial_write_error");}
     }
+    publish_status();
+  }
+  void publish_status()
+  {
+    const double time = steady_seconds();
+    const bool connected = fd_ >= 0;
+    const bool tx_run = connected && state_.last_tx_run;
+    const auto chassis_flags = state_.status ? std::optional{state_.status->status} : std::nullopt;
+    // Sequence numbers, ages and parser counters update on the heartbeat.
+    if (published_status_ && time - published_status_->time < .2 &&
+      published_status_->connected == connected && published_status_->running == state_.running &&
+      published_status_->tx_run == tx_run && published_status_->reason == state_.reason &&
+      published_status_->chassis_flags == chassis_flags)
+    {
+      return;
+    }
+
+    const char * state_name = state_.running ? "RUNNING" : "WAIT_STOP_ACK";
     const auto & c = parser_.counters;
-    nlohmann::json status{{"connected", fd_ >= 0}, {"port", port_},
-      {"state", state_.running ? "RUNNING" : "WAIT_STOP_ACK"}, {"stop_reason", state_.reason},
-      {"tx", tx_ ? *tx_ : nlohmann::json(nullptr)},
+    nlohmann::json status{{"connected", connected}, {"port", port_},
+      {"state", state_name}, {"stop_reason", state_.reason}, {"tx", nullptr},
       {"rx_age_s", state_.status_time ? nlohmann::json(time - *state_.status_time) : nlohmann::json(nullptr)},
       {"chassis", nullptr}, {"parser", {{"frames_ok", c.frames_ok}, {"bad_header", c.bad_header},
         {"bad_version", c.bad_version}, {"bad_type", c.bad_type}, {"bad_length", c.bad_length}, {"bad_crc", c.bad_crc}}}};
+    if (connected) {
+      status["tx"] = {{"seq", state_.last_tx_seq}, {"mode", tx_run ? 1 : 0},
+        {"state", state_name}, {"stop_reason", state_.reason}, {"invalid_reason", ""}};
+    }
     if (state_.status) {
       const auto & s = *state_.status;
       status["chassis"] = {{"seq", s.seq}, {"last_seq", s.last_seq}, {"status_raw", s.status},
@@ -199,6 +225,7 @@ private:
         {"wheel_valid", s.wheel_valid()}, {"sample_time_ms", s.sample_ms}};
     }
     std_msgs::msg::String message; message.data = status.dump(); status_pub_->publish(message);
+    published_status_ = PublishedStatus{time, connected, state_.running, tx_run, state_.reason, chassis_flags};
   }
   int fd_ = -1, baudrate_;
   std::string port_, expected_, base_, wheel_frame_;
@@ -207,7 +234,7 @@ private:
   std::int64_t last_pub_ns_ = 0;
   std::optional<std::uint32_t> sample_ms_;
   std::optional<double> received_;
-  std::optional<nlohmann::json> tx_;
+  std::optional<PublishedStatus> published_status_;
   ChassisStateMachine state_;
   FrameStreamParser parser_;
   geometry_msgs::msg::TwistStamped command_;

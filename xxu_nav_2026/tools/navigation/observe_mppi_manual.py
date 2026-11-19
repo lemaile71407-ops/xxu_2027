@@ -14,6 +14,7 @@ from pathlib import Path
 
 import numpy as np
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.parameter import Parameter, parameter_value_to_python
 from rclpy.qos import qos_profile_sensor_data, QoSProfile, DurabilityPolicy, ReliabilityPolicy
 from rclpy.signals import SignalHandlerOptions
@@ -118,32 +119,36 @@ def main():
         while not future.done() and time.monotonic()<until and not stopped: rclpy.spin_once(node,timeout_sec=.05)
         if not future.done():raise TimeoutError('parameter response timeout')
         return future.result()
-    parameters={}
-    for name in ['/controller_server','/velocity_smoother','/collision_monitor','/local_costmap/local_costmap','/global_costmap/global_costmap','/fake_vel_transform','/map_server','/amcl','/cmd_vel_watchdog']:
-        clients=[]
-        try:
-            c=node.create_client(ListParameters,name+'/list_parameters');clients.append(c)
-            if not c.wait_for_service(timeout_sec=2):raise TimeoutError('parameter service unavailable')
-            names=wait(c.call_async(ListParameters.Request())).result.names
-            c=node.create_client(GetParameterTypes,name+'/get_parameter_types');clients.append(c)
-            req=GetParameterTypes.Request(names=names);types=wait(c.call_async(req)).types
-            names=[k for k,v in zip(names,types) if v!=0]
-            c=node.create_client(GetParameters,name+'/get_parameters');clients.append(c)
-            values=wait(c.call_async(GetParameters.Request(names=names))).values
-            parameters[name]=dict(zip(names,map(parameter_value_to_python,values)))
-        except Exception as exc:parameters[name]={'error':str(exc)}
-        finally:
-            for c in clients:node.destroy_client(c)
-    (args.output/'parameters.json').write_text(json.dumps(parameters,indent=2)+'\n')
-    timer=node.create_timer(.05,sample); start=time.monotonic(); flushed=start
-    print('READ-ONLY RECORDING '+str(args.output),flush=True)
     try:
+        parameters={}
+        for name in ['/controller_server','/velocity_smoother','/collision_monitor','/local_costmap/local_costmap','/global_costmap/global_costmap','/fake_vel_transform','/map_server','/amcl','/cmd_vel_watchdog']:
+            clients=[]
+            try:
+                c=node.create_client(ListParameters,name+'/list_parameters');clients.append(c)
+                if not c.wait_for_service(timeout_sec=2):raise TimeoutError('parameter service unavailable')
+                names=wait(c.call_async(ListParameters.Request())).result.names
+                c=node.create_client(GetParameterTypes,name+'/get_parameter_types');clients.append(c)
+                req=GetParameterTypes.Request(names=names);types=wait(c.call_async(req)).types
+                names=[k for k,v in zip(names,types) if v!=0]
+                c=node.create_client(GetParameters,name+'/get_parameters');clients.append(c)
+                values=wait(c.call_async(GetParameters.Request(names=names))).values
+                parameters[name]=dict(zip(names,map(parameter_value_to_python,values)))
+            except (KeyboardInterrupt, ExternalShutdownException):
+                raise
+            except Exception as exc:parameters[name]={'error':str(exc)}
+            finally:
+                for c in clients:node.destroy_client(c)
+        (args.output/'parameters.json').write_text(json.dumps(parameters,indent=2)+'\n')
+        timer=node.create_timer(.05,sample); start=time.monotonic(); flushed=start
+        print('READ-ONLY RECORDING '+str(args.output),flush=True)
         while rclpy.ok() and not stopped and (not args.duration or time.monotonic()-start<args.duration):
             rclpy.spin_once(node,timeout_sec=.05)
             if time.monotonic()-flushed>2:
                 stream.flush();flushed=time.monotonic()
                 (args.output/'health.json').write_text(json.dumps({'wall_time':time.time(),'ros_time':now(),'counts':counts,'status':seen},indent=2)+'\n')
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
     finally:
-        stream.close();events.close();node.destroy_node();rclpy.shutdown()
+        stream.close();events.close();node.destroy_node();rclpy.try_shutdown()
 
 if __name__=='__main__':main()

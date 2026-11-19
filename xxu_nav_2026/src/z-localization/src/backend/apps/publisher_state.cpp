@@ -179,8 +179,20 @@ void Publisher::publishPoseWithCovariance(const LocalizationProjection& projecti
     if (!pose_covariance_pub_) {
         return;
     }
+    const bool publish_pose = hasSubscribers(pose_covariance_pub_.get());
+    if (!publish_pose && !status_marker_pub_) {
+        return;
+    }
     const Eigen::Matrix4d T_map_body =
         parameters_.input.body_transform.bodyPoseFromSensorPose(projection.T_map_sensor);
+    const Eigen::Vector3d translation = T_map_body.block<3, 1>(0, 3);
+    if (status_marker_pub_) {
+        std::lock_guard<std::mutex> lock(output_mutex_);
+        last_visualized_body_position_ = translation;
+    }
+    if (!publish_pose) {
+        return;
+    }
     PoseCovariance6d covariance = projection.pose_covariance_valid
                                       ? projection.pose_covariance
                                       : fallbackFrontendPoseCovariance();
@@ -195,11 +207,6 @@ void Publisher::publishPoseWithCovariance(const LocalizationProjection& projecti
     geometry_msgs::msg::PoseWithCovarianceStamped message;
     message.header.frame_id = parameters_.input.map_frame;
     message.header.stamp = stamp;
-    const Eigen::Vector3d translation = T_map_body.block<3, 1>(0, 3);
-    {
-        std::lock_guard<std::mutex> lock(output_mutex_);
-        last_visualized_body_position_ = translation;
-    }
     Eigen::Quaterniond orientation(T_map_body.block<3, 3>(0, 0));
     orientation.normalize();
     message.pose.pose.position.x = translation.x();

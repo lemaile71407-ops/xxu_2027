@@ -49,6 +49,7 @@ def main():
         parser.error('--max-odom-speed must be finite and positive')
     args.output.mkdir(parents=True,exist_ok=False)
     import rclpy
+    from rclpy.executors import ExternalShutdownException
     from rclpy.parameter import Parameter
     from rclpy.qos import qos_profile_sensor_data, QoSProfile, DurabilityPolicy, ReliabilityPolicy
     from nav_msgs.msg import Odometry
@@ -222,8 +223,10 @@ def main():
                     'max_correction_m_since_start':max_correction}
             tmp=args.output/'health.tmp';tmp.write_text(json.dumps(health,indent=2)+'\n')
             tmp.replace(args.output/'health.json')
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
     finally:
-        events.close();node.destroy_node();rclpy.shutdown()
+        events.close();node.destroy_node();rclpy.try_shutdown()
 
 
 if __name__=='__main__':main()

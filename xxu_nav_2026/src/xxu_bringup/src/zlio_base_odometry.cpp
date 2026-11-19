@@ -1,6 +1,8 @@
 #include <chrono>
 #include <cmath>
+#include <memory>
 #include <optional>
+#include <utility>
 
 #include "xxu_bringup/odometry_conversion.hpp"
 
@@ -103,15 +105,14 @@ private:
       message.header.stamp.sec < 0 || message.header.stamp.nanosec >= 1000000000u ||
       (message.header.stamp.sec == 0 && message.header.stamp.nanosec == 0))
     {
-      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+      RCLCPP_WARN_THROTTLE(get_logger(), log_clock_, 2000,
         "Waiting for rigid mount or rejecting unexpected odometry frame/time");
       return;
     }
     try {
-      const auto output = convert_odometry(message, base_from_sensor_, base_);
+      auto output = convert_odometry(message, base_from_sensor_, base_);
       if (last_input_stamp_ && *last_input_stamp_ == message.header.stamp) {return;}
       last_input_stamp_ = message.header.stamp;
-      publisher_->publish(output);
 
       geometry_msgs::msg::TransformStamped tf;
       tf.header = output.header;
@@ -120,9 +121,11 @@ private:
       tf.transform.translation.y = output.pose.pose.position.y;
       tf.transform.translation.z = output.pose.pose.position.z;
       tf.transform.rotation = output.pose.pose.orientation;
+      auto output_message = std::make_unique<nav_msgs::msg::Odometry>(std::move(output));
+      publisher_->publish(std::move(output_message));
       pending_tf_ = tf;
     } catch (const std::invalid_argument & error) {
-      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "%s", error.what());
+      RCLCPP_WARN_THROTTLE(get_logger(), log_clock_, 2000, "%s", error.what());
     }
   }
 
@@ -131,6 +134,7 @@ private:
   bool ready_ = false;
   std::optional<geometry_msgs::msg::TransformStamped> pending_tf_;
   std::optional<builtin_interfaces::msg::Time> last_input_stamp_;
+  rclcpp::Clock log_clock_{RCL_STEADY_TIME};
   rclcpp::TimerBase::SharedPtr tf_timer_;
   std::unique_ptr<tf2_ros::Buffer> buffer_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> broadcaster_;

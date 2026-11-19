@@ -111,6 +111,10 @@ public:
     void publishMapAxes();
 
 private:
+    static bool hasSubscribers(const rclcpp::PublisherBase* publisher) {
+        return publisher && (publisher->get_subscription_count() > 0 ||
+                             publisher->get_intra_process_subscription_count() > 0);
+    }
     /// 可选输出失败只跳过当前输出；资源、估计或未知失败交回节点统一处理。
     template <class Action>
     void publishOptional(const char* name, Action&& action) {

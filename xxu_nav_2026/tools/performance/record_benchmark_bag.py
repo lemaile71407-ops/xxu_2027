@@ -12,6 +12,7 @@ import time
 from datetime import datetime, timezone
 
 import yaml
+from rclpy.executors import ExternalShutdownException
 
 
 REQUIRED = {
@@ -128,7 +129,7 @@ def main():
                     stopped = 'free disk threshold reached'
                     break
                 time.sleep(min(1, max(0, args.duration - (time.monotonic() - start))))
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, ExternalShutdownException):
             stopped = 'interrupted by user'
         finally:
             if proc.poll() is None:

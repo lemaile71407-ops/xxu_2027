@@ -25,7 +25,7 @@ struct RosInputParameters {
     std::string map_frame = "map";
     std::string odom_frame = "camera_init";
     std::string body_frame = "body";
-    std::string odom_topic = "/Odometry";
+    std::string odom_topic = "/odometry";
     std::string sync_odom_topic = "/Odometry_scan_end";
     std::string cloud_topic = "/cloud_registered";
     bool cloud_in_local_frame = false;

@@ -85,7 +85,7 @@ def yaw_of(pose):
 class TestResetProtocol(unittest.TestCase):
     def setUp(self):
         rclpy.init()
-        self.addCleanup(rclpy.shutdown)
+        self.addCleanup(rclpy.try_shutdown)
         self.node = rclpy.create_node('coordinated_reset_observer')
         self.addCleanup(self.node.destroy_node)
         retained = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)

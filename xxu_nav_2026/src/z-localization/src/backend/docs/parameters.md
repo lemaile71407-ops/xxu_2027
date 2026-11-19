@@ -25,7 +25,7 @@
 | `frame_topic` | 字符串 | `/frontend/frame` | ZLIO 同步观测话题，一条消息包含位姿和局部去畸变点云 |
 | `prediction_topic` | 字符串 | `/frontend/odometry` | ZLIO 高频里程计预测话题 |
 | `session_topic` | 字符串 | `/frontend/session` | ZLIO 会话通知话题，用于识别进程、重置代次和输入故障 |
-| `odom_topic` | 字符串 | `/Odometry` | `legacy` 高频里程计话题，用于输出实时位姿 |
+| `odom_topic` | 字符串 | `/odometry` | `legacy` 高频里程计话题，用于输出实时位姿 |
 | `sync_odom_topic` | 字符串 | `/Odometry_scan_end` | `legacy` 扫描末端里程计话题，用于与点云配对 |
 | `cloud_topic` | 字符串 | `/cloud_registered` | `legacy` 去畸变点云输入话题 |
 | `input_cloud_in_local_frame` | 布尔 | `true` | 输入点云是否在传感器系；关闭时按 odom 系读取并转回传感器系，ZLIO 必须开启 |
@@ -338,7 +338,7 @@
 
 | 键 | 类型 / 单位 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `enabled` | 布尔 | `true` | 是否启用本组兼容话题及 map → body TF |
+| `enabled` | 布尔 | `false` | 是否启用本组兼容话题及 map → body TF |
 | `publish_pose` | 布尔 | `true` | 是否发布兼容车体位姿 |
 | `publish_twist` | 布尔 | `true` | 是否发布兼容车体速度，速度在 map 系表达 |
 | `publish_path` | 布尔 | `false` | 是否发布兼容车体轨迹 |
@@ -356,7 +356,7 @@
 
 | 键 | 类型 / 单位 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `enabled` | 布尔 | `true` | 是否将实时点云转换到 map 系并发布 |
+| `enabled` | 布尔 | `false` | 是否将实时点云转换到 map 系并发布。RViz 的 `Current registered scan` 显示依赖此项 |
 | `publish_period` | 浮点，s | `0.0` | 实时世界点云的最小发布间隔；须 `≥0`，`0` 每个有效帧都可发布 |
 | `publish_initializing` | 布尔 | `false` | 是否允许初始定位尚未完成时发布世界点云 |
 | `publish_untrusted` | 布尔 | `false` | 是否允许 `SUSPECT` / `LOST` 时发布世界点云；此时使用最后可信位姿变换 |
@@ -386,7 +386,7 @@
 #### `body_calibration.launch.py`
 
 这些选项也可作为 `body_calibration_node` 的 ROS 参数传入。直接运行节点时，`odom_frame`、`odom_topic`
-分别默认为 `camera_init`、`/Odometry`，其余与下表一致。
+分别默认为 `camera_init`、`/odometry`，其余与下表一致。
 
 | 参数 | 类型 / 单位 | 默认值 | 说明 |
 | --- | --- | --- | --- |

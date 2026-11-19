@@ -123,8 +123,7 @@ def main():
         node.save()
     finally:
         node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        rclpy.try_shutdown()
 
     return 0
 

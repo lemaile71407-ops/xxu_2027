@@ -178,7 +178,7 @@ void Publisher::publishMapAxes() {
 void Publisher::publishWorldCloud(const FrontendFrame& frame,
                                   const LocalizationProjection& projection,
                                   const builtin_interfaces::msg::Time& stamp) {
-    if (!world_cloud_pub_ || !frame.cloud_local) {
+    if (!frame.cloud_local || !hasSubscribers(world_cloud_pub_.get())) {
         return;
     }
     if ((projection.status == LocalizationStatus::Initializing &&

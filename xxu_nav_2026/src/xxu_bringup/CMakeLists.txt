@@ -17,6 +17,10 @@ find_package(tf2_msgs REQUIRED)
 find_package(Eigen3 3.4 REQUIRED NO_MODULE)
 find_package(yaml-cpp REQUIRED)
 
+option(XXU_ENABLE_TRACY "Enable Tracy profiling zones in xxu_bringup" OFF)
+set(XXU_TRACY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../local_assets/tracy"
+  CACHE PATH "Path to local Tracy checkout")
+
 add_library(xxu_sentry_components SHARED src/zlio_base_odometry.cpp
   src/cmd_vel_watchdog.cpp src/gimbal_imu_compensator.cpp src/pointcloud_frame_republisher.cpp)
 target_compile_features(xxu_sentry_components PUBLIC cxx_std_17)
@@ -24,17 +28,31 @@ target_include_directories(xxu_sentry_components PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_link_libraries(xxu_sentry_components Eigen3::Eigen yaml-cpp)
+if(XXU_ENABLE_TRACY)
+  if(NOT EXISTS "${XXU_TRACY_DIR}/public/tracy/Tracy.hpp")
+    message(FATAL_ERROR "XXU_ENABLE_TRACY=ON requires Tracy headers under ${XXU_TRACY_DIR}/public")
+  endif()
+  find_package(Threads REQUIRED)
+  target_sources(xxu_sentry_components PRIVATE "${XXU_TRACY_DIR}/public/TracyClient.cpp")
+  target_include_directories(xxu_sentry_components PRIVATE "${XXU_TRACY_DIR}/public")
+  target_compile_definitions(xxu_sentry_components PRIVATE
+    XXU_ENABLE_TRACY TRACY_ENABLE TRACY_ON_DEMAND)
+  target_link_libraries(xxu_sentry_components Threads::Threads ${CMAKE_DL_LIBS})
+endif()
 ament_target_dependencies(xxu_sentry_components rclcpp rclcpp_components nav_msgs
   geometry_msgs sensor_msgs std_msgs tf2 tf2_ros tf2_msgs)
 rclcpp_components_register_node(xxu_sentry_components
-  PLUGIN "xxu_bringup::ZlioBaseOdometry" EXECUTABLE zlio_base_odometry)
+  PLUGIN "xxu_bringup::ZlioBaseOdometry" EXECUTABLE zlio_base_odometry EXECUTOR EventsExecutor)
 rclcpp_components_register_node(xxu_sentry_components
-  PLUGIN "xxu_bringup::CmdVelWatchdog" EXECUTABLE cmd_vel_watchdog)
+  PLUGIN "xxu_bringup::CmdVelWatchdog" EXECUTABLE cmd_vel_watchdog EXECUTOR EventsExecutor)
 rclcpp_components_register_node(xxu_sentry_components
-  PLUGIN "xxu_bringup::GimbalImuCompensator" EXECUTABLE gimbal_imu_compensator)
+  PLUGIN "xxu_bringup::GimbalImuCompensator" EXECUTABLE gimbal_imu_compensator EXECUTOR EventsExecutor)
 rclcpp_components_register_node(xxu_sentry_components
-  PLUGIN "xxu_bringup::PointCloudFrameRepublisher" EXECUTABLE pointcloud_frame_republisher)
+  PLUGIN "xxu_bringup::PointCloudFrameRepublisher" EXECUTABLE pointcloud_frame_republisher EXECUTOR EventsExecutor)
 install(TARGETS xxu_sentry_components LIBRARY DESTINATION lib)
+add_executable(component_container_events src/component_container_events.cpp)
+ament_target_dependencies(component_container_events rclcpp rclcpp_components)
+install(TARGETS component_container_events DESTINATION lib/${PROJECT_NAME})
 add_executable(wait_for_odom src/wait_for_odom.cpp)
 ament_target_dependencies(wait_for_odom rclcpp nav_msgs)
 install(TARGETS wait_for_odom DESTINATION lib/${PROJECT_NAME})

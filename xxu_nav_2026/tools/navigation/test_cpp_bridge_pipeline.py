@@ -3,6 +3,7 @@
 import json
 import math
 import os
+from copy import deepcopy
 from pathlib import Path
 import signal
 import struct
@@ -15,6 +16,7 @@ import yaml
 from ament_index_python.packages import get_package_prefix
 import rclpy
 from rclpy.qos import QoSProfile, DurabilityPolicy, ReliabilityPolicy, qos_profile_sensor_data
+from rclpy.time import Time
 from geometry_msgs.msg import TransformStamped, TwistStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Imu, JointState, LaserScan, PointCloud2, PointField
@@ -32,7 +34,7 @@ class CppHarness(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        rclpy.shutdown()
+        rclpy.try_shutdown()
 
     def setUp(self):
         self.node = rclpy.create_node('cpp_pipeline_probe')
@@ -106,6 +108,47 @@ class CppHarness(unittest.TestCase):
         self.assertEqual(self.node.get_subscriptions_info_by_topic('/tf'), [])
 
 class CppPipelineTest(CppHarness):
+    def test_clock_decimation_preserves_stamps_and_drops_rewinds(self):
+        self.start('clock_rate_limiter', {'publish_rate': 200.,
+            'input_topic': '/probe/clock_raw', 'output_topic': '/probe/clock'},
+            package='xxu_sim_bringup')
+        received = self.received(Clock, '/probe/clock')
+        raw = self.node.create_publisher(Clock, '/probe/clock_raw', 10)
+        self.spin(.8)
+        self.assertEqual(self.node.get_subscriptions_info_by_topic('/clock'), [])
+        stamps = lambda: [m.clock.sec * 10**9 + m.clock.nanosec for m in received]
+        sent = set()
+
+        def feed(value):
+            m = Clock(); m.clock.sec, m.clock.nanosec = divmod(value, 10**9)
+            sent.add(value); raw.publish(m); self.spin(.01)
+
+        # Slow wall-time delivery deliberately differs from the source's 1 ms steps.
+        # Clock decimation must depend on source time, not on the executor's clock.
+        for index in range(31):
+            feed(100 * 10**9 + index * 10**6)
+        self.assertEqual(stamps(), [100 * 10**9 + index * 5 * 10**6 for index in range(7)])
+        count = len(received)
+        for _ in range(5):
+            feed(100 * 10**9 + 30 * 10**6)
+        self.spin(.05)
+        self.assertEqual(len(received), count, 'paused source must not replay ticks')
+        feed(0)
+        feed(5 * 10**6)
+        feed(100 * 10**9 + 29 * 10**6)
+        self.assertEqual(len(received), count, 'backward samples must not reset the input watermark')
+        feed(100 * 10**9 + 34 * 10**6)
+        self.assertEqual(len(received), count, 'backward samples must not change the 5 ms phase')
+        feed(100 * 10**9 + 35 * 10**6)
+        self.assertEqual(stamps()[-1], 100 * 10**9 + 35 * 10**6)
+        count = len(received)
+        feed(108 * 10**9)
+        self.assertEqual(len(received), count + 1, 'large jumps must not replay missed slots')
+        self.spin(.05)
+        self.assertEqual(len(received), count + 1)
+        self.assertTrue(set(stamps()) <= sent)
+        self.assertEqual(stamps(), sorted(set(stamps())))
+
     def test_tf_rate_with_31hz_and_200hz_input_and_frozen_source(self):
         self.start('zlio_base_odometry', {
             'extrinsics_source': 'parameters', 'base_from_sensor_xyz': [0., 0., 0.],
@@ -142,39 +185,88 @@ class CppPipelineTest(CppHarness):
                             for m in received for t in m.transforms))
 
     def test_public_tf_contains_only_core_edges_and_caps_200hz_sources(self):
+        self.check_public_tf_relay(50.)
+
+    def test_public_tf_keeps_20hz_and_flushes_one_tail(self):
+        self.check_public_tf_relay(20.)
+
+    def check_public_tf_relay(self, configured_rate):
         self.start('cmd_vel_watchdog', {
             'input_topic': '/probe/cmd', 'output_topic': '/probe/safe',
             'require_odom': False, 'require_scan': False, 'require_joint_states': False,
-            'require_tf': False, 'tf_publish_rate': 50.})
-        received = self.received(TFMessage, '/tf')
+            'require_tf': False, 'tf_publish_rate': configured_rate})
+        received = []
+
+        def observe(message):
+            now = time.monotonic()
+            received.extend((now, t) for t in message.transforms)
+
+        self.node.create_subscription(TFMessage, '/tf', observe, qos_profile_sensor_data)
         source = self.node.create_publisher(TFMessage, '/sentry/tf/odometry', qos_profile_sensor_data)
+        expected = {('map', 'odom'), ('odom', 'base_link')}
+        edges = [('map', 'odom'), ('odom', 'base_link'),
+                 ('base_link', 'wheel_fl'), ('base_link', 'base_footprint')]
+        sent = {}
+        delay_limit = 1. / configured_rate + .01
         self.spin(.8)
-        received.clear()
+
+        def publish():
+            stamp = self.node.get_clock().now().to_msg()
+            transforms = []
+            for parent, child in edges:
+                transform = TransformStamped()
+                transform.header.frame_id, transform.child_frame_id = parent, child
+                transform.header.stamp = stamp
+                transform.transform.rotation.w = 1.
+                transforms.append(transform)
+            sent_at = time.monotonic()
+            source.publish(TFMessage(transforms=transforms))
+            sent[(stamp.sec, stamp.nanosec)] = sent_at
+            return stamp, sent_at
+
         started = due = time.monotonic()
-        while time.monotonic() - started < 2.:
+        while time.monotonic() - started < 3.:
             if time.monotonic() >= due:
-                transforms = []
-                for parent, child in [('map', 'odom'), ('odom', 'base_link'),
-                                      ('base_link', 'wheel_fl'), ('base_link', 'base_footprint')]:
-                    t = TransformStamped(); t.header.frame_id = parent; t.child_frame_id = child
-                    t.header.stamp = self.node.get_clock().now().to_msg(); t.transform.rotation.w = 1.
-                    transforms.append(t)
-                source.publish(TFMessage(transforms=transforms)); due += .005
+                publish()
+                due += .005
             rclpy.spin_once(self.node, timeout_sec=.001)
         duration = time.monotonic() - started
         counts = {}
-        for m in received:
-            for t in m.transforms:
-                edge = (t.header.frame_id, t.child_frame_id)
-                counts[edge] = counts.get(edge, 0) + 1
-        self.assertEqual(set(counts), {('map', 'odom'), ('odom', 'base_link')})
+        for _, transform in received:
+            edge = (transform.header.frame_id, transform.child_frame_id)
+            counts[edge] = counts.get(edge, 0) + 1
+        self.assertEqual(set(counts), expected)
         rates = {str(edge): count / duration for edge, count in counts.items()}
-        print(json.dumps({'public_tf_rates': rates}), flush=True)
+        print(json.dumps({'configured_tf_rate': configured_rate, 'public_tf_rates': rates}), flush=True)
         for rate in rates.values():
-            self.assertGreaterEqual(rate, 20.)
-            self.assertLessEqual(rate, 51.)
-        self.spin(.1); count = len(received); self.spin(.15)
-        self.assertEqual(len(received), count)
+            self.assertGreaterEqual(rate, configured_rate - .5)
+            self.assertLessEqual(rate, configured_rate + 1.)
+        stopped_at = len(received)
+        self.spin(.15)
+        max_delay = max(when - sent[(t.header.stamp.sec, t.header.stamp.nanosec)] for when, t in received)
+        self.assertLess(max_delay, delay_limit)
+        for edge in expected:
+            self.assertLessEqual(sum((t.header.frame_id, t.child_frame_id) == edge
+                                     for _, t in received[stopped_at:]), 1)
+        received.clear()
+
+        first_stamp, _ = publish()
+        self.spin(.004)
+        _, queued_at = publish()
+        self.spin(.004)
+        tail_stamp, _ = publish()
+        self.spin(.12)
+        tail_delays = []
+        for edge in expected:
+            frames = [(when, t.header.stamp) for when, t in received
+                      if (t.header.frame_id, t.child_frame_id) == edge]
+            self.assertEqual([stamp for _, stamp in frames], [first_stamp, tail_stamp])
+            tail_delays.append(frames[-1][0] - queued_at)
+        self.assertLess(max(tail_delays), delay_limit)
+        print(json.dumps({'configured_tf_rate': configured_rate, 'max_tf_delay_ms': max_delay * 1e3,
+                          'tail_delay_ms': max(tail_delays) * 1e3}), flush=True)
+        self.spin(.15)
+        self.assertEqual(len(received), 2 * len(expected))
 
     def test_odometry_accepts_only_static_mount_then_releases_subscription(self):
         self.start('zlio_base_odometry', {'input_topic': '/probe/raw', 'output_topic': '/probe/base'},
@@ -211,7 +303,7 @@ class CppPipelineTest(CppHarness):
         process = subprocess.Popen(['ros2', 'launch', 'xxu_bringup', 'sentry_localization.launch.py',
             f'mount_file:={path}', f'frontend_config:={workspace}/src/z-localization/config/lio.yaml',
             f'backend_config:={workspace}/src/z-localization/config/backend.smoke.yaml', 'mode:=mapping',
-            'driver:=false'], stdout=log, stderr=subprocess.STDOUT,
+            'driver:=false', 'use_sim_time:=true'], stdout=log, stderr=subprocess.STDOUT,
             env=dict(os.environ, ROS_DOMAIN_ID=str(self.domain), ROS_LOCALHOST_ONLY='1'))
         self.processes.append((process, log))
         statics = self.received(TFMessage, '/tf_static', QoSProfile(depth=100, durability=DurabilityPolicy.TRANSIENT_LOCAL))
@@ -231,6 +323,12 @@ class CppPipelineTest(CppHarness):
         edges = {(t.header.frame_id, t.child_frame_id) for m in statics for t in m.transforms}
         self.assertEqual(edges, {('base_link', mount['frames']['sensor']),
                                  ('base_link', mount['frames']['lidar'])})
+        clock_subscribers = {info.node_name for info in self.node.get_subscriptions_info_by_topic('/clock')}
+        self.assertIn('cmd_vel_watchdog', clock_subscribers)
+        self.assertTrue(clock_subscribers.isdisjoint({
+            'zlio_base_odometry', 'pointcloud_to_laserscan',
+            f"mount_{mount['frames']['sensor']}", f"mount_{mount['frames']['lidar']}",
+        }))
         self.assertFalse(any('robot_state_publisher' == n for n, _ in self.node.get_node_names_and_namespaces()))
         self.assert_no_global_tf_subscribers()
 
@@ -349,6 +447,8 @@ class CppPipelineTest(CppHarness):
         self.assertAlmostEqual(output.twist.twist.linear.y, 0., places=10)
         count = len(received); message.child_frame_id = 'wrong'
         self.spin(.15, feed); self.assertEqual(len(received), count)
+        clock_subscribers = {info.node_name for info in self.node.get_subscriptions_info_by_topic('/clock')}
+        self.assertNotIn('zlio_base_odometry', clock_subscribers)
         self.assert_no_global_tf_subscribers()
 
     def test_watchdog_source_stamp_and_paused_clock_fail_closed(self):
@@ -377,6 +477,61 @@ class CppPipelineTest(CppHarness):
         self.assertEqual(output[-1].twist.linear.x, 0.)
         self.assert_no_global_tf_subscribers()
 
+    def test_watchdog_drops_reordered_dynamic_tf(self):
+        self.start('cmd_vel_watchdog', {
+            'input_topic': '/probe/cmd', 'output_topic': '/probe/safe', 'require_odom': False,
+            'require_scan': False, 'require_joint_states': False, 'use_sim_time': True,
+            'publish_rate': 100., 'tf_timeout': .5,
+        })
+        safe = self.received(TwistStamped, '/probe/safe')
+        relayed = self.received(TFMessage, '/tf')
+        command_pub = self.node.create_publisher(TwistStamped, '/probe/cmd', qos_profile_sensor_data)
+        source = self.node.create_publisher(TFMessage, '/sentry/tf/odometry', qos_profile_sensor_data)
+        clock_pub = self.node.create_publisher(Clock, '/clock', 10)
+        clock = Clock()
+        clock.clock.sec = 100
+        self.spin(.8, lambda: clock_pub.publish(clock))
+
+        def send(sec, nanosec):
+            transform = TransformStamped()
+            transform.header.frame_id, transform.child_frame_id = 'odom', 'base_link'
+            transform.header.stamp.sec, transform.header.stamp.nanosec = sec, nanosec
+            transform.transform.rotation.w = 1.
+            source.publish(TFMessage(transforms=[transform]))
+
+        def command():
+            message = TwistStamped()
+            message.header.stamp = clock.clock
+            message.twist.linear.x = .25
+            command_pub.publish(message)
+
+        send(100, 0)
+        self.spin(.06, command)
+        self.assertEqual(safe[-1].twist.linear.x, .25)
+        send(99, 250_000_000)
+        self.spin(.04, command)
+        self.assertEqual(safe[-1].twist.linear.x, .25)
+
+        def advance():
+            clock.clock.nanosec += 20_000_000
+            clock_pub.publish(clock)
+            send(clock.clock.sec, clock.clock.nanosec)
+            command()
+
+        self.spin(.68, advance)
+        self.assertEqual(safe[-1].twist.linear.x, .25)
+        stamps = [Time.from_msg(t.header.stamp).nanoseconds for msg in relayed for t in msg.transforms]
+        self.assertTrue(all(stamp >= 100_000_000_000 for stamp in stamps))
+        self.assertGreater(stamps[-1], 100_500_000_000)
+
+        def stale_tf_and_command():
+            send(99, 250_000_000)
+            command()
+
+        self.spin(.56, stale_tf_and_command)
+        self.assertEqual(safe[-1].twist.linear.x, 0., 'reordered TF must not refresh the gate')
+        self.assertTrue(all(t.header.stamp.sec >= 100 for msg in relayed for t in msg.transforms))
+
     def test_watchdog_tf_stream_loss_and_localization_recovery(self):
         self.start('cmd_vel_watchdog', {
             'input_topic': '/probe/cmd', 'output_topic': '/probe/safe',
@@ -386,6 +541,9 @@ class CppPipelineTest(CppHarness):
             'localization_state_topic': '/probe/state', 'localization_pose_topic': '/probe/pose',
             'publish_rate': 100.})
         output = self.received(TwistStamped, '/probe/safe')
+        ready_qos = QoSProfile(depth=10, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        ready = self.received(Bool, '/cmd_vel_watchdog/localization_ready', ready_qos)
+        tf_ready = self.received(Bool, '/cmd_vel_watchdog/tf_ready', ready_qos)
         pubs = {name: self.node.create_publisher(kind, '/probe/' + name, qos_profile_sensor_data)
                 for name, kind in [('cmd', TwistStamped), ('odom', Odometry), ('scan', LaserScan), ('pose', Odometry)]}
         state = self.node.create_publisher(String, '/probe/state',
@@ -412,6 +570,11 @@ class CppPipelineTest(CppHarness):
                 cmd = TwistStamped(); cmd.header.stamp = stamp; cmd.twist.linear.x = 1.; pubs['cmd'].publish(cmd)
         self.spin(2.3, feed)
         self.assertTrue(any(m.twist.linear.x == 1. for m in output[-10:]))
+        ready.clear(); tf_ready.clear()
+        self.spin(.6, feed)
+        for heartbeat in (ready, tf_ready):
+            self.assertTrue(3 <= len(heartbeat) <= 5, f'Unexpected readiness rate: {len(heartbeat)} in 0.6 s')
+            self.assertTrue(all(message.data for message in heartbeat))
         stream = False; self.spin(.65, feed); self.assertEqual(output[-1].twist.linear.x, 0.)
         stream = True; self.spin(.12, feed); self.assertEqual(output[-1].twist.linear.x, 1.)
         trusted = False; generation = 3; self.spin(.12, feed); self.assertEqual(output[-1].twist.linear.x, 0.)
@@ -422,6 +585,199 @@ class CppPipelineTest(CppHarness):
         commands = True; self.spin(.12, feed); self.assertEqual(output[-1].twist.linear.x, 1.)
         self.assert_no_global_tf_subscribers()
 
+    def test_watchdog_generic_keepalive_freshness_and_timeouts(self):
+        self.start('cmd_vel_watchdog', {
+            'input_topic': '/probe/cmd', 'output_topic': '/probe/safe',
+            'odom_topic': '/probe/odom', 'scan_topic': '/probe/scan',
+            'joint_states_topic': '/probe/joint_states', 'require_tf': False,
+            'publish_rate': 100., 'odom_timeout': .2, 'scan_timeout': .2, 'joint_states_timeout': .2})
+        output = self.received(TwistStamped, '/probe/safe')
+        pubs = {
+            'cmd': self.node.create_publisher(TwistStamped, '/probe/cmd', qos_profile_sensor_data),
+            'odom': self.node.create_publisher(Odometry, '/probe/odom', qos_profile_sensor_data),
+            'scan': self.node.create_publisher(LaserScan, '/probe/scan', qos_profile_sensor_data),
+            'joints': self.node.create_publisher(JointState, '/probe/joint_states', qos_profile_sensor_data),
+        }
+        self.spin(.6)
+        expected_types = {
+            '/probe/odom': 'nav_msgs/msg/Odometry',
+            '/probe/scan': 'sensor_msgs/msg/LaserScan',
+            '/probe/joint_states': 'sensor_msgs/msg/JointState',
+        }
+        for topic, expected_type in expected_types.items():
+            infos = [i for i in self.node.get_subscriptions_info_by_topic(topic) if i.node_name == 'cmd_vel_watchdog']
+            self.assertEqual(len(infos), 1, topic)
+            self.assertEqual(infos[0].topic_type, expected_type)
+        active = {'odom': True, 'scan': True, 'joints': False}
+
+        def feed():
+            stamp = self.node.get_clock().now().to_msg()
+            cmd = TwistStamped(); cmd.header.stamp = stamp; cmd.twist.linear.x = 1.
+            pubs['cmd'].publish(cmd)
+            if active['odom']:
+                odom = Odometry(); odom.header.stamp = stamp; odom.pose.pose.orientation.w = 1.
+                pubs['odom'].publish(odom)
+            if active['scan']:
+                scan = LaserScan(); scan.header.stamp = stamp; scan.ranges = [1.5, 2.0, 2.5]
+                pubs['scan'].publish(scan)
+            if active['joints']:
+                joints = JointState(); joints.header.stamp = stamp
+                joints.name = ['gimbal_joint', 'wheel_fl', 'wheel_fr']
+                joints.position = [0.1, 0.2, 0.3]; joints.velocity = [0.0, 1.0, 1.0]
+                pubs['joints'].publish(joints)
+
+        self.spin(.25, feed)
+        self.assertEqual(output[-1].twist.linear.x, 0.)
+        active['joints'] = True
+        self.spin(.12, feed)
+        self.assertEqual(output[-1].twist.linear.x, 1.)
+        for stream in ('joints', 'scan', 'odom'):
+            active[stream] = False
+            self.spin(.3, feed)
+            self.assertEqual(output[-1].twist.linear.x, 0., f'{stream} timeout must close gate')
+            active[stream] = True
+            self.spin(.12, feed)
+            self.assertEqual(output[-1].twist.linear.x, 1., f'{stream} recovery must reopen gate')
+
+    def test_timed_self_filter_waits_for_unsorted_cloud_coverage(self):
+        geometry = Path(self.logs.name) / 'self_filter.yaml'
+        planes = [[sign if component == axis else 0. for component in range(3)] + [-.25]
+                  for axis in range(3) for sign in (-1., 1.)]
+        geometry.write_text(yaml.safe_dump({'self_filter': {
+            'frame': 'base_link', 'tolerance': 0., 'hull_planes': [planes], 'wheels': [],
+        }}))
+        self.start('pointcloud_frame_republisher', {
+            'target_frame': 'base_link', 'expected_source_frame': 'probe_lidar',
+            'use_point_timestamps': True, 'use_joint_interpolation': True,
+            'sensor_offset': [0., 0., 0.], 'sensor_rpy': [0., 0., 0.],
+            'pending_timeout': .7, 'pending_queue_size': 1, 'self_filter_geometry_file': str(geometry),
+        }, [('points_in', '/probe/raw'), ('points_out', '/probe/filtered'), ('joint_states', '/probe/joints')])
+        received = self.received(PointCloud2, '/probe/filtered')
+        cloud_pub = self.node.create_publisher(PointCloud2, '/probe/raw', qos_profile_sensor_data)
+        joints = self.node.create_publisher(JointState, '/probe/joints', qos_profile_sensor_data)
+        self.spin(.8)
+
+        def joint(nanosec, position):
+            sample = JointState(name=['gimbal_joint'], position=[position])
+            sample.header.stamp.sec = 10
+            sample.header.stamp.nanosec = nanosec
+            joints.publish(sample)
+
+        joint(0, 0.)
+        joint(20_000_000, 0.)
+        self.spin(.05)
+        cloud = PointCloud2(width=2, height=2, point_step=32, row_step=72, is_bigendian=True)
+        cloud.header.frame_id = 'probe_lidar'
+        cloud.header.stamp.sec = 10
+        cloud.fields = [PointField(name=name, offset=4 * index, datatype=PointField.FLOAT32, count=1)
+                        for index, name in enumerate('xyz')]
+        cloud.fields.append(PointField(name='timestamp', offset=16, datatype=PointField.FLOAT64, count=1))
+        payload = bytearray([0x55] * (cloud.height * cloud.row_step))
+        offsets = (0, 32, 72, 104)
+        for offset, xyz, stamp in zip(offsets, ((0., 0., 0.), (1., 0., 0.), (0., 1., 0.), (2., 0., 0.)),
+                                      (10.010e9, 10.030e9, 10.030e9, 10.010e9)):
+            struct.pack_into('>fff', payload, offset, *xyz)
+            struct.pack_into('>d', payload, offset + 16, stamp)
+        cloud.data = bytes(payload)
+
+        ordered = deepcopy(cloud)
+        ordered.header.stamp.nanosec = 1
+        ordered_payload = bytearray(payload)
+        for index, offset in enumerate(offsets, 1):
+            struct.pack_into('>d', ordered_payload, offset + 16, 10e9 + index * 1e6)
+        ordered.data = bytes(ordered_payload)
+        cloud_pub.publish(ordered)
+        self.spin(.12)
+        self.assertEqual(len(received), 1)
+        self.assertEqual(received[0].header.stamp, ordered.header.stamp)
+        self.assertEqual(received[0].width, 3)
+        for offset, expected in zip((0, 32, 64), ((1., 0., 0.), (0., 1., 0.), (2., 0., 0.))):
+            self.assertEqual(struct.unpack_from('>fff', received[0].data, offset), expected)
+        received.clear()
+
+        cloud_pub.publish(cloud)
+        self.spin(.12)
+        self.assertFalse(received, 'an uncovered interior point must defer the entire cloud')
+
+        bad_time = deepcopy(cloud)
+        bad_payload = bytearray(payload)
+        struct.pack_into('>d', bad_payload, offsets[1] + 16, math.nan)
+        bad_time.data = bytes(bad_payload)
+        cloud_pub.publish(bad_time)
+        bad_layout = deepcopy(cloud)
+        bad_layout.data = bytes(payload[:-1])
+        cloud_pub.publish(bad_layout)
+        self.spin(.08)
+        self.assertFalse(received, 'invalid input must not evict or release a valid pending frame')
+
+        joint(40_000_000, math.pi)
+        self.spin(.2)
+        self.assertEqual(len(received), 1)
+        output = received[0]
+        self.assertEqual(output.header.frame_id, 'base_link')
+        self.assertEqual(output.header.stamp, cloud.header.stamp)
+        self.assertEqual((output.width, output.height, output.row_step), (3, 1, 96))
+        self.assertTrue(output.is_bigendian)
+        for offset, original, xyz in zip((0, 32, 64), offsets[1:], ((0., 1., 0.), (-1., 0., 0.), (2., 0., 0.))):
+            for actual, expected in zip(struct.unpack_from('>fff', output.data, offset), xyz):
+                self.assertAlmostEqual(actual, expected, places=5)
+            self.assertEqual(bytes(output.data[offset + 12:offset + 32]), bytes(payload[original + 12:original + 32]))
+
+    def test_joint_coverage_wait_avoids_reprocessing_large_clouds(self):
+        process = self.start('pointcloud_frame_republisher', {
+            'target_frame': 'base_link', 'expected_source_frame': 'probe_lidar',
+            'use_point_timestamps': True, 'use_joint_interpolation': True, 'pending_timeout': .7,
+        }, [('points_in', '/probe/raw'), ('points_out', '/probe/compensated'), ('joint_states', '/probe/joints')])
+        clouds = self.node.create_publisher(PointCloud2, '/probe/raw', qos_profile_sensor_data)
+        joints = self.node.create_publisher(JointState, '/probe/joints', qos_profile_sensor_data)
+        received = self.received(PointCloud2, '/probe/compensated')
+        self.spin(.8)
+
+        def joint(sec, nanosec):
+            sample = JointState(name=['gimbal_joint'], position=[.2])
+            sample.header.stamp.sec, sample.header.stamp.nanosec = sec, nanosec
+            joints.publish(sample)
+
+        process_stat = Path(f'/proc/{process.pid}/stat')
+        ticks_per_second = os.sysconf('SC_CLK_TCK')
+
+        def cpu_ticks():
+            fields = process_stat.read_text().rsplit(') ', 1)[1].split()
+            return int(fields[11]) + int(fields[12])  # User and system CPU ticks.
+
+        cloud = PointCloud2(width=20_000, height=1, point_step=24, row_step=480_000)
+        cloud.header.frame_id = 'probe_lidar'
+        cloud.fields = [PointField(name=name, offset=4 * index, datatype=PointField.FLOAT32, count=1)
+                        for index, name in enumerate('xyz')]
+        cloud.fields.append(PointField(name='timestamp', offset=16, datatype=PointField.FLOAT64, count=1))
+        payload = bytearray(struct.pack('<fff4xd', 1., .1, .2, 0.) * cloud.width)
+        wait_ticks = 0
+        for sec in range(10, 13):
+            cloud.header.stamp.sec = sec
+            for index in range(cloud.width):
+                struct.pack_into('<d', payload, index * cloud.point_step + 16, sec * 1e9 + 5e6 + index * 100)
+            struct.pack_into('<d', payload, (cloud.width - 2) * cloud.point_step + 16, sec * 1e9 + 30e6)
+            cloud.data = bytes(payload)
+            joint(sec, 0)
+            joint(sec, 20_000_000)
+            self.spin(.04)
+            before = cpu_ticks()
+            clouds.publish(cloud)
+            self.spin(.23)
+            wait_ticks += cpu_ticks() - before
+            self.assertFalse(received)
+            joint(sec, 40_000_000)
+            self.spin(.2)
+            self.assertEqual([frame.header.stamp.sec for frame in received], [sec])
+            self.assertEqual(received[0].width, cloud.width)
+            received.clear()
+
+        wait_cpu_ms = wait_ticks * 1_000. / ticks_per_second
+        print(json.dumps({'cloud_wait_probe': {'frames': 3, 'points': cloud.width,
+                          'total_wait_seconds': .69, 'cpu_ms': wait_cpu_ms}}), flush=True)
+        # Allow DDS reception and clock tick rounding while catching repeated full transforms.
+        self.assertLessEqual(wait_cpu_ms, 35.)
+
     def test_padded_cloud_and_fixed_imu_remain_cpp(self):
         self.start('pointcloud_frame_republisher', {'target_frame': 'probe_sensor',
             'expected_source_frame': 'probe_lidar'}, [('points_in', '/probe/points'), ('points_out', '/probe/transformed')])
@@ -429,7 +785,9 @@ class CppPipelineTest(CppHarness):
             'sensor_offset': [0., 0., 0.], 'sensor_rpy': [0., 0., math.pi / 2],
             'input_acceleration_scale': 9.81}, [('imu_in', '/probe/imu'), ('imu_out', '/probe/imu_out')])
         self.start('pointcloud_to_laserscan_node', {'target_frame': 'base_link', 'min_height': -.5,
-            'max_height': 5., 'range_min': .01}, [('cloud_in', '/probe/transformed'), ('scan', '/probe/scan')],
+            'max_height': 5., 'range_min': .01, 'publish_processed_cloud': True,
+            'processed_cloud_project_to_2d': True},
+            [('cloud_in', '/probe/transformed'), ('scan', '/probe/scan'), ('processed_cloud', '/probe/processed')],
             package='pointcloud_to_laserscan')
         static1 = self.static('probe_sensor', 'probe_lidar', (.01, .02, -.03), math.pi / 2)
         static2 = self.static('base_link', 'probe_sensor')
@@ -446,22 +804,44 @@ class CppPipelineTest(CppHarness):
         cloud.data = bytes(payload)
         imu = Imu(); imu.angular_velocity.x = 1.; imu.linear_acceleration.x = 1.
         imu.angular_velocity_covariance = [1., 0., 0., 0., 2., 0., 0., 0., 3.]
+        sent_stamps = set()
         def feed():
             stamp = self.node.get_clock().now().to_msg(); cloud.header.stamp = stamp; imu.header.stamp = stamp
+            sent_stamps.add((stamp.sec, stamp.nanosec))
             clouds.publish(cloud); imus.publish(imu)
         self.spin(1.5, feed)
         self.assertTrue(cloud_out and imu_out and scans)
+        for message in [*cloud_out, *imu_out]:
+            self.assertIn((message.header.stamp.sec, message.header.stamp.nanosec), sent_stamps)
+        clock_subscribers = {info.node_name for info in self.node.get_subscriptions_info_by_topic('/clock')}
+        self.assertTrue(clock_subscribers.isdisjoint({
+            'pointcloud_frame_republisher', 'gimbal_imu_compensator', 'pointcloud_to_laserscan',
+        }))
         for offset in (0, 40):
             actual = struct.unpack_from('<fff', cloud_out[-1].data, offset)
             for a, b in zip(actual, (-1.99, 1.02, 2.97)): self.assertAlmostEqual(a, b, places=5)
             self.assertEqual(bytes(cloud_out[-1].data[offset+12:offset+40]), bytes(payload[offset+12:offset+40]))
         self.assertEqual(scans[-1].header.frame_id, 'base_link')
+        ranges_without_cloud_subscriber = list(scans[-1].ranges)
+        self.assertAlmostEqual(min(ranges_without_cloud_subscriber), math.hypot(-1.99, 1.02), places=5)
         self.assertAlmostEqual(imu_out[-1].angular_velocity.y, 1., places=10)
         self.assertAlmostEqual(imu_out[-1].linear_acceleration.y, 9.81, places=10)
         self.assertEqual(imu_out[-1].orientation_covariance[0], -1.)
         self.assert_no_global_tf_subscribers()
         for info in self.node.get_subscriptions_info_by_topic('/tf_static'):
             self.assertNotIn(info.node_name, ('pointcloud_frame_republisher', 'pointcloud_to_laserscan'))
+        processed = self.received(PointCloud2, '/probe/processed')
+        scans.clear()
+        self.spin(.7, feed)
+        self.assertTrue(processed and scans)
+        self.assertEqual(list(scans[-1].ranges), ranges_without_cloud_subscriber)
+        projected = processed[-1]
+        self.assertEqual(projected.header.frame_id, 'base_link')
+        self.assertEqual((projected.width, projected.height, projected.row_step), (2, 1, 64))
+        for offset in (0, 32):
+            for actual, expected in zip(struct.unpack_from('<fff', projected.data, offset), (-1.99, 1.02, 0.)):
+                self.assertAlmostEqual(actual, expected, places=5)
+            self.assertEqual(bytes(projected.data[offset+12:offset+32]), bytes(payload[12:32]))
 
 
 if __name__ == '__main__':

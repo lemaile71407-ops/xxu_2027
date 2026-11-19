@@ -60,7 +60,7 @@ private:
       !vector(message.linear_acceleration).allFinite())
     {
       interval_.clear();
-      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "Rejecting invalid IMU frame/time/values");
+      RCLCPP_WARN_THROTTLE(get_logger(), log_clock_, 5000, "Rejecting invalid IMU frame/time/values");
       return;
     }
     if (interval_samples_ == 1) {on_imu(message); return;}
@@ -141,6 +141,7 @@ private:
     publisher_->publish(output);
   }
   JointHistory history_;
+  rclcpp::Clock log_clock_{RCL_STEADY_TIME};
   bool fixed_;
   int interval_samples_;
   double position_offset_, scale_, alpha_tau_;

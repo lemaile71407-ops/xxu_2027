@@ -52,15 +52,53 @@ public:
     }
     output_ = create_publisher<sensor_msgs::msg::PointCloud2>("points_out", rclcpp::SensorDataQoS());
     input_ = create_subscription<sensor_msgs::msg::PointCloud2>("points_in", rclcpp::SensorDataQoS(),
-      [this](sensor_msgs::msg::PointCloud2::ConstSharedPtr m) {
-        if (m->header.frame_id.empty() || (!expected_.empty() && m->header.frame_id != expected_)) {return;}
-        if (pending_.size() >= static_cast<std::size_t>(queue_limit_)) {pending_.pop_front();}
-        pending_.push_back({std::move(m), steady_seconds()}); process_pending();
-      });
-    timer_ = create_wall_timer(std::chrono::milliseconds(10), [this] {process_pending();});
+      [this](sensor_msgs::msg::PointCloud2::ConstSharedPtr m) {on_cloud(std::move(m));});
+    timer_ = create_wall_timer(std::chrono::milliseconds(10), [this] {process_pending();},
+      nullptr, false);
   }
 private:
   struct Wheel {Eigen::Vector3d center, axis; double half_width, radius2;};
+  struct PendingCloud
+  {
+    sensor_msgs::msg::PointCloud2::ConstSharedPtr message;
+    CloudLayout layout;
+    double received;
+    std::optional<std::pair<double, double>> time_range;
+  };
+
+  void on_cloud(sensor_msgs::msg::PointCloud2::ConstSharedPtr message)
+  {
+    if (message->header.frame_id.empty() ||
+      (!expected_.empty() && message->header.frame_id != expected_)) {return;}
+    const double received = steady_seconds();
+    try {
+      const auto & input = *message;
+      const CloudLayout layout(input, timed_);
+      std::optional<std::pair<double, double>> time_range;
+      if (timed_ && input.width != 0 && input.height != 0) {
+        double min_ns = 9.22e18, max_ns = 0.;
+        for (std::uint32_t row = 0; row < input.height; ++row) {
+          const auto * record = input.data.data() + static_cast<std::size_t>(row) * input.row_step;
+          for (std::uint32_t col = 0; col < input.width; ++col, record += input.point_step) {
+            const double ns = read_scalar<double>(record + layout.timestamp, input.is_bigendian);
+            if (!std::isfinite(ns) || ns < 0 || ns >= 9.22e18) {
+              throw std::invalid_argument("invalid point timestamp");
+            }
+            min_ns = std::min(min_ns, ns);
+            max_ns = std::max(max_ns, ns);
+          }
+        }
+        time_range.emplace(std::round(min_ns) * 1.e-9, std::round(max_ns) * 1.e-9);
+      }
+      pending_.push_back({std::move(message), layout, received, time_range});
+    } catch (const std::exception & error) {
+      RCLCPP_WARN_THROTTLE(get_logger(), log_clock_, 2000, "Dropping cloud: %s", error.what());
+      return;
+    }
+    if (pending_.size() > static_cast<std::size_t>(queue_limit_)) {pending_.pop_front();}
+    process_pending();
+  }
+
   void load_geometry(const std::string & path)
   {
     const auto data = YAML::LoadFile(path);
@@ -109,42 +147,72 @@ private:
     static_sub_.reset(); buffer_.reset();
     return true;
   }
-  bool process(const sensor_msgs::msg::PointCloud2 & input)
+  bool process(const PendingCloud & entry)
   {
-    const CloudLayout layout(input, timed_);
+    const auto & input = *entry.message;
+    const auto & layout = entry.layout;
     if (!joint_mode_ && !cache_transform(input.header.frame_id)) {return false;}
-    if (timed_) {
-      // Verify complete temporal coverage before copying any payload.
-      for (std::uint32_t row = 0; row < input.height; ++row) {
-        for (std::uint32_t col = 0; col < input.width; ++col) {
-          const auto * data = input.data.data() + static_cast<std::size_t>(row) * input.row_step + col * input.point_step;
+    // JointHistory starts a new contiguous history whenever the sample gap is too large.
+    if (joint_mode_ && entry.time_range &&
+      (!history_.interpolate(entry.time_range->first, false) ||
+      !history_.interpolate(entry.time_range->second, false)))
+    {
+      return false;
+    }
+
+    const std::size_t point_count = static_cast<std::size_t>(input.width) * input.height;
+    const bool filter = !hulls_.empty() || !wheels_.empty();
+    auto output = std::make_unique<sensor_msgs::msg::PointCloud2>();
+    if (filter) {
+      output->header = input.header;
+      output->height = 1;
+      output->fields = input.fields;
+      output->is_bigendian = input.is_bigendian;
+      output->point_step = input.point_step;
+      output->is_dense = input.is_dense;
+      output->data.reserve(point_count * input.point_step);
+    } else {
+      *output = input;
+    }
+    output->header.frame_id = target_;
+
+    std::optional<double> previous_point_time;
+    Eigen::Isometry3d joint_transform = Eigen::Isometry3d::Identity();
+    for (std::uint32_t row = 0; row < input.height; ++row) {
+      for (std::uint32_t col = 0; col < input.width; ++col) {
+        const auto offset = static_cast<std::size_t>(row) * input.row_step + col * input.point_step;
+        const auto * data = input.data.data() + offset;
+        if (joint_mode_) {
           const double ns = read_scalar<double>(data + layout.timestamp, input.is_bigendian);
-          if (!std::isfinite(ns) || ns < 0 || ns >= 9.22e18) {throw std::invalid_argument("invalid point timestamp");}
-          if (joint_mode_ && !history_.interpolate(std::round(ns) * 1.e-9, false)) {return false;}
+          const double time = std::round(ns) * 1.e-9;
+          if (previous_point_time != time) {
+            const auto joint = history_.interpolate(time, false);
+            if (!joint) {return false;}
+            const Eigen::Matrix3d rotation =
+              Eigen::AngleAxisd(joint->position + position_offset_, axis_).toRotationMatrix();
+            joint_transform.linear() = rotation * sensor_rotation_;
+            joint_transform.translation() = rotation * offset_;
+            previous_point_time = time;
+          }
+        }
+
+        Eigen::Vector3d point;
+        for (int axis = 0; axis < 3; ++axis) {point[axis] = read_scalar<float>(data + layout.xyz[axis], input.is_bigendian);}
+        point = (joint_mode_ ? joint_transform : transform_) * point;
+
+        std::size_t output_offset = offset;
+        if (filter) {
+          if (inside_robot(point)) {continue;}
+          output_offset = output->data.size();
+          output->data.insert(output->data.end(), data, data + input.point_step);
+        }
+        auto * record = output->data.data() + output_offset;
+        for (int axis = 0; axis < 3; ++axis) {
+          write_scalar<float>(record + layout.xyz[axis], static_cast<float>(point[axis]), input.is_bigendian);
         }
       }
     }
-    auto output = std::make_unique<sensor_msgs::msg::PointCloud2>(input);
-    output->header.frame_id = target_;
-    const bool filter = !hulls_.empty() || !wheels_.empty();
-    std::vector<std::uint8_t> records;
-    if (filter) {records.reserve(input.data.size());}
-    for (std::uint32_t row = 0; row < input.height; ++row) {
-      for (std::uint32_t col = 0; col < input.width; ++col) {
-        auto * data = output->data.data() + static_cast<std::size_t>(row) * input.row_step + col * input.point_step;
-        Eigen::Vector3d point;
-        for (int axis = 0; axis < 3; ++axis) {point[axis] = read_scalar<float>(data + layout.xyz[axis], input.is_bigendian);}
-        if (joint_mode_) {
-          const double ns = read_scalar<double>(data + layout.timestamp, input.is_bigendian);
-          const auto joint = *history_.interpolate(std::round(ns) * 1.e-9, false);
-          point = Eigen::AngleAxisd(joint.position + position_offset_, axis_) * (sensor_rotation_ * point + offset_);
-        } else {point = transform_ * point;}
-        for (int axis = 0; axis < 3; ++axis) {write_scalar<float>(data + layout.xyz[axis], static_cast<float>(point[axis]), input.is_bigendian);}
-        if (filter && !inside_robot(point)) {records.insert(records.end(), data, data + input.point_step);}
-      }
-    }
     if (filter) {
-      output->data = std::move(records); output->height = 1;
       output->width = output->data.size() / output->point_step;
       output->row_step = output->width * output->point_step;
     }
@@ -155,14 +223,21 @@ private:
   {
     while (!pending_.empty()) {
       try {
-        if (!process(*pending_.front().first) && steady_seconds() - pending_.front().second <= pending_timeout_) {return;}
+        if (!process(pending_.front()) &&
+          steady_seconds() - pending_.front().received <= pending_timeout_)
+        {
+          if (timer_->is_canceled()) {timer_->reset();}
+          return;
+        }
       } catch (const std::exception & error) {
-        RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "Dropping cloud: %s", error.what());
+        RCLCPP_WARN_THROTTLE(get_logger(), log_clock_, 2000, "Dropping cloud: %s", error.what());
       }
       pending_.pop_front();
     }
+    if (!timer_->is_canceled()) {timer_->cancel();}
   }
   std::string target_, expected_;
+  rclcpp::Clock log_clock_{RCL_STEADY_TIME};
   bool timed_, joint_mode_;
   int queue_limit_;
   double position_offset_, pending_timeout_, tolerance_ = 0.;
@@ -173,7 +248,7 @@ private:
   std::optional<std::string> cached_source_;
   std::vector<std::vector<Eigen::Vector4d>> hulls_;
   std::vector<Wheel> wheels_;
-  std::deque<std::pair<sensor_msgs::msg::PointCloud2::ConstSharedPtr, double>> pending_;
+  std::deque<PendingCloud> pending_;
   std::unique_ptr<tf2_ros::Buffer> buffer_;
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr static_sub_;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr input_;

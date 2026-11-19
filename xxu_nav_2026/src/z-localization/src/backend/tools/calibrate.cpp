@@ -67,7 +67,7 @@ public:
     BodyCalibrationNode() : Node("body_calibration_node") {
         map_frame_ = declare_parameter<std::string>("map_frame", "map");
         odom_frame_ = declare_parameter<std::string>("odom_frame", "camera_init");
-        odom_topic_ = declare_parameter<std::string>("odom_topic", "/Odometry");
+        odom_topic_ = declare_parameter<std::string>("odom_topic", "/odometry");
         tf_lookup_timeout_ = declare_parameter<double>("max_sync_dt", 0.08);
         calibration_config_.sample_period = declare_parameter<double>("sample_period", 0.05);
         calibration_config_.print_period = declare_parameter<double>("print_period", 1.0);

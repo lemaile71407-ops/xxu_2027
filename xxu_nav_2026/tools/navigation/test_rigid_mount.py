@@ -135,10 +135,11 @@ class MountTest(unittest.TestCase):
 
     def test_robot_model_can_own_static_tf_without_duplicate_publishers(self):
         with patch('xxu_bringup.sensor_launch.Node', side_effect=lambda **kw: kw):
-            actions = rigid_sensor_actions(self.load(measured()), use_sim_time=False,
+            actions = rigid_sensor_actions(self.load(measured()), use_sim_time=True,
                                            publish_mount_tf=False)
         self.assertEqual(len(actions), 2)
         self.assertTrue(all(a['package'] == 'xxu_bringup' for a in actions))
+        self.assertTrue(all(a['parameters'][0]['use_sim_time'] is False for a in actions))
 
     def test_entry_passes_selected_base_and_sensor_to_existing_adapter(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -140,7 +140,7 @@ private:
 
     if (!x_field.exists || !y_field.exists || !z_field.exists) {
       RCLCPP_WARN_THROTTLE(
-        this->get_logger(), *this->get_clock(), 2000,
+        this->get_logger(), log_clock_, 2000,
         "PointCloud2 x/y/z FLOAT32 fields are required");
       return;
     }
@@ -158,7 +158,7 @@ private:
           msg->row_step < packed_row_size ||
           static_cast<size_t>(msg->height - 1) * msg->row_step + packed_row_size > msg->data.size()) {
         RCLCPP_WARN_THROTTLE(
-          this->get_logger(), *this->get_clock(), 2000,
+          this->get_logger(), log_clock_, 2000,
           "Point time input requires a valid UINT32 nanosecond offset field and point layout");
         return;
       }
@@ -259,6 +259,7 @@ private:
   }
 
   std::string target_frame_;
+  rclcpp::Clock log_clock_{RCL_STEADY_TIME};
   double scan_period_;
   std::string input_time_offset_field_;
   int max_points_;

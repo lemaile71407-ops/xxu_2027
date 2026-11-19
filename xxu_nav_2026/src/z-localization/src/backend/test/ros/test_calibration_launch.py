@@ -68,7 +68,7 @@ class TestCalibrationParameters(unittest.TestCase):
             self.assertFalse(values[5].bool_value)
         finally:
             node.destroy_node()
-            rclpy.shutdown()
+            rclpy.try_shutdown()
 
 
 @launch_testing.post_shutdown_test()

@@ -39,6 +39,49 @@ interfaces = load('review_interfaces', Path(__file__).with_name('check_interface
 navigation = load('review_navigation', Path(__file__).with_name('check_ega_navigation.py'))
 
 
+class ShutdownTest(unittest.TestCase):
+    def test_startup_handles_interrupt_during_spin_and_idle_cancellation(self):
+        from rclpy.executors import ExternalShutdownException
+        module = load('shutdown_startup', WORKSPACE / 'src/xxu_bringup/scripts/nav2_navigation_startup.py')
+        for exception in (KeyboardInterrupt, ExternalShutdownException):
+            for during_cleanup in (False, True):
+                with self.subTest(exception=exception, during_cleanup=during_cleanup):
+                    ros, node = Mock(), Mock()
+                    ros.ok.return_value = True
+                    if during_cleanup:
+                        node.idle_scan.stop.side_effect = exception()
+                    else:
+                        ros.spin.side_effect = exception()
+                    with patch.object(module, 'rclpy', ros), \
+                            patch.object(module, 'NavigationStartup', return_value=node), \
+                            patch.object(module.signal, 'signal'):
+                        module.main()
+                    node.destroy_node.assert_called_once()
+                    ros.try_shutdown.assert_called_once()
+                    ros.shutdown.assert_not_called()
+
+    def test_map_save_exits_with_failure_on_interrupt(self):
+        from rclpy.executors import ExternalShutdownException
+        module = load('shutdown_save_map', WORKSPACE / 'src/xxu_slam_toolbox/scripts/save_map.py')
+        for exception in (KeyboardInterrupt, ExternalShutdownException):
+            for phase in ('service', 'result'):
+                with self.subTest(exception=exception.__name__, phase=phase), tempfile.TemporaryDirectory() as folder:
+                    ros, node = Mock(), Mock()
+                    ros.create_node.return_value = node
+                    client = node.create_client.return_value
+                    client.wait_for_service.return_value = True
+                    wait = client.wait_for_service if phase == 'service' else ros.spin_until_future_complete
+                    wait.side_effect = exception()
+                    args = SimpleNamespace(map_path=str(Path(folder) / 'map'), timeout=1., service='/probe/save')
+                    with patch.object(module, 'rclpy', ros), patch.object(module, 'parse_args', return_value=args):
+                        self.assertEqual(module.main(), 1)
+                    wait.assert_called_once()
+                    self.assertEqual(client.call_async.call_count, int(phase == 'result'))
+                    node.destroy_node.assert_called_once()
+                    ros.try_shutdown.assert_called_once()
+                    ros.shutdown.assert_not_called()
+
+
 class FreshnessTest(unittest.TestCase):
     def test_installed_cpp_gate_source_stamp_and_steady_timeout(self):
         subprocess.run([sys.executable, str(Path(__file__).with_name('test_cpp_bridge_pipeline.py')),

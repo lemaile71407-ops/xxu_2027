@@ -43,6 +43,13 @@ topics:
       position_unit: rad
       velocity_unit: rad/s
   localization:
+    # Raw ZLIO sensor prediction feeds the base adapter; navigation consumes /odom.
+    frontend_odometry:
+      name: /odometry
+      type: nav_msgs/msg/Odometry
+      header_frame_id: odom
+      child_frame_id: imu
+      owner: zlio
     odometry:
       name: /odom
       type: nav_msgs/msg/Odometry

@@ -241,7 +241,18 @@ def launch_setup(context):
             arguments=['-file', model, '-name', 'sentry_bot',
                        '-x', lc('spawn_x'), '-y', lc('spawn_y'), '-z', '0.3',
                        '-Y', lc('spawn_yaw')])]),
-        bridge('rm_clock_bridge', [contract.topic('system.clock') + '@rosgraph_msgs/msg/Clock[gz.msgs.Clock']),
+        node('ros_gz_bridge', 'parameter_bridge', 'rm_clock_bridge', {
+            'use_sim_time': False, 'bridge_names': ['clock'],
+            'bridges.clock.ros_topic_name': '/sentry/simulation/clock_raw',
+            'bridges.clock.gz_topic_name': contract.topic('system.clock'),
+            'bridges.clock.ros_type_name': 'rosgraph_msgs/msg/Clock',
+            'bridges.clock.gz_type_name': 'gz.msgs.Clock',
+            'bridges.clock.direction': 'GZ_TO_ROS', 'bridges.clock.qos_profile': 'CLOCK',
+        }),
+        node('xxu_sim_bringup', 'clock_rate_limiter', 'rm_clock_limiter', {
+            'use_sim_time': False,
+            'publish_rate': ParameterValue(lc('clock_publish_rate'), value_type=float),
+        }),
         bridge('rm_sensor_bridge', [
             contract.topic('simulation.rm_lidar') + '@sensor_msgs/msg/PointCloud2[gz.msgs.PointCloudPacked',
             contract.topic('radar.imu') + '@sensor_msgs/msg/Imu[gz.msgs.IMU',
@@ -261,6 +272,7 @@ def launch_setup(context):
                  chassis_parameters(profile))] if custom_robot else
            [node('xxu_sim_bringup', 'rm_sim_adapter', 'rm_sim_adapter')]),
         node('xxu_livox_sim', 'livox_pointcloud_shaper', 'rm_lidar_shaper', {
+            'use_sim_time': False,  # Point times come from the input cloud, not /clock.
             'target_frame': contract.frame('rm_lidar'), 'scan_period': 0.0, 'max_points': 12000,
             'input_time_offset_field': 'offset_time' if rgl_point_timing == 'uniform' else ''},
             remappings=[('points_in', contract.topic('simulation.rm_lidar')),
@@ -270,7 +282,7 @@ def launch_setup(context):
                               pointcloud_overrides={'use_point_timestamps': False}
                               if custom_robot and rgl_point_timing == 'uniform' else None),
         node('pointcloud_to_laserscan', 'pointcloud_to_laserscan_node', 'pointcloud_to_laserscan', {
-            'target_frame': contract.frame('navigation_base'), 'transform_tolerance': 0.05,
+            'use_sim_time': False, 'target_frame': contract.frame('navigation_base'), 'transform_tolerance': 0.05,
             'min_height': float(lc('scan_min_height').perform(context)) - geometry['base_height']
                           if custom_robot else ParameterValue(lc('scan_min_height'), value_type=float),
             'max_height': geometry['collision_height'] + .02 - geometry['base_height'] if custom_robot else 0.50,
@@ -279,7 +291,7 @@ def launch_setup(context):
             'range_max': 40.0,
             'robot_self_filter_radius': geometry['robot_radius'] if custom_robot else ParameterValue(lc('scan_self_filter_radius'), value_type=float),
             'use_inf': True, 'scan_qos_reliability': 'best_effort',
-            'publish_processed_cloud': True, 'processed_cloud_frame': contract.frame('navigation_base'),
+            'publish_processed_cloud': False, 'processed_cloud_frame': contract.frame('navigation_base'),
             'processed_cloud_project_to_2d': True, 'processed_cloud_z_value': 0.0},
             remappings=[('cloud_in', contract.topic('localization.deskewed_cloud')), ('scan', contract.topic('localization.scan')),
                         ('processed_cloud', contract.topic('localization.navigation_cloud'))]),
@@ -313,6 +325,7 @@ def generate_launch_description():
         'cmd_vel_out_topic': contract.topic('navigation.collision_output'),
         'rgl_plugin_dir': '', 'field_model': '',
         'robot_model': 'upstream', 'dynamic_test_vehicle': 'false',
+        'clock_publish_rate': '200.0',
     }
     return LaunchDescription([DeclareLaunchArgument(key, default_value=value)
                               for key, value in defaults.items()] + [

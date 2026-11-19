@@ -3,6 +3,8 @@
  * @brief 发布可选的 robot_navigation 位姿、速度、路径与危险状态接口。
  */
 
+#include <optional>
+
 #include "apps/publisher.hpp"
 #include "apps/ros.hpp"
 
@@ -21,14 +23,15 @@ void Publisher::publishLegacyDanger(const LocalizationStatus status) {
 /// 在输出锁内限频并裁剪兼容路径，随后发布本轮冻结的路径快照。
 void Publisher::publishLegacyPath(const geometry_msgs::msg::PoseStamped& pose,
                                   const builtin_interfaces::msg::Time& stamp_message) {
-    nav_msgs::msg::Path path;
-    bool due = false;
+    const bool publish_path = hasSubscribers(legacy_path_pub_.get());
+    std::optional<nav_msgs::msg::Path> path;
     {
         std::lock_guard<std::mutex> lock(output_mutex_);
         const rclcpp::Time stamp(stamp_message);
-        due = last_legacy_path_stamp_.nanoseconds() == 0 || parameters_.legacy.path_period <= 0.0 ||
-              (stamp - last_legacy_path_stamp_).seconds() < 0.0 ||
-              (stamp - last_legacy_path_stamp_).seconds() >= parameters_.legacy.path_period;
+        const bool due = last_legacy_path_stamp_.nanoseconds() == 0 ||
+                         parameters_.legacy.path_period <= 0.0 ||
+                         (stamp - last_legacy_path_stamp_).seconds() < 0.0 ||
+                         (stamp - last_legacy_path_stamp_).seconds() >= parameters_.legacy.path_period;
         if (due) {
             legacy_path_.header.frame_id = parameters_.input.map_frame;
             legacy_path_.header.stamp = stamp_message;
@@ -44,11 +47,12 @@ void Publisher::publishLegacyPath(const geometry_msgs::msg::PoseStamped& pose,
                     legacy_path_.poses.begin(),
                     legacy_path_.poses.begin() + static_cast<std::ptrdiff_t>(remove_count));
             }
-            path = legacy_path_;
+            if (publish_path)
+                path = legacy_path_;
         }
     }
-    if (due) {
-        legacy_path_pub_->publish(path);
+    if (path) {
+        legacy_path_pub_->publish(*path);
     }
 }
 
@@ -63,27 +67,35 @@ void Publisher::publishLegacyOutput(const nav_msgs::msg::Odometry& odom,
         return;
     }
 
-    const Eigen::Matrix4d T_map_body =
-        parameters_.input.body_transform.bodyPoseFromSensorPose(projection.T_map_sensor);
-    const geometry_msgs::msg::PoseStamped pose =
-        matrixToPoseStamped(T_map_body, parameters_.input.map_frame, odom.header.stamp);
-    if (legacy_pose_pub_) {
-        legacy_pose_pub_->publish(pose);
-    }
     // ZLIO owns only map -> odom; the base bridge owns odom -> base_link.
     // Legacy message outputs must not introduce a second map -> body branch.
-    if (parameters_.input.frontend != "zlio" &&
-        projection.global_pose_available && parameters_.legacy.publish_tf && tf_broadcaster_ &&
-        !parameters_.input.body_frame.empty()) {
+    const bool publish_tf = parameters_.input.frontend != "zlio" &&
+                            projection.global_pose_available && parameters_.legacy.publish_tf &&
+                            tf_broadcaster_ && !parameters_.input.body_frame.empty();
+    const bool publish_pose = hasSubscribers(legacy_pose_pub_.get());
+    const bool publish_twist = hasSubscribers(legacy_twist_pub_.get());
+    if (!publish_tf && !publish_pose && !publish_twist && !legacy_path_pub_) {
+        return;
+    }
+
+    const Eigen::Matrix4d T_map_body =
+        parameters_.input.body_transform.bodyPoseFromSensorPose(projection.T_map_sensor);
+    std::optional<geometry_msgs::msg::PoseStamped> pose;
+    if (publish_pose || legacy_path_pub_) {
+        pose = matrixToPoseStamped(T_map_body, parameters_.input.map_frame, odom.header.stamp);
+        if (publish_pose)
+            legacy_pose_pub_->publish(*pose);
+    }
+    if (publish_tf) {
         tf_broadcaster_->sendTransform(toRosTransform(T_map_body, parameters_.input.map_frame,
                                                       parameters_.input.body_frame,
                                                       odom.header.stamp));
     }
-
+    // 为晚加入的订阅者持续采样，有订阅时才复制路径快照。
     if (legacy_path_pub_)
-        publishLegacyPath(pose, odom.header.stamp);
+        publishLegacyPath(*pose, odom.header.stamp);
 
-    if (!legacy_twist_pub_) {
+    if (!publish_twist) {
         return;
     }
     Eigen::Vector3d linear_sensor = vectorFromRos(odom.twist.twist.linear);

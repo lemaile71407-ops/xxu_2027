@@ -2,6 +2,7 @@
 #include <rclcpp_components/register_node_macro.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
+#include <rosgraph_msgs/msg/clock.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/float64.hpp>
@@ -9,7 +10,9 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <optional>
+#include <stdexcept>
 
 namespace xxu_sim_bringup {
 double wrap(double x) {return std::atan2(std::sin(x), std::cos(x));}
@@ -17,6 +20,45 @@ double yaw(const geometry_msgs::msg::Quaternion & q)
 {return std::atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));}
 double steady()
 {return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();}
+
+// Decimate source simulation time, independently of ROS time and physics stepping.
+class ClockRateLimiter final : public rclcpp::Node
+{
+public:
+  explicit ClockRateLimiter(const rclcpp::NodeOptions & options) : Node("rm_clock_limiter", options)
+  {
+    const double rate = declare_parameter("publish_rate", 200.);
+    if (!std::isfinite(rate) || rate < 1. || rate > 1.e9) {
+      throw std::invalid_argument("clock publish_rate must be finite and within [1, 1e9] Hz");
+    }
+    period_ = static_cast<std::int64_t>(std::llround(1.e9 / rate));
+    const auto input = declare_parameter("input_topic", "/sentry/simulation/clock_raw");
+    const auto output = declare_parameter("output_topic", "/clock");
+    if (input == output) {throw std::invalid_argument("clock input and output must differ");}
+    publisher_ = create_publisher<rosgraph_msgs::msg::Clock>(output, rclcpp::ClockQoS());
+    subscription_ = create_subscription<rosgraph_msgs::msg::Clock>(input, rclcpp::ClockQoS(),
+      [this](rosgraph_msgs::msg::Clock::ConstSharedPtr m) {
+        if (m->clock.sec < 0 || m->clock.nanosec >= 1000000000u) {return;}
+        const auto stamp = static_cast<std::int64_t>(m->clock.sec) * 1000000000LL + m->clock.nanosec;
+        if (previous_ && stamp <= *previous_) {return;}
+        previous_ = stamp;
+        if (!next_) {
+          next_ = stamp + period_;
+        } else if (stamp >= *next_) {
+          // Skip missed slots rather than replaying ticks or accumulating drift.
+          *next_ += ((stamp - *next_) / period_ + 1) * period_;
+        } else {
+          return;
+        }
+        publisher_->publish(*m);
+      });
+  }
+private:
+  std::int64_t period_;
+  std::optional<std::int64_t> previous_, next_;
+  rclcpp::Publisher<rosgraph_msgs::msg::Clock>::SharedPtr publisher_;
+  rclcpp::Subscription<rosgraph_msgs::msg::Clock>::SharedPtr subscription_;
+};
 
 class RmSimAdapter final : public rclcpp::Node
 {
@@ -156,3 +198,4 @@ private:
 RCLCPP_COMPONENTS_REGISTER_NODE(xxu_sim_bringup::RmSimAdapter)
 RCLCPP_COMPONENTS_REGISTER_NODE(xxu_sim_bringup::GimbalStabilizer)
 RCLCPP_COMPONENTS_REGISTER_NODE(xxu_sim_bringup::OmniDrive)
+RCLCPP_COMPONENTS_REGISTER_NODE(xxu_sim_bringup::ClockRateLimiter)

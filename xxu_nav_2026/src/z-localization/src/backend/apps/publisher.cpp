@@ -108,7 +108,7 @@ void Publisher::configure() {
 /// 发布地图系传感器里程计及协方差，不可信时清零速度并提高不确定度。
 void Publisher::publishOdometry(const nav_msgs::msg::Odometry& input,
                                 const LocalizationProjection& projection) {
-    if (!odometry_pub_)
+    if (!hasSubscribers(odometry_pub_.get()))
         return;
     // 位姿由后端投影替换；输入时间、传感器子坐标系和可信时的局部速度沿用前端消息。
     auto output = input;

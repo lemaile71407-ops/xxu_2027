@@ -51,7 +51,7 @@ class TestFrontendLifecycle(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.node.destroy_node()
-        rclpy.shutdown()
+        rclpy.try_shutdown()
 
     def call(self, service_type, name, request):
         client = self.node.create_client(service_type, name)

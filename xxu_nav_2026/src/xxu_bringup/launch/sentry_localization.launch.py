@@ -17,9 +17,11 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 from xxu_bringup.sensor_launch import load_rigid_mount, rigid_sensor_actions
+from xxu_bringup.interfaces import interfaces
 
 
 def setup(context):
+    contract = interfaces()
     arg = lambda name: LaunchConfiguration(name).perform(context)
     mount = load_rigid_mount(arg('mount_file'))
     if mount['frames']['base'] != 'base_link':
@@ -43,25 +45,29 @@ def setup(context):
                                     publish_mount_tf=arg('publish_mount_tf') == 'true')
     actions += [
         ComposableNodeContainer(
-            name='sentry_bridge_container', namespace='', package='rclcpp_components',
-            executable='component_container_mt', output='screen',
+            name='sentry_bridge_container', namespace='', package='xxu_bringup',
+            executable='component_container_events', output='screen',
             composable_node_descriptions=[
                 ComposableNode(package='xxu_bringup', plugin='xxu_bringup::ZlioBaseOdometry',
                     name='zlio_base_odometry', parameters=[{
-                        'use_sim_time': simulated, 'base_frame': 'base_link',
+                        'use_sim_time': False, 'base_frame': 'base_link',
+                        'input_topic': contract.topic('localization.frontend_odometry'),
+                        'output_topic': contract.topic('localization.odometry'),
                         'sensor_frame': frames['sensor'], 'source_child_frame': 'imu',
                         'tf_publish_rate': 30.0,
                         'extrinsics_source': 'parameters',
                         'base_from_sensor_xyz': mount['base_to_sensor']['xyz'],
                         'base_from_sensor_rpy': mount['base_to_sensor']['rpy']}],
-                    remappings=[('/tf', '/sentry/tf/odometry')]),
+                    remappings=[('/tf', '/sentry/tf/odometry')],
+                    extra_arguments=[{'use_intra_process_comms': True}]),
                 ComposableNode(package='xxu_bringup', plugin='xxu_bringup::CmdVelWatchdog',
                     name='cmd_vel_watchdog', parameters=[{
                         'use_sim_time': simulated, 'publish_rate': 100.,
                         'require_localization': True,
                         'require_joint_states': arg('require_joint_states') == 'true',
                         'required_tf_pairs': ['odom->base_link'],
-                        'tf_source_frame': frames['lidar']}]),
+                        'tf_source_frame': frames['lidar']}],
+                    extra_arguments=[{'use_intra_process_comms': True}]),
             ]),
         IncludeLaunchDescription(PythonLaunchDescriptionSource(str(
             Path(get_package_share_directory('bringup')) / 'launch/bringup.launch.py')),
@@ -78,7 +84,7 @@ def setup(context):
             }.items()),
         Node(package='pointcloud_to_laserscan', executable='pointcloud_to_laserscan_node',
             name='pointcloud_to_laserscan', output='screen', parameters=[{
-                'use_sim_time': simulated, 'target_frame': 'base_link',
+                'use_sim_time': False, 'target_frame': 'base_link',
                 'scan_qos_reliability': 'best_effort', 'scan_time': .1,
                 'min_height': float(arg('scan_min_height')), 'max_height': float(arg('scan_max_height'))}],
             remappings=[('cloud_in', '/cloud_deskewed'), ('scan', '/scan')]),

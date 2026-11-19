@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from slam_toolbox.srv import SaveMap
 
 
@@ -52,10 +53,11 @@ def main():
 
         node.get_logger().info(f"Saved map to {map_path}.yaml and {map_path}.pgm")
         return 0
+    except (KeyboardInterrupt, ExternalShutdownException):
+        return 1
     finally:
         node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        rclpy.try_shutdown()
 
 
 if __name__ == "__main__":

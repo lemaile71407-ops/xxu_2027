@@ -109,25 +109,54 @@ public:
     if (stamp > pose_stamp_) {pose_stamp_ = stamp; pose_progress_ = received;}
   }
 
+  struct Evaluation
+  {
+    bool trusted = true;
+    bool state_fresh = true;
+    bool state_stamp_valid = true;
+    bool pose_fresh = true;
+    bool pose_stamp_valid = true;
+    bool recovering = false;
+
+    bool ready() const
+    {
+      return trusted && state_fresh && state_stamp_valid && pose_fresh && pose_stamp_valid && !recovering;
+    }
+
+    std::vector<std::string> reasons() const
+    {
+      std::vector<std::string> result;
+      if (!trusted) {result.emplace_back("localization untrusted or malformed");}
+      if (!state_fresh) {result.emplace_back("localization state receipt/source-progress timeout");}
+      if (!state_stamp_valid) {result.emplace_back("localization state source timestamp expired or invalid");}
+      if (!pose_fresh) {result.emplace_back("localization pose receipt/source-progress timeout");}
+      if (!pose_stamp_valid) {result.emplace_back("localization pose source timestamp expired or invalid");}
+      if (recovering) {result.emplace_back("localization recovery hold");}
+      return result;
+    }
+  };
+
+  Evaluation evaluate(double now, std::int64_t ros_now)
+  {
+    const auto valid_stamp = [this, ros_now](std::int64_t stamp) {
+        const auto age = ros_now - stamp;
+        return stamp > 0 && age >= -50000000LL && static_cast<double>(age) <= timeout_ * 1.e9;
+      };
+    Evaluation result{
+      trusted_,
+      fresh(state_received_, timeout_, now) && fresh(state_progress_, timeout_, now),
+      valid_stamp(state_stamp_),
+      fresh(pose_received_, timeout_, now) && fresh(pose_progress_, timeout_, now),
+      valid_stamp(pose_stamp_)};
+    if (!result.ready()) {stable_since_.reset(); return result;}
+    if (!stable_since_) {stable_since_ = now;}
+    result.recovering = now - *stable_since_ < recovery_hold_;
+    return result;
+  }
+
   std::vector<std::string> check(double now, std::int64_t ros_now)
   {
-    std::vector<std::string> reasons;
-    if (!trusted_) {reasons.emplace_back("localization untrusted or malformed");}
-    auto source = [&](const char * name, const auto & received, const auto & progress, auto stamp) {
-        if (!fresh(received, timeout_, now) || !fresh(progress, timeout_, now)) {
-          reasons.push_back(std::string("localization ") + name + " receipt/source-progress timeout");
-        }
-        const auto age = ros_now - stamp;
-        if (stamp <= 0 || age < -50000000LL || static_cast<double>(age) > timeout_ * 1.e9) {
-          reasons.push_back(std::string("localization ") + name + " source timestamp expired or invalid");
-        }
-      };
-    source("state", state_received_, state_progress_, state_stamp_);
-    source("pose", pose_received_, pose_progress_, pose_stamp_);
-    if (!reasons.empty()) {stable_since_.reset(); return reasons;}
-    if (!stable_since_) {stable_since_ = now;}
-    if (now - *stable_since_ < recovery_hold_) {reasons.emplace_back("localization recovery hold");}
-    return reasons;
+    return evaluate(now, ros_now).reasons();
   }
 
 private:

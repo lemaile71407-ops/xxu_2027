@@ -135,6 +135,7 @@ class VehicleParametersTest(unittest.TestCase):
                     platform, use_sim_time='true', profile=profile if platform == 'rm_sim' else None)
                 self.assertTrue(actions)
                 self.assertTrue(all(action['package'] == 'xxu_bringup' for action in actions))
+                self.assertTrue(all(action['parameters'][0]['use_sim_time'] is False for action in actions))
 
     def test_autonomous_mapping_resolves_selected_vehicle(self):
         launch_file = SHARE.parent / 'xxu_slam_toolbox/launch/autonomous_mapping.launch.py'
@@ -348,7 +349,8 @@ class VehicleParametersTest(unittest.TestCase):
                    ('frontend_config', 'backend_config', 'external_map', 'external_nav2_params')},
                 **{key: 'false' for key in ('gazebo_gui', 'rviz', 'dynamic_test_vehicle', 'idle_scan')},
                 **{key: '' for key in ('field_model', 'rgl_plugin_dir', 'robot_geometry_file')},
-                spawn_x='2', spawn_y='2', spawn_yaw='0', lidar_mode='rgl', imu_sampling='direct')
+                spawn_x='2', spawn_y='2', spawn_yaw='0', lidar_mode='rgl', imu_sampling='direct',
+                clock_publish_rate='200.0')
             with patch.object(module, 'get_package_share_directory',
                               side_effect=lambda name: str(SIM_SHARE if name == 'xxu_sim_bringup' else SHARE)), \
                     patch.object(module, 'PythonLaunchDescriptionSource',

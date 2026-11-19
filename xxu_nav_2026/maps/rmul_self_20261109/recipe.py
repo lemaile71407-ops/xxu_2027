@@ -7,6 +7,7 @@ from scipy.ndimage import binary_dilation,distance_transform_edt
 import numpy as np
 from scipy.spatial.transform import Rotation
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.parameter import Parameter
 from rclpy.qos import qos_profile_sensor_data
@@ -78,9 +79,17 @@ def main():
   for target in route:
    print('mapping target',target,flush=True);n.go(target);summary['reached'].append(target)
   n.wait(3.);summary['completed']=True
+ except (KeyboardInterrupt, ExternalShutdownException):summary['failure']='capture interrupted'
  except BaseException as e:summary['failure']=repr(e)
  finally:
-  n.wait(1.);save(n,summary);(OUT/'capture.json').write_text(json.dumps(summary,indent=2)+'\n');n.destroy_node();rclpy.shutdown();print(json.dumps(summary,indent=2),flush=True)
+  try:
+   if rclpy.ok():n.wait(1.)
+  except (KeyboardInterrupt, ExternalShutdownException):pass
+  finally:
+   try:
+    save(n,summary);(OUT/'capture.json').write_text(json.dumps(summary,indent=2)+'\n');print(json.dumps(summary,indent=2),flush=True)
+   finally:
+    n.destroy_node();rclpy.try_shutdown()
  raise SystemExit(0 if summary['completed'] else 1)
 
 

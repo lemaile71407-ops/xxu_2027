@@ -9,6 +9,7 @@ import time
 
 import numpy as np
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.parameter import Parameter
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.signals import SignalHandlerOptions
@@ -205,11 +206,13 @@ def main():
                           'jump_count': len(jumps)}
                 (args.output / 'health.json').write_text(json.dumps(health, indent=2) + '\n')
                 flushed = time.monotonic()
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
     finally:
         for stream in streams.values():
             stream.close()
         node.destroy_node()
-        rclpy.shutdown()
+        rclpy.try_shutdown()
 
 
 if __name__ == '__main__':

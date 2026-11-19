@@ -26,7 +26,7 @@ def _compose(a, b):
             [[sum(r[i][k]*s[k][j] for k in range(3)) for j in range(3)] for i in range(3)])
 
 
-def _static_action(parent, child, pose, use_sim_time):
+def _static_action(parent, child, pose):
     xyz, r = pose
     pitch = math.atan2(-r[2][0], math.hypot(r[0][0], r[1][0]))
     if math.hypot(r[0][0], r[1][0]) > 1.e-10:
@@ -38,7 +38,7 @@ def _static_action(parent, child, pose, use_sim_time):
         arguments.extend(['--' + name, str(value)])
     return Node(package='tf2_ros', executable='static_transform_publisher',
                 name='mount_' + child, arguments=arguments,
-                parameters=[{'use_sim_time': use_sim_time}], output='screen')
+                parameters=[{'use_sim_time': False}], output='screen')
 
 
 def navigation_static_actions(robot_description, base, sensors, *, use_sim_time):
@@ -67,7 +67,7 @@ def navigation_static_actions(robot_description, base, sensors, *, use_sim_time)
         pose = _pose([0., 0., 0.], [0., 0., 0.])
         for part in reversed(chain):
             pose = _compose(pose, part)
-        actions.append(_static_action(base, sensor, pose, use_sim_time))
+        actions.append(_static_action(base, sensor, pose))
     return actions
 
 
@@ -131,14 +131,14 @@ def rigid_sensor_actions(mount, *, use_sim_time, publish_mount_tf=True):
     if publish_mount_tf:
         sensor = _pose(**mount['base_to_sensor'])
         lidar = _compose(sensor, _pose(**mount['sensor_to_lidar']))
-        actions += [_static_action(frames['base'], frames['sensor'], sensor, use_sim_time),
-                    _static_action(frames['base'], frames['lidar'], lidar, use_sim_time)]
+        actions += [_static_action(frames['base'], frames['sensor'], sensor),
+                    _static_action(frames['base'], frames['lidar'], lidar)]
     # Fixed TF is identical for every acquisition time, so one lookup per cloud
     # preserves all point-time fields without the dynamic TF group limit.
     actions.append(Node(
         package="xxu_bringup", executable="pointcloud_frame_republisher",
         name="rigid_pointcloud_transform", output="screen", parameters=[{
-            "use_sim_time": use_sim_time, "target_frame": frames["sensor"],
+            "use_sim_time": False, "target_frame": frames["sensor"],
             "expected_source_frame": frames["lidar"],
             "use_point_timestamps": False, "use_joint_interpolation": False,
         }], remappings=[("points_in", mount["topics"]["points_in"]),
@@ -146,7 +146,7 @@ def rigid_sensor_actions(mount, *, use_sim_time, publish_mount_tf=True):
     actions.append(Node(
         package="xxu_bringup", executable="gimbal_imu_compensator",
         name="rigid_imu_transform", output="screen", parameters=[{
-            "use_sim_time": use_sim_time, "target_frame": frames["sensor"],
+            "use_sim_time": False, "target_frame": frames["sensor"],
             "fixed_sensor": True, "sensor_offset": [0.0, 0.0, 0.0],
             "expected_source_frame": frames["imu_source"],
             "sensor_rpy": mount["sensor_from_imu_rpy"], "joint_position_offset": 0.0,
@@ -185,6 +185,10 @@ def sensor_preprocessing(platform, *, use_sim_time, profile=None,
     actions = []
     for key, definition in definitions.items():
         parameters = {"use_sim_time": use_sim_time, **definition["parameters"], **overrides.get(key, {})}
+        # Acquisition stamps drive compensation; pending expiry uses steady time.
+        # Neither preprocessor needs a high-rate /clock subscription.
+        if definition["executable"] in ("pointcloud_frame_republisher", "gimbal_imu_compensator"):
+            parameters["use_sim_time"] = False
         # Config references are semantic contract keys, not a second copy of names.
         parameters = {name: contract.frame(value[7:]) if isinstance(value, str) and value.startswith("@frame:")
                       else value for name, value in parameters.items()}

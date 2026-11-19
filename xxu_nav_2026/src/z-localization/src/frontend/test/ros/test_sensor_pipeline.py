@@ -91,7 +91,7 @@ def room_message(input_type):
 class TestSensorPipeline(unittest.TestCase):
     def setUp(self):
         rclpy.init()
-        self.addCleanup(rclpy.shutdown)
+        self.addCleanup(rclpy.try_shutdown)
         self.node = rclpy.create_node('sensor_pipeline_observer')
         self.addCleanup(self.node.destroy_node)
         self.imus = self.node.create_publisher(Imu, '/test/imu', 1000)
