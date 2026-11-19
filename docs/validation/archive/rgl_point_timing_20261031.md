@@ -6,7 +6,7 @@
 
 - 本机 RGL 支持为射线设置毫秒偏移，并可按传感器线速度和角速度模拟运动畸变；测试中的输出逐点时间可取秒或纳秒相对偏移。[官方说明](https://github.com/RobotecAI/RobotecGPULidar)也将该畸变描述为只考虑传感器运动的简化模型，不代表动态物体运动的完整模拟。
 - 上游 RGL Gazebo 插件默认不设置射线时间、速度和畸变，也不发布逐点时间。现有 MID-360 二进制扫描文件仅提供射线位姿矩阵，其每条射线的采样时刻与排列顺序尚无可靠依据，不能直接按索引声称真实采样时间。下面的候选接入明确使用均匀时序假设。
-- 本次为现有 [点云适配器](../../xxu_nav_2026/src/xxu_livox_sim/src/livox_pointcloud_shaper.cpp) 增加默认关闭的 `input_time_offset_field`。指定字段时，输入必须为相对 `header.stamp` 的 UINT32 纳秒偏移，并设置 `scan_period=0`；输出 `timestamp` 为 FLOAT64 的绝对纳秒。时间字段缺失、类型错误、字段越界或点云行布局不合法会拒绝该帧。未启用时沿用原行为。
+- 本次为现有 [点云适配器](../../../xxu_nav_2026/src/xxu_livox_sim/src/livox_pointcloud_shaper.cpp) 增加默认关闭的 `input_time_offset_field`。指定字段时，输入必须为相对 `header.stamp` 的 UINT32 纳秒偏移，并设置 `scan_period=0`；输出 `timestamp` 为 FLOAT64 的绝对纳秒。时间字段缺失、类型错误、字段越界或点云行布局不合法会拒绝该帧。未启用时沿用原行为。
 - 输入时间必须与实际射线采样位姿匹配，适配器不会生成或验证物理上正确的时间。输出使用现有 FLOAT64 纳秒格式，实际分辨率受数值大小影响。
 - 如果将该输出给 ZLIO 的 PointCloud2 解码器，须匹配 `point_time_field=timestamp`、`point_time_scale=1e-9`、`point_time_absolute=true`。本次没有更改 ZLIO 或正式启动配置。
 - 候选链路已验证 RGL、Gazebo 到 ROS 的字段桥接和 ZLIO 前端，见下文；尚未完成导航闭环、全局定位后端、动态云台及真实雷达时序验证，不能据此判断实际定位精度改善。
@@ -50,7 +50,7 @@ ROS_DOMAIN_ID=127 python3 docs/validation/data/rgl_timing_capability_20261031/sh
 
 ## RGL 到 ZLIO 的候选接入
 
-同日将候选实现保存为 [上游插件补丁](../../xxu_nav_2026/tools/navigation/rgl_timed_scan.patch)，用 [独立构建脚本](../../xxu_nav_2026/tools/navigation/build_rgl_timed_candidate.sh) 从固定版本生成插件，不覆盖上游仓库或默认 RGL 安装。启动文件增加显式参数 `rgl_point_timing:=uniform`；设置 `enable_zlio_timed:=true`、`enable_lio:=false` 时，还会以相同虚拟传感器坐标系启动 ZLIO 前端，并关闭其 TF 发布。这是一条候选验证链，默认仍为关闭。
+同日将候选实现保存为 [上游插件补丁](../../../xxu_nav_2026/tools/navigation/rgl_timed_scan.patch)，用 [独立构建脚本](../../../xxu_nav_2026/tools/navigation/build_rgl_timed_candidate.sh) 从固定版本生成插件，不覆盖上游仓库或默认 RGL 安装。启动文件增加显式参数 `rgl_point_timing:=uniform`；设置 `enable_zlio_timed:=true`、`enable_lio:=false` 时，还会以相同虚拟传感器坐标系启动 ZLIO 前端，并关闭其 TF 发布。这是一条候选验证链，默认仍为关闭。
 
 逐帧保存上一时刻的雷达位姿，在当前帧计算这段时间的平均传感器局部线速度与角速度。按文件中射线顺序，将整帧时间均匀分配在两个时刻之间；从上一时刻位姿出发用 RGL 速度畸变模型射线追踪，头时间为扫描起点，输出 `offset_time` 为相对起点的 UINT32 纳秒。过滤未命中射线后，每个命中点的时间仍与其射线绑定。下游整形器保留时间，固定雷达的静态坐标转换保留整个点记录。速度坐标系和输出坐标以 [非零位置、90 度旋转的斜墙程序](data/rgl_timing_capability_20261031/rgl_velocity_frame_probe.cpp)及解析结果验证；RGL 0.21.0 的[射线实现](https://github.com/RobotecAI/RobotecGPULidar/blob/a65f07f9565adbfe5cda33a58732638786cb34e8/src/gpu/optixPrograms.cu)也使用局部速度。
 

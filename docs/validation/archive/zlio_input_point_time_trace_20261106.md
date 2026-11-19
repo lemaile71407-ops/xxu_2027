@@ -6,7 +6,7 @@
 
 **已确认进入 ZLIO 前的点时间每帧仅为帧头；当前安装的 `livox_pointcloud_shaper` 对已知非零输入能复现丢弃点偏移，而现有源码的独立构建能保留偏移。** 这确认了候选时序能力与运行产物的差异，尚不单独证明原始扫描的物理时间语义错误。
 
-后续[端到端验证](zlio_point_time_e2e_20261106.md)已通过有时序 RGL 到 ZLIO 的点时间交付，并在新的同源对照中观察到误差下降，但原 46.56 cm 未复现。该轮还发现旧候选 RGL 实际不输出点时间：若源本为瞬时扫描，帧内同时间可能合理，不能仅凭本报告的单值时间把原漂移归因为丢失采样时刻。
+后续[端到端验证](../zlio_point_time_e2e_20261106.md)已通过有时序 RGL 到 ZLIO 的点时间交付，并在新的同源对照中观察到误差下降，但原 46.56 cm 未复现。该轮还发现旧候选 RGL 实际不输出点时间：若源本为瞬时扫描，帧内同时间可能合理，不能仅凭本报告的单值时间把原漂移归因为丢失采样时刻。
 
 - 原包 176–180 s 共 **40 帧、109531 点**，每帧 `timestamp` 的唯一值数量都是 **1**，且全部等于本帧头时间。该现象存在于原始录得的 `/mid360/livox_points_compensated`，不是本次回放、ZLIO 解码或采样才产生。
 - 原采集启动明确传入 `rgl_point_timing=uniform`，运行日志也打印此模式；它表示配置意图，不能代替实际点时间交付证据。
@@ -26,7 +26,7 @@
 
 再直接读取原包 PointCloud2 的 FLOAT64 `timestamp` 字节，按字段 offset、point_step、row_step 和大小端解析，核对 176–180 s 所有 40 帧。时间跨度全部为 0；上述两帧原输入分别有 2391、2193 点，也全部等于帧头。因而不能用“采样恰好只选中同时刻回波”解释这两帧。[检查程序](data/zlio_propagation_update_trace_20261106/inspect_input_point_times.py)、[逐帧字段、范围及消息摘要](data/zlio_propagation_update_trace_20261106/input_point_time_inspection.json)
 
-当前前端解码按配置读取点内时间；输入缓冲只排序和赋 ID，未将每点时间替换成帧头。此处关键证据是**原输入本身已单值化**，不依赖仅从源码推断实际运行行为。[解码](../../xxu_nav_2026/src/z-localization/src/frontend/apps/ros.cpp)、[输入缓冲](../../xxu_nav_2026/src/z-localization/src/frontend/src/input.cpp)
+当前前端解码按配置读取点内时间；输入缓冲只排序和赋 ID，未将每点时间替换成帧头。此处关键证据是**原输入本身已单值化**，不依赖仅从源码推断实际运行行为。[解码](../../../xxu_nav_2026/src/z-localization/src/frontend/apps/ros.cpp)、[输入缓冲](../../../xxu_nav_2026/src/z-localization/src/frontend/src/input.cpp)
 
 ## 2. 采集意图与实际交付不一致
 
@@ -37,7 +37,7 @@
 - 点云补偿器为 `point_timestamps=False`、`joint_interpolation=False`；
 - 整形器可执行文件来自工作区安装路径。
 
-当前[启动源码](../../xxu_nav_2026/src/xxu_bringup/launch/rm_sim_gazebo.launch.py)在 uniform 模式给整形器传 `input_time_offset_field=offset_time`；当前[整形器源码](../../xxu_nav_2026/src/xxu_livox_sim/src/livox_pointcloud_shaper.cpp)的预期行为为 `timestamp=header+offset_time`。配置、源码存在并不等于采集运行时已经交付该功能。
+当前[启动源码](../../xxu_nav_2026/src/xxu_bringup/launch/rm_sim_gazebo.launch.py)在 uniform 模式给整形器传 `input_time_offset_field=offset_time`；当前[整形器源码](../../../xxu_nav_2026/src/xxu_livox_sim/src/livox_pointcloud_shaper.cpp)的预期行为为 `timestamp=header+offset_time`。配置、源码存在并不等于采集运行时已经交付该功能。
 
 没有原始 RGL 消息，故本轮不能独立证明当时插件确已输出非零偏移或启用了畸变，也不能精确区分首次丢失在插件、整形器还是更早的运行配置。可以确认的是：本次录包没有保留预期的逐点时间；当前安装整形器也无法正确处理已知非零偏移。
 
@@ -69,7 +69,7 @@
 
 ## 5. 后续端到端验证入口
 
-已完成固定算法、噪声和门限的端到端实验，同步保存 RGL 原始云、两侧整形/补偿云、IMU、真值和 ZLIO 解码日志。实际点级交付、177.81–181.40 s 同源误差及未复现原故障的边界统一见[端到端验证报告](zlio_point_time_e2e_20261106.md)。
+已完成固定算法、噪声和门限的端到端实验，同步保存 RGL 原始云、两侧整形/补偿云、IMU、真值和 ZLIO 解码日志。实际点级交付、177.81–181.40 s 同源误差及未复现原故障的边界统一见[端到端验证报告](../zlio_point_time_e2e_20261106.md)。
 
 不能从原包的单值时间按点序强行补造偏移，也不能以新实验的改善追认原包一定丢失了采样时间。当前未完成原 46.56 cm 故障修复确认、安装验证、完整路线回归、导航验收或默认切换。
 

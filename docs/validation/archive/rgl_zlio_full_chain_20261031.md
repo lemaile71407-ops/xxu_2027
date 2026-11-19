@@ -2,11 +2,11 @@
 
 ## 结论
 
-**整套定位与导航仍未通过完整验证，不应替换正式导航链。** RGL 逐点时间、固定外参、ZLIO 前端及 `odom → base_footprint` 可以在受控仿真中工作；可选点云出口已接通 `/cloud_deskewed → /scan`，定位失信及超时门控有隔离试验证据。2026-11-01 已按用户要求开展正常输入下的 Nav2 闭环，并把先验图后端接入隔离候选：单目标通过，长路线出现错误恢复，开启已有连续性保护后能停车但导航未完成，当前结果统一见[后端正常导航复核](zlocalization_comparison_20261030.md#后端接入与正常导航复核2026-11-01)。下文的主动 IMU 中断测试保留为历史证据，当前正常运行不注入断流。此前的参数改善和保护候选均不能视为根因修复，正式默认仍保留旧链。
+**整套定位与导航仍未通过完整验证，不应替换正式导航链。** RGL 逐点时间、固定外参、ZLIO 前端及 `odom → base_footprint` 可以在受控仿真中工作；可选点云出口已接通 `/cloud_deskewed → /scan`，定位失信及超时门控有隔离试验证据。2026-11-01 已按用户要求开展正常输入下的 Nav2 闭环，并把先验图后端接入隔离候选：单目标通过，长路线出现错误恢复，开启已有连续性保护后能停车但导航未完成，当前结果统一见[后端正常导航复核](../zlocalization_comparison_20261030.md#后端接入与正常导航复核2026-11-01)。下文的主动 IMU 中断测试保留为历史证据，当前正常运行不注入断流。此前的参数改善和保护候选均不能视为根因修复，正式默认仍保留旧链。
 
-本次使用 ROS 2 Jazzy、无界面 Gazebo、RMUL 场地、EGA 固定雷达车型及隔离 ROS 域。RGL 使用 [逐点时间候选补丁](../../xxu_nav_2026/tools/navigation/rgl_timed_scan.patch)，前后端使用 `src/z-localization` 当前源码；前端、后端与适配器分别独立构建，ROS 消息依赖沿用本地已安装版本。点云时序是均匀射线顺序的仿真假设，并非实测 MID-360 时间；后端先验图取自同一仿真场地的历史录包构建图，当前仿真输入是新运行，不是独立场地图。未覆盖实车、动态云台或长时间运行。
+本次使用 ROS 2 Jazzy、无界面 Gazebo、RMUL 场地、EGA 固定雷达车型及隔离 ROS 域。RGL 使用 [逐点时间候选补丁](../../../xxu_nav_2026/tools/navigation/rgl_timed_scan.patch)，前后端使用 `src/z-localization` 当前源码；前端、后端与适配器分别独立构建，ROS 消息依赖沿用本地已安装版本。点云时序是均匀射线顺序的仿真假设，并非实测 MID-360 时间；后端先验图取自同一仿真场地的历史录包构建图，当前仿真输入是新运行，不是独立场地图。未覆盖实车、动态云台或长时间运行。
 
-2026-11-06 补充边界：后续独立路线 `capture03` 的实际点时间与 uniform 配置意图不一致，不能由本页早期候选能力验证推定其运行输入已保留逐点时间。原包及产物对照见[输入点时间溯源](zlio_input_point_time_trace_20261106.md)；新的[端到端时间与误差实验](zlio_point_time_e2e_20261106.md)已验证交付并显示同源改善，但未复现原 46.56 cm，不能认定原故障修复。
+2026-11-06 补充边界：后续独立路线 `capture03` 的实际点时间与 uniform 配置意图不一致，不能由本页早期候选能力验证推定其运行输入已保留逐点时间。原包及产物对照见[输入点时间溯源](zlio_input_point_time_trace_20261106.md)；新的[端到端时间与误差实验](../zlio_point_time_e2e_20261106.md)已验证交付并显示同源改善，但未复现原 46.56 cm，不能认定原故障修复。
 
 ## 时间与底盘 TF
 
@@ -35,11 +35,11 @@
 | 0.2 m / 16 | 0 | 80 | [细体素首次](data/rgl_full_20261031/backend_convergence_20261031/voxel02/analysis.json) |
 | 0.2 m / 16，同包重复 | 0 | 80 | [细体素重复](data/rgl_full_20261031/backend_convergence_20261031/voxel02_repeat/analysis.json) |
 
-四次均正常结束，状态消息未观察到 `LOST`。两次 0.4 m 回放均发生 15 次 `SUSPECT` 后恢复，采样估计不可信时长分别约 3.54、3.55 秒；不可信样本未声明 `pose_trusted=true`。新增[配准调试日志](../../xxu_nav_2026/src/z-localization/src/backend/src/registration_solver.cpp)仅输出最终步长、对应点数和求解状态，不改变收敛判据。基线的 15 次跟踪失败均跑满 16 次，最终平移步长约 5.79–33.58 mm，超过现有 5 mm 上限；提高到 64 次后，同一批运行关键帧仍失败。[基线步长](data/rgl_full_20261031/backend_convergence_20261031/baseline16/tracking_failure_steps.json)、[64 次步长](data/rgl_full_20261031/backend_convergence_20261031/budget64/tracking_failure_steps.json)可对照。
+四次均正常结束，状态消息未观察到 `LOST`。两次 0.4 m 回放均发生 15 次 `SUSPECT` 后恢复，采样估计不可信时长分别约 3.54、3.55 秒；不可信样本未声明 `pose_trusted=true`。新增[配准调试日志](../../../xxu_nav_2026/src/z-localization/src/backend/src/registration_solver.cpp)仅输出最终步长、对应点数和求解状态，不改变收敛判据。基线的 15 次跟踪失败均跑满 16 次，最终平移步长约 5.79–33.58 mm，超过现有 5 mm 上限；提高到 64 次后，同一批运行关键帧仍失败。[基线步长](data/rgl_full_20261031/backend_convergence_20261031/baseline16/tracking_failure_steps.json)、[64 次步长](data/rgl_full_20261031/backend_convergence_20261031/budget64/tracking_failure_steps.json)可对照。
 
 从 `SUSPECT` 状态消息前 0.3 秒内最近的配准调试发布中导出 12 组源、目标点云，固定几何后逐步求解，12 组均出现稳定两步振荡；每组分别使用 16、32、64、128、256 次预算仍不收敛。例如第一组每步约移动 13.31 mm、旋转 0.06275°，对应点数在 204 与 205 间交替，隔两步的位姿重复。因此，至少这批样本的失败不能用增加迭代数解决，对应关系切换是后续求解器诊断入口。导出源已变换到地图系的旧最终估计，重新求解从单位变换开始；配对采用录包时间近似关联，**不是原跟踪初值与目标的精确快照**，不据此解释所有失败。[逐组结果与范围](data/rgl_full_20261031/backend_convergence_20261031/baseline16/cloud_pairs/probe_summary.json)、[导出方法](data/rgl_full_20261031/backend_convergence_20261031/export_debug_clouds.py)及[固定几何探针](data/rgl_full_20261031/backend_convergence_20261031/probe_registration.cpp)保留复核入口。
 
-原完整会话的 112 条 `SUSPECT` 原因虽然均包含 `converged=false`，其中 109 条信息有效、3 条信息无效，不能全部归为数值振荡。原日志中首次重置紧随 IMU 间断及前端会话变化；后来一次跟踪仅有 75/75 个对应点，低于配置最少 80 个，恢复连续三次未通过支撑验收后升级 `LOST`，随后仍持续支撑不足并约每 10 秒重置一次。当前恢复提交路径在 `LOST` 匹配失败时调用重置，受 `reset.min_gap=10` 秒限制；这说明增加重置次数不能直接补足几何支撑，尚不能认定调整体素即可解决跨代次恢复。[旧日志分类及关键时间线](data/rgl_full_20261031/backend_convergence_20261031/historical_failure_analysis.json)、[恢复提交](../../xxu_nav_2026/src/z-localization/src/backend/src/localization_recovery.cpp)和[重置协调](../../xxu_nav_2026/src/z-localization/src/backend/src/reset_coordinator.cpp)记录依据。
+原完整会话的 112 条 `SUSPECT` 原因虽然均包含 `converged=false`，其中 109 条信息有效、3 条信息无效，不能全部归为数值振荡。原日志中首次重置紧随 IMU 间断及前端会话变化；后来一次跟踪仅有 75/75 个对应点，低于配置最少 80 个，恢复连续三次未通过支撑验收后升级 `LOST`，随后仍持续支撑不足并约每 10 秒重置一次。当前恢复提交路径在 `LOST` 匹配失败时调用重置，受 `reset.min_gap=10` 秒限制；这说明增加重置次数不能直接补足几何支撑，尚不能认定调整体素即可解决跨代次恢复。[旧日志分类及关键时间线](data/rgl_full_20261031/backend_convergence_20261031/historical_failure_analysis.json)、[恢复提交](../../../xxu_nav_2026/src/z-localization/src/backend/src/localization_recovery.cpp)和[重置协调](../../../xxu_nav_2026/src/z-localization/src/backend/src/reset_coordinator.cpp)记录依据。
 
 本节只完成静止输入下的失败分类及候选参数对照。0.2 m 结果来自同一包两次回放，未证明独立场景、运动或全局精度；没有重放高频里程计输入、前端会话及重置服务，本节回放未录到 `/localization/odometry`，不能用于判定 TF、跨代次恢复或导航保护。后续实时运动及中断恢复的对象与结果见下节；正式默认链继续保持原方案。
 
@@ -73,11 +73,11 @@ run04、run05 的前后端使用同一组临时参数，均在约 29.3 秒墙钟
 
 初次完整会话中，ZLIO 的 `/frontend/frame` 尚未桥接到 `/cloud_deskewed`。15 秒被动观察内，`/cloud_deskewed` 和 `/scan` 均无消息，速度安全门的 1368 个状态样本均为关闭。[历史前置条件观察](data/rgl_full_20261031/navigation_readiness.json)。
 
-该历史会话在安全门正常运行时发送 192 条 0.1 m/s 请求，781 条安全输出均为零。[历史验证结果](data/rgl_full_20261031/safety_gate.json)。由于当时缺扫描，该零输出不能单独证明安全门识别了后端 `SUSPECT` 或 `LOST`。以下为补齐接口后的独立验证；现有 [Nav2 启动门控](../../xxu_nav_2026/src/xxu_bringup/scripts/nav2_navigation_startup.py)仍只检查 `map → odom` 可查询，没有完成外部定位的 Nav2 启动及任务恢复策略。
+该历史会话在安全门正常运行时发送 192 条 0.1 m/s 请求，781 条安全输出均为零。[历史验证结果](data/rgl_full_20261031/safety_gate.json)。由于当时缺扫描，该零输出不能单独证明安全门识别了后端 `SUSPECT` 或 `LOST`。以下为补齐接口后的独立验证；现有 [Nav2 启动门控](../../../xxu_nav_2026/src/xxu_bringup/scripts/nav2_navigation_startup.py)仍只检查 `map → odom` 可查询，没有完成外部定位的 Nav2 启动及任务恢复策略。
 
 ### 可选点云出口与定位门控（2026-10-31）
 
-在既有 [Python 底盘适配器](../../xxu_nav_2026/src/xxu_bringup/scripts/zlio_base_odometry.py)增加默认关闭的 `publish_deskewed_cloud`。启用后校验前端会话、代次、序列、时间戳、坐标契约及点云布局，拒绝过期、重复、传播空帧和非有限坐标；原子帧点数据、字段和时间戳保持原样，只将本候选的虚拟 `imu` 帧标为同一固定坐标的 `lio_base_sensor`，由现有 TF 与扫描转换器处理到 `base_footprint`。此契约依赖已补偿的固定虚拟传感器输入，不适用于任意原始 IMU 外参；底盘转换没有改写为 C++。用法归[导航工具 README](../../xxu_nav_2026/tools/navigation/README.md#共享启动与参数来源)。
+在既有 [Python 底盘适配器](../../xxu_nav_2026/src/xxu_bringup/scripts/zlio_base_odometry.py)增加默认关闭的 `publish_deskewed_cloud`。启用后校验前端会话、代次、序列、时间戳、坐标契约及点云布局，拒绝过期、重复、传播空帧和非有限坐标；原子帧点数据、字段和时间戳保持原样，只将本候选的虚拟 `imu` 帧标为同一固定坐标的 `lio_base_sensor`，由现有 TF 与扫描转换器处理到 `base_footprint`。此契约依赖已补偿的固定虚拟传感器输入，不适用于任意原始 IMU 外参；底盘转换没有改写为 C++。用法归[导航工具 README](../../../xxu_nav_2026/tools/navigation/README.md#共享启动与参数来源)。
 
 在既有 [速度安全门](../../xxu_nav_2026/src/fake_vel_transform/scripts/cmd_vel_watchdog.py)增加默认关闭的 `require_localization`。启用时同时检查后端状态可信且未冻结、状态与 map 系全局里程计的接收年龄、ROS 源年龄及单调时钟下的源时间推进；零时间戳通知和重复旧消息不能续期源时间。格式错误、版本回退、`SUSPECT/LOST` 或超时关闭输出；恢复需持续新鲜可信达到配置观察时间，并等待新的速度请求，缓存请求不能自动释放。两次试验的定位超时为 0.5 秒，恢复观察为 1.0 秒；这不是实车标定或硬实时保证。参数和职责归[模块 README](../../xxu_nav_2026/src/fake_vel_transform/README.md)。
 
@@ -136,7 +136,7 @@ full_drop01 恢复后录制器收到 6426 条新鲜转发 IMU，源时间最大�
 | Python 底盘 TF 适配 | 前端传感器位姿与导航底盘接口不同；有杆臂、速度、协方差测试及逐条重算 | 有固定传感器契约内的换算证据；已录固定 TF 误差不足以解释旧米级跳变，尚未改写 C++ |
 | 去畸变点云出口及最终速度定位门控 | 缺失导航扫描接口及定位失信保护需求；有数据一致性、故障停车和缓存请求检查 | 是默认关闭的接入与保护功能；不修复前后端失信，不等于 Nav2 任务取消、重规划或到点闭环已完成 |
 
-固定窗口、空帧和连续性门的原始证据及限制仍归[先前对照报告](zlocalization_comparison_20261030.md#固定窗口修复与恢复搜索诊断2026-10-30)，构建兼容归[迁移记录](zlocalization_src_migration_20261031.md#检查)，启动拆分归[模块边界核验](module_boundaries_20261030.md)，点时间归[RGL 能力报告](rgl_point_timing_20261031.md)，坐标换算归[底盘 TF 报告](zlio_base_tf_20261031.md)。本轮没有自动撤回这些既有候选、删除源码或继续叠加修复；原正式默认链保持不变。后续修改须先明确对应故障及可重复证据，再限定改动范围。
+固定窗口、空帧和连续性门的原始证据及限制仍归[先前对照报告](../zlocalization_comparison_20261030.md#固定窗口修复与恢复搜索诊断2026-10-30)，构建兼容归[迁移记录](../zlocalization_src_migration_20261031.md#检查)，启动拆分归[模块边界核验](../module_boundaries_20261030.md)，点时间归[RGL 能力报告](rgl_point_timing_20261031.md)，坐标换算归[底盘 TF 报告](../zlio_base_tf_20261031.md)。本轮没有自动撤回这些既有候选、删除源码或继续叠加修复；原正式默认链保持不变。后续修改须先明确对应故障及可重复证据，再限定改动范围。
 
 ## 物理 IMU 帧检查（2026-11-01）
 
@@ -225,7 +225,7 @@ full_drop01 恢复后录制器收到 6426 条新鲜转发 IMU，源时间最大�
 
 ## 保持 IMU 连续运行（2026-11-01）
 
-当前任务已按用户要求收敛为正常仿真运行与 Point-LIO 效果对照；本轮连续运行后开展的 1 倍速精度复核、正常 AMCL/Nav2 接入及五目标实际结果，统一见[正常仿真对照](zlocalization_comparison_20261030.md#正常仿真与-point-lio-对照2026-11-01)。以下仅保留本节的 IMU 连续性证据，不重复保存性能结论。
+当前任务已按用户要求收敛为正常仿真运行与 Point-LIO 效果对照；本轮连续运行后开展的 1 倍速精度复核、正常 AMCL/Nav2 接入及五目标实际结果，统一见[正常仿真对照](../zlocalization_comparison_20261030.md#正常仿真与-point-lio-对照2026-11-01)。以下仅保留本节的 IMU 连续性证据，不重复保存性能结论。
 
 按用户当前要求，后续连续运行验证不再主动暂停 IMU 补偿进程或停止消息转发。此前 6 秒中断来自验证脚本的 `SIGSTOP` 或转发丢弃注入，不是正常启动链自带的动作；历史故障恢复结果继续保留，不能据其宣称正常运行会自然发生同样断流。[验证脚本](data/rgl_full_20261031/navigation_interface_20261031/run_navigation_interface.py)的 `--imu-fault` 默认值由 `process` 改为 `none`，并增加连续观察阶段与收发时间统计；`process/drop` 仅保留为显式故障注入模式，本轮未调用。没有修改补偿程序、桥接程序、ZLIO 算法、超时判据或正式默认启动链。
 

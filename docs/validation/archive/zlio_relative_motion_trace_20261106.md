@@ -14,7 +14,7 @@
 
 **本轮尚未区分 ZLIO 内部估计误差与进入 ZLIO 前的点云/IMU 时间、动态补偿或坐标语义问题。** “已经在前端输出中存在”是本轮确认的故障边界，不是对前端算法或补偿器的最终归因。特别是点级时间、时变延迟和动态杆臂补偿不能被一次统一时间偏移检查排除。后续[同时间预测/后验实验](zlio_propagation_update_attribution_20261106.md)已确认指定窗口新增偏差首先显现在 IMU 传播阶段；速度/偏置、输入补偿及积分根因仍待区分。
 
-后续[输入点时间溯源](zlio_input_point_time_trace_20261106.md)确认原补偿输入为每帧单值时间，当前安装整形器可复现丢弃已知输入偏移。新的[端到端实验](zlio_point_time_e2e_20261106.md)验证有时序输入的交付及同源改善，但原源扫描是否为瞬时扫描、原漂移因果与修复仍未确认。
+后续[输入点时间溯源](zlio_input_point_time_trace_20261106.md)确认原补偿输入为每帧单值时间，当前安装整形器可复现丢弃已知输入偏移。新的[端到端实验](../zlio_point_time_e2e_20261106.md)验证有时序输入的交付及同源改善，但原源扫描是否为瞬时扫描、原漂移因果与修复仍未确认。
 
 ## 1. 原始资料与链路身份
 
@@ -31,8 +31,8 @@
 
 ### 两条前端输出必须区分
 
-- `/odometry`：ZLIO 高频预测。前端将同一个 Odometry 对象原样放入 `/frontend/odometry` 身份包装再发布。[node.cpp 的 publish](../../xxu_nav_2026/src/z-localization/src/frontend/apps/node.cpp)
-- `/frontend/frame.odometry`：点云观测处理完成后的后验，与点云同封装发布。后端关键帧使用这个位姿。本段七帧都为 `lidar_updated=true`，不是空点云传播片段。独立 `/lidar_odometry` 话题未录入本次原始包；本轮取得的是原始 frame 消息中真实发布的后验，不伪称有该独立话题的证据。[node.cpp 的 collect](../../xxu_nav_2026/src/z-localization/src/frontend/apps/node.cpp)
+- `/odometry`：ZLIO 高频预测。前端将同一个 Odometry 对象原样放入 `/frontend/odometry` 身份包装再发布。[node.cpp 的 publish](../../../xxu_nav_2026/src/z-localization/src/frontend/apps/node.cpp)
+- `/frontend/frame.odometry`：点云观测处理完成后的后验，与点云同封装发布。后端关键帧使用这个位姿。本段七帧都为 `lidar_updated=true`，不是空点云传播片段。独立 `/lidar_odometry` 话题未录入本次原始包；本轮取得的是原始 frame 消息中真实发布的后验，不伪称有该独立话题的证据。[node.cpp 的 collect](../../../xxu_nav_2026/src/z-localization/src/frontend/apps/node.cpp)
 - `/odom`：导航用底盘适配输出，计算 `T_odom_base=T_odom_sensor T_sensor_base`。它不是后端这里的输入。[适配器](../../xxu_nav_2026/src/xxu_bringup/scripts/zlio_base_odometry.py)
 
 本段原始位姿头为 `odom → imu`，前端 epoch 全为 0、进程身份一致。这里 `imu` 按该实验契约表示已经补偿后的刚性虚拟传感器，底盘适配时对应 `lio_base_sensor`，不是拿原始转动云台 IMU 坐标直接当底盘。前端启动的输入为 `/mid360/livox_points_compensated` 和 `/imu_lio_compensated`，前端 LiDAR 到 body 外参为单位变换。[原采集启动](data/rgl_full_20261031/independent_route_check_20261101/capture_navigation.launch.py)、[原前端配置](data/rgl_full_20261031/normal_pointlio_comparison_20261101/run01/frontend.yaml)
@@ -41,7 +41,7 @@
 
 ## 2. 同一源时间逐项比较
 
-所有后端 runtime 时间均与原始 `/frontend/frame` 的整数纳秒头时间精确匹配，没有用接收时间或近邻帧替代。后端回调对封装里的 Odometry 使用别名指针，`makeFrontendFrame` 直接取该头时间并将 pose 转成矩阵；这条 ZLIO 专用输入路径没有重新把两路话题作近似同步，也没有插入动态 TF 位姿变换。[node_input.cpp](../../xxu_nav_2026/src/z-localization/src/backend/apps/node_input.cpp)、[node.cpp](../../xxu_nav_2026/src/z-localization/src/backend/apps/node.cpp)
+所有后端 runtime 时间均与原始 `/frontend/frame` 的整数纳秒头时间精确匹配，没有用接收时间或近邻帧替代。后端回调对封装里的 Odometry 使用别名指针，`makeFrontendFrame` 直接取该头时间并将 pose 转成矩阵；这条 ZLIO 专用输入路径没有重新把两路话题作近似同步，也没有插入动态 TF 位姿变换。[node_input.cpp](../../../xxu_nav_2026/src/z-localization/src/backend/apps/node_input.cpp)、[node.cpp](../../../xxu_nav_2026/src/z-localization/src/backend/apps/node.cpp)
 
 仿真真值按源时间做位置线性插值和旋转 SLERP，禁止外推；从真值模型位姿转换到与原诊断一致的虚拟传感器系。录得的 `T_base_footprint_lio_base_sensor` 旋转为单位阵、平移为 `(0,0,0.0697382371)` m。没有把底盘 `/odom` 直接拿来与 `imu` 位姿比较。
 

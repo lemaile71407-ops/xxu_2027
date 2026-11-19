@@ -15,7 +15,7 @@
 
 后续状态溯源进一步确认：**传播区间带入的后验速度误差主导本段位置误差增长**，并看到 LiDAR 更新会明显放大速度误差。seq1262 将水平速度误差从 0.5464 m/s 增至 0.7678 m/s，随后出现最大单次传播增长。它是明确的放大点，尚不是全运行的最早根因；完整方法和边界见第 6 节。
 
-最新输入检查发现 capture03 的每帧单值时间，以及安装整形器与源码构建的行为差异，详见[输入点时间溯源](zlio_input_point_time_trace_20261106.md)。新的[端到端对照](zlio_point_time_e2e_20261106.md)显示有时序输入交付及同源改善，但未复现原 46.56 cm；不能由此或本报告的传播分解认定原漂移根因已修复。
+最新输入检查发现 capture03 的每帧单值时间，以及安装整形器与源码构建的行为差异，详见[输入点时间溯源](zlio_input_point_time_trace_20261106.md)。新的[端到端对照](../zlio_point_time_e2e_20261106.md)显示有时序输入交付及同源改善，但未复现原 46.56 cm；不能由此或本报告的传播分解认定原漂移根因已修复。
 
 这是指定起点之后新增相对误差的阶段归属，不是整个运行从启动以来首次异常的定位。起点归零来自对齐，并不表示当时绝对定位没有误差。原始输出到后端的身份与传输证据仍以[上一轮溯源](zlio_relative_motion_trace_20261106.md)为准。
 
@@ -42,14 +42,14 @@
 
 普通 `/odometry` 高频发布受回调和后验重传播影响，不能当成指定扫描端点的同时间纯预测。原采集未开启逐次更新诊断，因此本轮使用已有 `/frontend/lidar_diagnostics` 的 `prediction` 和 `corrected`，两者时间戳严格相同，corrected 与原子 frame 对齐。
 
-[实际处理顺序](../../xxu_nav_2026/src/z-localization/src/frontend/src/odometry.cpp)为：
+[实际处理顺序](../../../xxu_nav_2026/src/z-localization/src/frontend/src/odometry.cpp)为：
 
 1. `predictTo(end)`：从上一后验状态顺序积分 IMU，推进至当前观测端点。
 2. 在滤波更新前保存 `filter_.estimate()` 为 diagnostic prediction。
 3. `filter_.update(...)`：执行当前 LiDAR 测量更新。
 4. 将实际提交的结果保存为 corrected 后验，并发布 frame/diagnostic。
 
-[消息转换](../../xxu_nav_2026/src/z-localization/src/frontend/apps/ros.cpp)与[诊断消息定义](../../xxu_nav_2026/src/z-localization/src/localization_interfaces/msg/FrontendLidarDiagnostic.msg)明确两者的时间、坐标和原始校正量。本轮不从外部高频话题插值猜测更新前状态。
+[消息转换](../../../xxu_nav_2026/src/z-localization/src/frontend/apps/ros.cpp)与[诊断消息定义](../../../xxu_nav_2026/src/z-localization/src/localization_interfaces/msg/FrontendLidarDiagnostic.msg)明确两者的时间、坐标和原始校正量。本轮不从外部高频话题插值猜测更新前状态。
 
 ## 3. 逐更新结果
 
@@ -96,12 +96,12 @@ sequence 1263 的传播将上一后验误差从 28.558 cm 增至 38.065 cm，单
 
 ### 6.1 速度、偏置怎样取得
 
-当前前端发布的线速度为 `v_body=Rᵀv_world`，所以由各条 prediction/corrected 的姿态恢复 `v_world=R v_body`；再通过本报告相同的固定世界对齐与仿真真值速度比较。没有将车体坐标速度直接与世界坐标速度相减。[发布实现](../../xxu_nav_2026/src/z-localization/src/frontend/apps/ros.cpp)
+当前前端发布的线速度为 `v_body=Rᵀv_world`，所以由各条 prediction/corrected 的姿态恢复 `v_world=R v_body`；再通过本报告相同的固定世界对齐与仿真真值速度比较。没有将车体坐标速度直接与世界坐标速度相减。[发布实现](../../../xxu_nav_2026/src/z-localization/src/frontend/apps/ros.cpp)
 
 真值速度用同源时间位置的局部三次多项式导数估计，主结果使用 ±50 ms 窗口；±30 ms 与 ±80 ms 的敏感性复算在全部目标传播起点上的最大分量差为 **0.01349 m/s**。这不是精确的真值速度误差上界，但远小于下述 0.25–0.77 m/s 差异，且不是只用一个差分窗口给出结论。
 
 - 陀螺偏置：发布角速度满足 `ω_out=ω_IMU−b_g`，用原 IMU 在同一整数纳秒时间的原样/线性插值恢复 `b_g`。
-- 加速度偏置：同一传播区间中状态偏置不变。按原始 IMU 分段和[轨迹积分公式](../../xxu_nav_2026/src/z-localization/src/frontend/src/trajectory.cpp)构造速度对常量 `b_a` 的线性关系，由前后速度反算 `b_a`。
+- 加速度偏置：同一传播区间中状态偏置不变。按原始 IMU 分段和[轨迹积分公式](../../../xxu_nav_2026/src/z-localization/src/frontend/src/trajectory.cpp)构造速度对常量 `b_a` 的线性关系，由前后速度反算 `b_a`。
 - 独立核对：速度已用于求 `b_a`，因此不再用速度相等自证；而用所得偏置、原始 IMU、起点状态独立计算末端位置与旋转。30 个区间最大位置分量误差 **8.88×10⁻¹⁶ m**，最大旋转矩阵元素误差 **2.00×10⁻¹⁵**。说明这些反算状态与实际传播输出一致，不是依据配置值猜测偏置。
 
 这里验证的是记录到的状态与源码公式的数值闭合，并不证明这些偏置就是正确的物理标定，也不证明积分公式对真实运动的所有近似都足够准确。

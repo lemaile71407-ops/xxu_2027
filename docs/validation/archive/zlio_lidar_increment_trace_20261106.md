@@ -42,7 +42,7 @@
 
 ## 2. 求解增量与状态注入是否正确执行
 
-实际[滤波更新](../../xxu_nav_2026/src/z-localization/src/frontend/src/filter.cpp)将纯位姿信息放在 15 维状态的前 6 维，保留完整先验耦合。令当前图表协方差为 P，先验回拉均值为 m，当前 LiDAR 信息及梯度为 H、g，则相应完整解为：
+实际[滤波更新](../../../xxu_nav_2026/src/z-localization/src/frontend/src/filter.cpp)将纯位姿信息放在 15 维状态的前 6 维，保留完整先验耦合。令当前图表协方差为 P，先验回拉均值为 m，当前 LiDAR 信息及梯度为 H、g，则相应完整解为：
 
 `δ=(P⁻¹+H)⁻¹(P⁻¹m−g)`。
 
@@ -52,7 +52,7 @@
 
 `v_next=Exp(δθ)v_iter+J_left(δθ)δρ_v`。
 
-逐项核对旋转速度、先验均值回拉、测量相关项，再与实际下一状态比较。[群状态注入](../../xxu_nav_2026/src/z-localization/src/frontend/src/state.cpp)
+逐项核对旋转速度、先验均值回拉、测量相关项，再与实际下一状态比较。[群状态注入](../../../xxu_nav_2026/src/z-localization/src/frontend/src/state.cpp)
 
 | 复算项 | 10 轮最大数值差 |
 | --- | ---: |
@@ -121,7 +121,7 @@
 
 NEES 使用差分近似真值，创新量使用 `z_local=−H_pose⁻¹g_pose`、`S=P_pose+H_pose⁻¹` 的固定局部高斯近似。它们只描述这两个已筛选故障快照，相关性及协方差标定尚未验证，不能直接据此设新门限或宣称通过/未通过总体概率校准。
 
-源码在存在观测支撑并可求解后，达到小步条件或最大迭代数就提交 `{accepted=true}`。本轮两帧都执行到第 5 轮，`accepted` 不等于速度误差改善或整体创新已通过独立可信检验。当前[提交条件](../../xxu_nav_2026/src/z-localization/src/frontend/src/filter.cpp)未对上述压缩创新统计作整体门控；这只是设计检查结果，不是已经验证的新保护方案。
+源码在存在观测支撑并可求解后，达到小步条件或最大迭代数就提交 `{accepted=true}`。本轮两帧都执行到第 5 轮，`accepted` 不等于速度误差改善或整体创新已通过独立可信检验。当前[提交条件](../../../xxu_nav_2026/src/z-localization/src/frontend/src/filter.cpp)未对上述压缩创新统计作整体门控；这只是设计检查结果，不是已经验证的新保护方案。
 
 ## 6. 已锁定范围与下一项最小因果检查
 
