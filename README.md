@@ -29,7 +29,7 @@ source install/setup.zsh
 若仅构建实车侧导航与硬件驱动（不拉取或构建 Gazebo 仿真包）：
 
 ```bash
-colcon build --symlink-install --packages-up-to xxu_hardware xxu_slam_toolbox pb_nav2_plugins pb_omni_pid_pursuit_controller pointcloud_to_laserscan frontend backend
+colcon build --symlink-install --packages-up-to xxu_hardware xxu_slam_toolbox pointcloud_to_laserscan frontend backend
 ```
 
 ## 启动入口
@@ -71,8 +71,6 @@ xxu_nav_2026/src/
 ├── z-localization/                # ZLIO 前端、TDT 后端及统一定位启动
 ├── xxu_slam_toolbox/               # SLAM 与自主探索入口
 ├── pointcloud_to_laserscan/        # PointCloud2 转 LaserScan
-├── pb_nav2_plugins/                # 自定义 Nav2 后退行为（BackUpFreeSpace）
-├── pb_omni_pid_pursuit_controller/ # 备用 PID 控制器与目标接近包装插件
 └── m-explore-ros2/                 # explore_lite / map_merge 子模块
 ```
 

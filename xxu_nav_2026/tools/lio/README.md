@@ -65,9 +65,9 @@ ZLIO 应订阅本配置的两个输出话题，将 `sensor.body_from_lidar` 设�
 
 ```bash
 ros2 launch bringup bringup.launch.py \
-  frontend_config:="$PWD/maps/rmul_self_20261109/lio.yaml" \
-  backend_config:="$PWD/maps/rmul_self_20261109/backend.yaml" \
-  prior_map:="$PWD/maps/rmul_self_20261109/prior" \
+  frontend_config:="$PWD/maps/rmul_rotating_20261112/lio.yaml" \
+  backend_config:="$PWD/maps/rmul_rotating_20261112/backend.yaml" \
+  prior_map:="$PWD/maps/rmul_rotating_20261112/prior" \
   mode:=localization use_sim_time:=true input_type:=pointcloud2 \
   lidar_topic:=/mid360/livox_points_compensated imu_topic:=/imu_lio_compensated \
   imu_acceleration_scale:=1.0 point_time_field:=timestamp \

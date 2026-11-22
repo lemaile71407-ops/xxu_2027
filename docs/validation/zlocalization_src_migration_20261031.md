@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-按本次迁移要求，将完整 Z-Localization 源码及配置复制到 [导航工作区 src](../../xxu_nav_2026/src/z-localization/)。它包含前端、后端、消息接口、bringup 和 Livox 驱动；不是仅复制 ZLIO 前端。来源为独立仓库的提交 `76e126328b670adc92981d9b4900cc059a6f2343` 加该仓库当时已有的未提交修改，包括固定窗口候选修复和默认关闭的恢复连续性检查。复制时逐项比对了源码、配置、cmake 文件、README 和 LICENSE；未复制独立仓库的 `.git`、`build`、`install`、`log`、`deps`、`third_party` 或机器本地构建说明。原 [独立工作树](../../z-localization/)及其本地修改、依赖和构建产物保留。
+按本次迁移要求，将完整 Z-Localization 源码及配置复制到 [导航工作区 src](../../xxu_nav_2026/src/z-localization/)。它包含前端、后端、消息接口、bringup 和 Livox 驱动；不是仅复制 ZLIO 前端。来源为独立仓库的提交 `76e126328b670adc92981d9b4900cc059a6f2343` 加该仓库当时已有的未提交修改，包括固定窗口候选修复和默认关闭的恢复连续性检查。复制时逐项比对了源码、配置、cmake 文件、README 和 LICENSE；未复制独立仓库的 `.git`、`build`、`install`、`log`、`deps`、`third_party` 或机器本地构建说明。原独立工作树 `z-localization/` 的旧源码与构建产物已于 2026-11-22 清理，仅保留本地编译依赖目录 `z-localization/deps/`（GTSAM 4.2.0 与 Livox SDK2）。
 
 复制后的源码仅进入工作区，尚未接入正式传感器、TF 或导航启动链。现有启动代码仍调用 Small Point-LIO 和 AMCL/GICP；删除范围待用户确认。后端恢复、跨代次可信参考、Nav2 降级保护及实车适配的限制仍以[仿真对照报告](zlocalization_comparison_20261030.md#恢复连续性候选检查2026-10-31)为准。
 
@@ -24,4 +24,4 @@ ROS 2 Jazzy 下使用 `colcon list --base-paths xxu_nav_2026/src --names-only` �
 
 两次构建事件记录均只保留包开始、结束和退出码，测试 XML 中的源码路径改为项目相对路径；原始环境字段和本机路径未纳入上述证据。
 
-因为候选包现在位于工作区 `src`，普通工作区全量构建会发现它们；构建前需要准备 GTSAM 4.2、Livox SDK2 及其 CMake/动态库搜索路径。本机可参照原独立仓库的 [Jazzy 依赖说明](../../z-localization/JAZZY_LOCAL.md)，但该 `deps` 是本地未纳入主仓库的产物，不能假定其他机器已有。原有启动链仍依赖旧包，不应把源码复制或上述测试视作完成替换。
+因为候选包现在位于工作区 `src`，普通工作区全量构建会发现它们；构建前需要准备 GTSAM 4.2、Livox SDK2 及其 CMake/动态库搜索路径。本机继续使用 `z-localization/deps/`，但该 `deps` 是本地未纳入主仓库的产物，不能假定其他机器已有。原有启动链仍依赖旧包，不应把源码复制或上述测试视作完成替换。
