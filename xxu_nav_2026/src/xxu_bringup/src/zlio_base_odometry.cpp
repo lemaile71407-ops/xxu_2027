@@ -18,7 +18,8 @@ class ZlioBaseOdometry final : public rclcpp::Node
 {
 public:
   explicit ZlioBaseOdometry(const rclcpp::NodeOptions & options)
-  : Node("zlio_base_odometry", options)
+  : Node("zlio_base_odometry", options),
+    use_intra_process_comms_(options.use_intra_process_comms())
   {
     const double tf_rate = declare_parameter<double>("tf_publish_rate", 30.0);
     if (!std::isfinite(tf_rate) || tf_rate < 20.0 || tf_rate > 50.0) {
@@ -101,18 +102,22 @@ public:
 private:
   void on_odometry(const nav_msgs::msg::Odometry & message)
   {
+    const auto & stamp = message.header.stamp;
     if (!ready_ || message.header.frame_id != odom_ || message.child_frame_id != source_ ||
-      message.header.stamp.sec < 0 || message.header.stamp.nanosec >= 1000000000u ||
-      (message.header.stamp.sec == 0 && message.header.stamp.nanosec == 0))
+      stamp.sec < 0 || stamp.nanosec >= 1000000000u ||
+      (stamp.sec == 0 && stamp.nanosec == 0))
     {
       RCLCPP_WARN_THROTTLE(get_logger(), log_clock_, 2000,
         "Waiting for rigid mount or rejecting unexpected odometry frame/time");
       return;
     }
+    if (last_input_stamp_ && *last_input_stamp_ == stamp) {
+      return;
+    }
+
     try {
       auto output = convert_odometry(message, base_from_sensor_, base_);
-      if (last_input_stamp_ && *last_input_stamp_ == message.header.stamp) {return;}
-      last_input_stamp_ = message.header.stamp;
+      last_input_stamp_ = stamp;
 
       geometry_msgs::msg::TransformStamped tf;
       tf.header = output.header;
@@ -121,14 +126,19 @@ private:
       tf.transform.translation.y = output.pose.pose.position.y;
       tf.transform.translation.z = output.pose.pose.position.z;
       tf.transform.rotation = output.pose.pose.orientation;
-      auto output_message = std::make_unique<nav_msgs::msg::Odometry>(std::move(output));
-      publisher_->publish(std::move(output_message));
-      pending_tf_ = tf;
+      // Only intra-process delivery needs ownership of the ROS message.
+      if (use_intra_process_comms_) {
+        publisher_->publish(std::make_unique<nav_msgs::msg::Odometry>(std::move(output)));
+      } else {
+        publisher_->publish(output);
+      }
+      pending_tf_ = std::move(tf);
     } catch (const std::invalid_argument & error) {
       RCLCPP_WARN_THROTTLE(get_logger(), log_clock_, 2000, "%s", error.what());
     }
   }
 
+  const bool use_intra_process_comms_;
   std::string sensor_, source_, odom_, base_;
   Eigen::Isometry3d base_from_sensor_ = Eigen::Isometry3d::Identity();
   bool ready_ = false;

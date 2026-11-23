@@ -78,6 +78,109 @@ ros2 launch bringup bringup.launch.py \
 
 当前安装与静止检查结果、GTSAM 路径及相机 SDK 动态库冲突的处理范围见[第三阶段续测记录](../../../docs/validation/nav2_stage3_20261108.md#2026-11-09-续测预检查)。`record_localization_jumps.py --tdt` 可额外只读记录 TDT 状态与全局位姿；`--safe-velocity-topic`、`--truth-topic` 可记录安全输出和仿真真值，均不发布数据或控制命令。
 
+## 实车刚性外参标定流程（在线与离线录包）
+
+先在平整地面上确认 `base_link` 原点和底盘正前方，量出该原点到地面的高度 `base_height_above_ground`。地面投影原点使用 `0.0` m。记录原始 IMU、原始雷达和**未做刚性预处理**的 ZLIO 前端里程计，其中位姿为 `T_odom_imu`。留出范围明确、无台阶的地板视野，等前端启动并连续输出后再做动作。
+
+1. 原地静止至少 3 s。地板须在雷达视野中，手不要碰车或传感器。
+2. 沿底盘 `+X` 连续直行或推行至少 1.5 m，保持航向，优先录约 3 m。若全程沿 `-X`，设置 `straight_direction:=-1` 或 CLI 的 `--straight-direction -1`。
+3. 围绕同一个底盘原点原地转至少 180°，优先一整圈。避免平移、急停和明显侧倾。杆臂解的原点由旋转中心决定，因此这一动作的旋转中心必须与目标 `base_link` 原点重合。
+
+### 在线采集
+
+加载 ROS Jazzy 和工作空间后，启动隔离的采集入口。以下命令假定原始驱动已输出 PointCloud2。如果需要同时启动驱动，附加 `driver:=true driver_config:=/path/to/MID360_config.json`。原始驱动输出 CustomMsg 时使用 `lidar_input_type:=livox`，要求构建时检测到 `livox_ros_driver2`。若已有原始输入的 ZLIO 前端在运行，使用 `start_zlio:=false`。
+
+`start_zlio:=true` 将标定用 ZLIO 前端的输出隔离到 `/calibration/...`。`start_zlio:=true` 和 `start_zlio:=false` 的标定节点都默认订阅 `/calibration/lidar_odometry`，可用 `odom_topic:=/指定话题` 覆盖。标定入口默认拒绝 `/lidar_odometry`、`/odometry`、`/frontend/odometry` 和 `/odom`，这些生产话题可能发布补偿后虚拟传感器的位姿。确认所选话题来自原始输入的 ZLIO 前端后，才可显式设置 `allow_unisolated_odom_topic:=true`。
+
+物理 IMU 里程计的 `header.frame_id` 和 `child_frame_id` 默认应为 `odom` 和 `imu`。外部前端使用其他帧名时，设置 `odom_frame:=...` 和 `odom_child_frame:=...`。自启 ZLIO 读取 PointCloud2 时，可通过 `point_time_field`、`point_time_scale`、`point_time_absolute` 指定点时间字段、换算到秒的倍率和绝对时间模式，默认分别为 `timestamp`、`1e-9`、`true`。
+
+```bash
+calibration_dir="$(mktemp -d /tmp/xxu-mount.XXXXXX)"
+base_height=0.0
+ros2 launch xxu_bringup rigid_mount_calibration.launch.py \
+  driver:=false start_zlio:=true lidar_input_type:=pointcloud2 \
+  base_height_above_ground:="$base_height" confirm:=false \
+  output_mount_file:="$calibration_dir/rigid_mount.yaml" \
+  output_backend_body_file:="$calibration_dir/backend_body.yaml" \
+  output_report_file:="$calibration_dir/calibration_report.yaml"
+```
+
+在另一终端执行采集服务。 `capture_stationary` 启动默认 3 s 的定时采集，等日志给出样本数和质量结果再继续。手动定长可用 `start_stationary` 和 `stop_stationary`。每次 `start_*` 替换该阶段上一次的采集；`reset` 清空全部阶段。`start_*`、`stop_*` 和 `reset` 会自动将 `confirm` 重置为 `false`，新采集或清空后的结果须重新审阅确认才能正式导出。转动或直行期间各阶段只采集对应的原始里程计。
+
+```bash
+cal() { ros2 service call "/rigid_mount_calibration/$1" std_srvs/srv/Trigger '{}'; }
+
+cal capture_stationary
+# 等待节点日志给出静止质量结果。
+cal start_straight
+# 完成直线动作。
+cal stop_straight
+cal start_spin
+# 完成原地旋转。
+cal stop_spin
+cal solve_and_export
+# 检查导出的报告后，显式请求确认并重新导出。
+ros2 param set /rigid_mount_calibration confirm true
+cal solve_and_export
+```
+
+采集节点独立识别 IMU 单位，`imu_acceleration_scale:=0.0` 表示自动。自启的 ZLIO 也需要正确的单位，标定倍率自动时它使用 `zlio_imu_acceleration_scale:=9.81`。已确认驱动输出 m/s² 时可设置 `imu_acceleration_scale:=1.0`，该值同时传给 ZLIO。配置中 `imu_from_lidar_xyz`、`imu_from_lidar_rpy` 定义 Mid-360 的物理 IMU ← 雷达变换。改用实际设备内参时同步传入与之匹配的 `frontend_config`。启动入口只启所选驱动、ZLIO 前端和标定节点。
+
+### 离线录包与求解
+
+以下命令录制三个连续动作，`rigid_mount_calibrate` 默认读取 `/calibration/lidar_odometry`。外部原始输入前端使用其他话题时，通过 `--odom-topic` 指定。CLI 同样默认拒绝 `/lidar_odometry`、`/odometry`、`/frontend/odometry` 和 `/odom`。确认所选话题来自原始输入的 ZLIO 前端后，才可显式加上 `--allow-unisolated-odom-topic`。也可分别录静止、直行、原地转动三个包，求解时传 `--stationary-bag`、`--straight-bag`、`--spin-bag`。工具根据录包元数据识别 PointCloud2 或 CustomMsg，支持 MCAP 和 SQLite3。
+
+离线求解和独立复核均可用 `--odom-frame` 和 `--odom-child-frame` 指定物理 IMU 里程计的父帧和子帧，默认分别为 `odom` 和 `imu`。
+
+```bash
+calibration_dir="$(mktemp -d /tmp/xxu-mount.XXXXXX)"
+base_height=0.0
+odom_topic=/calibration/lidar_odometry  # 在线和离线标定的默认话题
+ros2 bag record -s mcap -o "$calibration_dir/training" \
+  /livox/imu /livox/lidar "$odom_topic"
+# 完成三个动作后按 Ctrl+C 停止录包，再执行求解。
+ros2 run xxu_bringup rigid_mount_calibrate \
+  --bag "$calibration_dir/training" --auto-segment --confirm \
+  --odom-topic "$odom_topic" \
+  --base-height-above-ground "$base_height" \
+  --output-mount "$calibration_dir/rigid_mount.yaml" \
+  --output-backend-body "$calibration_dir/backend_body.yaml" \
+  --output-report "$calibration_dir/calibration_report.yaml"
+```
+
+若自动分段报告缺段或窗口不合适，可用 `--stationary-window 0:5 --straight-window 8:15 --spin-window 20:32` 替换 `--auto-segment`，将示例窗口换成实际动作时间。窗口以录包首条消息的**接收时间**为零点，并包含两端。传 `--lidar-topic`、`--imu-topic`、`--odom-topic` 切换话题。驱动消息帧不同于 `livox_frame` 时，显式传 `--imu-source-frame` 和 `--lidar-frame`，并在报告内核对观测帧名。 `rigid_mount_calibrate --help` 列出完整阈值选项。IMU 噪声报告同时给出原始量和 SI 单位下的样本方差，可用于核对设备的 ZLIO 噪声设置。
+
+有独立测量时，可使用 `--yaw-deg DEG`、`--base-to-sensor-x M`、`--base-to-sensor-y M`、`--base-to-sensor-z M` 单独覆盖各量。在线对应的字符串参数是 `manual_yaw_deg`、`manual_tx`、`manual_ty`、`manual_tz`，空字符串表示未设置，`'0'` 表示测量值为零。yaw 参数是调平坐标系上的偏航 `psi`，满足 `R_base_imu = Rz(psi) * R_level_imu`。确认要求显式请求、所有量齐全且采集的阶段均通过检查。只录静止时，缺测字段写 `null`，生产入口拒绝加载未确认文件。 `--confirm` 在量不全或质量检查失败时返回非零，并仍按已指定的路径导出诊断文件。`--output-backend-body` 仅在确认通过时写入，未确认或验证失败时不会新建或覆盖已有后端文件。
+
+### 独立验证与接入
+
+重新录一组动作到 `"$calibration_dir/validation"`。独立验证使用已有 YAML 外参计算底盘系的重力、地板法向/高度、直行航向误差和自旋中心漂移。`--verify-mount` 要求静止、直行和自旋三段均执行并通过。缺段时仍导出已执行阶段的诊断，报告写入 `verification_passed: false` 并返回 1。校验必须使用同一个基准高度和直行方向。自动分段沿用外参文件记录的 IMU 加速度倍率。
+
+```bash
+ros2 run xxu_bringup rigid_mount_calibrate \
+  --verify-mount "$calibration_dir/rigid_mount.yaml" \
+  --bag "$calibration_dir/validation" --auto-segment \
+  --odom-topic "$odom_topic" \
+  --base-height-above-ground "$base_height" \
+  --output-report "$calibration_dir/verification_report.yaml"
+
+ros2 launch xxu_bringup rigid_sensor.launch.py \
+  mount_file:="$calibration_dir/rigid_mount.yaml" use_sim_time:=false \
+  publish_mount_tf:=true start_base_adapter:=true source_child_frame:=imu
+```
+
+`rigid_sensor.launch.py` 检查时应给 `/odometry` 提供与虚拟传感器轴一致的前端里程计，查看 `/livox/imu_lio_compensated`、`/livox/lidar_compensated` 和 `/odom`。默认 `base_aligned` 的虚拟传感器轴与底盘对齐，`imu_aligned` 保留物理 IMU 轴。两者在 `base_link` 中给出同样的重力、点云与底盘轨迹。生产预处理的点云输入为 PointCloud2。完成上述检查后停止独立入口，把生成的 `backend_body.yaml` 中 `common.body` 合入对应底盘和地图的专用后端配置，再启动组合入口：
+
+```bash
+ros2 launch xxu_bringup sentry_localization.launch.py \
+  mount_file:="$calibration_dir/rigid_mount.yaml" \
+  frontend_config:=/path/to/vehicle_lio.yaml \
+  backend_config:=/path/to/vehicle_backend.yaml \
+  prior_map:=/path/to/matching_prior_map driver:=false
+```
+
+[2026-11-19 标定工具核验](../../../docs/validation/rigid_mount_calibration_20261119.md)记录合成数据闭环和真实历史录包的只读检查。实车动作采集和外参验收仍待现场完成。
+
 ## 录制
 
 先准备实际传感器、所需关节/TF，以及 ZLIO 和底盘适配输出，再加载 ROS 2 与工作空间。实车整套 ZLIO 启动尚待验证，此工具只负责录制，不启动估计器。

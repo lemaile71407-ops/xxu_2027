@@ -1,6 +1,7 @@
 #include "xxu_bringup/odometry_conversion.hpp"
 #include "xxu_bringup/localization_health.hpp"
 #include "xxu_bringup/cloud_layout.hpp"
+#include "xxu_bringup/joint_history.hpp"
 #include "xxu_bringup/sensor_math.hpp"
 #include <gtest/gtest.h>
 

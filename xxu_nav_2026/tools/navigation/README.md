@@ -184,3 +184,31 @@ python3 tools/navigation/analyze_mppi_benchmark.py \
 默认 3.5 m/s，仅用于告警，不修改机器人速度上限。
 它保存 `health.json` 与 `events.jsonl`，不会拦截 TF、发送目标或停车。
 使用与现场一致的 ROS 域和中间件；仿真默认 `use_sim_time=true`。
+
+## 工具与回归脚本目录
+
+| 类别 | 文件 | 用途 |
+|---|---|---|
+| 启动与场地构建 | [start_rmul.sh](start_rmul.sh) | RMUL 仿真导航统一启动入口（支持 `tested_sim` / `baseline`、`--idle-scan`、`--spin`、`--dynamic-vehicle`） |
+| 启动与场地构建 | [generate_rmuc_map.py](generate_rmuc_map.py) | 根据固定场地碰撞几何生成 RMUC 二维地图 |
+| 启动与场地构建 | [prepare_rmul_field.py](prepare_rmul_field.py) | 重新转换 RMUL 场地模型与碰撞网格 |
+| 启动与场地构建 | [recolor_rmul_field.py](recolor_rmul_field.py) | 生成 RMUL 场地贴地外观纹理与 `rmul_2027_collision.stl` |
+| 构建与补丁 | [build_rgl.sh](build_rgl.sh) | 构建默认 RGL Gazebo 插件 |
+| 构建与补丁 | [build_rgl_timed_candidate.sh](build_rgl_timed_candidate.sh) | 使用 [rgl_timed_scan.patch](rgl_timed_scan.patch) 构建逐点时间候选 RGL 插件 |
+| 离线与隔离测试 | [check_interfaces.py](check_interfaces.py) | 静态检查启动、配置与 CAD 模型话题/坐标系接口契约 |
+| 离线与隔离测试 | [test_cpp_bridge_pipeline.py](test_cpp_bridge_pipeline.py) | C++ 传感器预处理、里程计桥、看门狗 TF/保活与时钟限频隔离管线测试 |
+| 离线与隔离测试 | [test_chassis_lower_bridge.py](test_chassis_lower_bridge.py) | STM32 串口协议编解码、状态机与 C++ PTY 环回测试 |
+| 离线与隔离测试 | [test_rigid_mount.py](test_rigid_mount.py) | 实车刚性安装多底盘外参、预处理与帧传递回归 |
+| 离线与隔离测试 | [test_rigid_mount_calibration.py](test_rigid_mount_calibration.py) | 刚性外参在线/离线标定工具与闭环校验回归 |
+| 离线与隔离测试 | [test_vehicle_parameters.py](test_vehicle_parameters.py) | 车型几何与探索/导航参数叠加回归 |
+| 离线与隔离测试 | [test_zlio_navigation.py](test_zlio_navigation.py) | ZLIO 转换契约、C++ 管线与 `BridgeReadiness` / `NavigationStartup` 测试 |
+| 离线与隔离测试 | [test_idle_scan.py](test_idle_scan.py) | `IdleScan` 空闲自旋抢占与安全取消单元测试 |
+| 离线与隔离测试 | [test_review_repairs.py](test_review_repairs.py) | 时间戳、进程归属、模块导入边界与停车判定回归 |
+| 离线与隔离测试 | [test_yaw_stability.py](test_yaw_stability.py) | 航向稳定性辅助脚本单元测试 |
+| 仿真检查与观测 | [check_yaw_stability.py](check_yaw_stability.py) | 180° 转后定位稳定性仿真回归（可选 [ega_imu_sample_noise.yaml](ega_imu_sample_noise.yaml)、[yaw_stability_profile.yaml](yaw_stability_profile.yaml)） |
+| 仿真检查与观测 | [check_ega_navigation.py](check_ega_navigation.py) | EGA 仿真导航路线闭环观察器 |
+| 只读观测与分析 | [analyze_mppi_benchmark.py](analyze_mppi_benchmark.py) | 离线分析 MPPI 路线基准 CSV/NPY 与 JSON |
+| 只读观测与分析 | [observe_mppi_manual.py](observe_mppi_manual.py) | 只读记录手动导航速度链与参数 |
+| 只读观测与分析 | [record_localization_jumps.py](record_localization_jumps.py) | 只读记录定位跳变与时间缺口 |
+| 只读观测与分析 | [monitor_localization_integrity.py](monitor_localization_integrity.py) | 只读持续观察定位状态与传感器输入完整性 |
+| 只读观测与分析 | [navigation_evidence.py](navigation_evidence.py) | 停车证据与轨迹飘移判定辅助模块 |

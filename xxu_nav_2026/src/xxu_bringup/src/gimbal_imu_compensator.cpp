@@ -1,3 +1,5 @@
+#include "xxu_bringup/joint_history.hpp"
+#include "xxu_bringup/node_parameters.hpp"
 #include "xxu_bringup/sensor_math.hpp"
 #include <rclcpp_components/register_node_macro.hpp>
 #include <sensor_msgs/msg/imu.hpp>
@@ -24,12 +26,12 @@ public:
     sensor_rotation_ = rpy_rotation(vector_parameter(*this, "sensor_rpy", {-.2967059728, 0., 0.}));
     position_offset_ = declare_parameter("joint_position_offset", 0.);
     if (!std::isfinite(position_offset_)) {throw std::invalid_argument("nonfinite joint position offset");}
-    scale_ = checked_seconds(*this, "input_acceleration_scale", 1.);
+    scale_ = checked_positive_number(*this, "input_acceleration_scale", 1.);
     alpha_tau_ = checked_seconds(*this, "angular_acceleration_time_constant", .05, true);
-    history_.acceleration_tau = checked_seconds(*this, "joint_acceleration_time_constant", .05, true);
-    history_.maximum_acceleration = checked_seconds(*this, "max_joint_acceleration", 100.);
-    history_.gap = checked_seconds(*this, "max_joint_sample_gap", .05);
-    history_.reset_threshold = checked_seconds(*this, "time_reset_threshold", .5);
+    history_.acceleration_tau_sec = checked_seconds(*this, "joint_acceleration_time_constant", .05, true);
+    history_.max_acceleration_rad_s2 = checked_positive_number(*this, "max_joint_acceleration", 100.);
+    history_.max_sample_gap_sec = checked_seconds(*this, "max_joint_sample_gap", .05);
+    history_.time_reset_threshold_sec = checked_seconds(*this, "time_reset_threshold", .5);
     publisher_ = create_publisher<sensor_msgs::msg::Imu>("imu_out", rclcpp::SensorDataQoS());
     if (!fixed_) {
       joints_ = create_subscription<sensor_msgs::msg::JointState>("joint_states", rclcpp::SensorDataQoS(),
@@ -91,7 +93,7 @@ private:
     std::optional<double> latest = previous_time_;
     if (!pending_.empty()) {latest = seconds(pending_.back().header.stamp);}
     if (latest && time <= *latest) {
-      if (*latest - time < history_.reset_threshold) {return;}
+      if (*latest - time < history_.time_reset_threshold_sec) {return;}
       pending_.clear(); reset_derivatives(); history_.reset_derivative();
     }
     if (fixed_) {publish(message, {time, 0., 0., 0.}); return;}

@@ -1,0 +1,29 @@
+# Repository-wide C++ formatting baseline for self-developed ROS 2 packages (xxu_*).
+# Third-party submodules keep their own .clang-format files.
+Language: Cpp
+BasedOnStyle: Google
+
+IndentWidth: 2
+ContinuationIndentWidth: 2
+AccessModifierOffset: -2
+ColumnLimit: 100
+UseTab: Never
+
+# ROS 2 C++ brace style: new line for functions/classes/structs, attached for control flow.
+BreakBeforeBraces: Linux
+NamespaceIndentation: None
+FixNamespaceComments: true
+
+DerivePointerAlignment: false
+PointerAlignment: Middle
+
+# Disallow compressed one-line control flow, blocks, and non-empty functions.
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortLambdasOnASingleLine: Inline
+
+# Preserve existing include ordering to avoid noisy diffs across incremental edits.
+SortIncludes: Never

@@ -1,0 +1,1621 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>XXU 2026 ROS 2 全链路数据流图</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    /* Theme tokens scoped to .app-shell (no :root overrides, preserving host variables when embedded) */
+    .app-shell {
+      --df-bg: var(--background, #f1f5f9);
+      --df-surface: var(--card, #ffffff);
+      --df-lane: var(--content, rgba(255, 255, 255, 0.82));
+      --df-subtle: var(--secondary, #f1f5f9);
+      --df-border: var(--border, #dbe3ee);
+      --df-text: var(--foreground, #0f172a);
+      --df-muted: var(--muted-foreground, #475569);
+      --df-accent: var(--primary, #2563eb);
+      --df-accent-fg: var(--primary-foreground, #ffffff);
+      --df-dot: rgba(100, 116, 139, 0.22);
+      --df-shadow: 0 4px 14px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.05);
+      --df-shadow-hover: 0 12px 26px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.06);
+      --df-pill-bg: rgba(255, 255, 255, 0.96);
+
+      --c-lidar: #0284c7;
+      --c-lidar-soft: rgba(2, 132, 199, 0.11);
+      --c-imu: #059669;
+      --c-imu-soft: rgba(5, 150, 105, 0.11);
+      --c-tf: #7c3aed;
+      --c-tf-soft: rgba(124, 58, 237, 0.11);
+      --c-vel: #d97706;
+      --c-vel-soft: rgba(217, 119, 6, 0.12);
+      --c-safety: #e11d48;
+      --c-safety-soft: rgba(225, 29, 72, 0.11);
+      --c-neutral: #64748b;
+      --c-neutral-soft: rgba(100, 116, 139, 0.11);
+    }
+
+    .app-shell[data-theme="dark"] {
+      --df-bg: #0b1120;
+      --df-surface: #11192c;
+      --df-lane: rgba(17, 25, 44, 0.78);
+      --df-subtle: #18233c;
+      --df-border: #25334d;
+      --df-text: #f1f5f9;
+      --df-muted: #94a3b8;
+      --df-accent: #3b82f6;
+      --df-accent-fg: #ffffff;
+      --df-dot: rgba(148, 163, 184, 0.16);
+      --df-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.25);
+      --df-shadow-hover: 0 12px 30px rgba(0, 0, 0, 0.52), 0 2px 8px rgba(0, 0, 0, 0.35);
+      --df-pill-bg: rgba(15, 23, 42, 0.96);
+
+      --c-lidar: #38bdf8;
+      --c-lidar-soft: rgba(56, 189, 248, 0.15);
+      --c-imu: #34d399;
+      --c-imu-soft: rgba(52, 211, 153, 0.15);
+      --c-tf: #a78bfa;
+      --c-tf-soft: rgba(167, 139, 250, 0.15);
+      --c-vel: #fbbf24;
+      --c-vel-soft: rgba(251, 191, 36, 0.15);
+      --c-safety: #fb7185;
+      --c-safety-soft: rgba(251, 113, 133, 0.15);
+      --c-neutral: #94a3b8;
+      --c-neutral-soft: rgba(148, 163, 184, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+
+    .app-shell {
+      background-color: var(--df-bg);
+      color: var(--df-text);
+      min-height: 100vh;
+      padding: 18px 24px;
+    }
+
+    .page-container {
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .panel-card {
+      background-color: var(--df-surface);
+      border: 1px solid var(--df-border);
+      box-shadow: var(--df-shadow);
+      border-radius: 16px;
+    }
+
+    .dot-canvas {
+      background-color: var(--df-bg);
+      background-image: radial-gradient(var(--df-dot) 1.25px, transparent 1.25px);
+      background-size: 22px 22px;
+      position: relative;
+      overflow: auto;
+    }
+
+    .zoom-stage {
+      transform-origin: top left;
+      transition: transform 0.15s ease-out;
+    }
+
+    .board-grid {
+      display: grid;
+      grid-template-columns: 220px 248px 248px 240px 296px;
+      column-gap: 92px;
+      align-items: stretch;
+      padding: 20px 22px 92px 22px;
+      position: relative;
+      width: max-content;
+    }
+
+    /* CRITICAL: both SVG and edge-labels overlay MUST be position: absolute so they do not occupy grid columns */
+    #wire-svg,
+    #edge-labels-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    #wire-svg {
+      z-index: 4;
+      overflow: visible;
+    }
+
+    #edge-labels-layer {
+      z-index: 5;
+    }
+
+    .swimlane {
+      background-color: var(--df-lane);
+      border: 1px solid var(--df-border);
+      backdrop-filter: blur(8px);
+      border-radius: 16px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .lane-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 10px;
+      border-bottom: 1px dashed var(--df-border);
+    }
+
+    .node-card {
+      background-color: var(--df-surface);
+      border: 1px solid var(--df-border);
+      border-radius: 12px;
+      padding: 12px 13px 12px 16px;
+      box-shadow: var(--df-shadow);
+      cursor: pointer;
+      position: relative;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, opacity 0.2s ease;
+      z-index: 3;
+    }
+
+    .node-card.push-bottom {
+      margin-top: auto;
+    }
+
+    .node-card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 10px;
+      bottom: 10px;
+      width: 4px;
+      border-radius: 0 4px 4px 0;
+      background-color: var(--node-color, var(--df-accent));
+    }
+
+    .node-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--df-shadow-hover);
+      border-color: var(--node-color, var(--df-accent));
+    }
+
+    .node-card.is-selected {
+      border-color: var(--node-color, var(--df-accent));
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--node-color, var(--df-accent)) 30%, transparent), var(--df-shadow-hover);
+    }
+
+    .node-card.is-dimmed {
+      opacity: 0.2;
+    }
+
+    .node-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .node-title {
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--df-text);
+      word-break: break-word;
+    }
+
+    .node-badge {
+      font-size: 12px;
+      line-height: 1.25;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 600;
+      background-color: var(--node-soft, var(--df-subtle));
+      color: var(--node-color, var(--df-text));
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .topic-line {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      color: var(--df-muted);
+      background-color: var(--df-subtle);
+      border-radius: 7px;
+      padding: 5px 8px;
+      margin-top: 7px;
+      word-break: break-word;
+      line-height: 1.42;
+    }
+
+    .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .meta-tag {
+      font-size: 12px;
+      padding: 2px 7px;
+      border-radius: 6px;
+      border: 1px solid var(--df-border);
+      color: var(--df-muted);
+      background-color: var(--df-surface);
+    }
+
+    .wire-path {
+      fill: none;
+      transition: opacity 0.2s ease, stroke-width 0.2s ease;
+    }
+
+    .wire-path.is-dimmed {
+      opacity: 0.12;
+    }
+
+    .wire-path.is-highlighted {
+      stroke-width: 3px !important;
+      filter: drop-shadow(0 0 4px currentColor);
+    }
+
+    .wire-path.is-flowing {
+      stroke-dasharray: 8 6;
+      animation: flowDash 0.85s linear infinite;
+    }
+
+    @keyframes flowDash {
+      to {
+        stroke-dashoffset: -28;
+      }
+    }
+
+    .edge-label-pill {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.2;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background-color: var(--df-pill-bg);
+      border: 1px solid var(--df-border);
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.09);
+      pointer-events: auto;
+      cursor: default;
+      white-space: nowrap;
+      transition: opacity 0.2s ease, transform 0.15s ease;
+    }
+
+    .edge-label-pill:hover {
+      transform: translate(-50%, -50%) scale(1.06);
+      z-index: 8;
+    }
+
+    .edge-label-pill.is-dimmed {
+      opacity: 0.14;
+    }
+
+    .control-pill {
+      border: 1px solid var(--df-border);
+      background-color: var(--df-surface);
+      color: var(--df-text);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .control-pill:hover {
+      border-color: var(--df-accent);
+    }
+
+    .control-pill.is-active {
+      background-color: var(--df-accent);
+      border-color: var(--df-accent);
+      color: var(--df-accent-fg);
+    }
+
+    .seg-group {
+      display: inline-flex;
+      padding: 3px;
+      border-radius: 10px;
+      background-color: var(--df-subtle);
+      border: 1px solid var(--df-border);
+      gap: 3px;
+    }
+
+    .seg-btn {
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 7px;
+      border: none;
+      background: transparent;
+      color: var(--df-muted);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .seg-btn:hover {
+      color: var(--df-text);
+    }
+
+    .seg-btn.is-active {
+      background-color: var(--df-surface);
+      color: var(--df-text);
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+    }
+
+    .bus-bar {
+      position: absolute;
+      left: 22px;
+      right: 22px;
+      bottom: 16px;
+      height: 46px;
+      border-radius: 12px;
+      border: 1px dashed var(--df-border);
+      background-color: var(--df-lane);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 18px;
+      z-index: 2;
+      gap: 20px;
+    }
+
+    .inspector-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+
+    .file-chip {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      color: var(--df-muted);
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 1px dashed var(--df-border);
+      word-break: break-all;
+      line-height: 1.35;
+    }
+
+    .file-pills-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .file-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--df-border);
+      background-color: var(--df-surface);
+      color: var(--df-text);
+      text-decoration: none;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .file-pill:hover {
+      border-color: var(--df-accent);
+    }
+
+    .file-kind {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 5px;
+      background-color: var(--df-subtle);
+      color: var(--df-muted);
+    }
+
+    .file-path {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      color: var(--df-accent);
+      text-decoration: none;
+      word-break: break-all;
+    }
+
+    .file-path:hover {
+      text-decoration: underline;
+    }
+
+    .copy-path-btn {
+      font-size: 12px;
+      padding: 1px 6px;
+      border-radius: 5px;
+      border: 1px solid var(--df-border);
+      background-color: var(--df-subtle);
+      color: var(--df-muted);
+      cursor: pointer;
+    }
+
+    .copy-path-btn:hover {
+      color: var(--df-text);
+      border-color: var(--df-accent);
+    }
+
+    @media (max-width: 900px) {
+      .inspector-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <div class="page-container">
+
+      <!-- Top Header Card -->
+      <div class="panel-card p-4 md:p-5 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+        <div class="space-y-1.5">
+          <div class="flex flex-wrap items-center gap-2.5">
+            <h1 class="text-lg md:text-xl font-bold tracking-tight" style="color: var(--df-text)">
+              XXU 2026 ROS 2 全链路数据流图
+            </h1>
+            <span class="node-badge" style="--node-color: var(--c-imu); --node-soft: var(--c-imu-soft);">
+              ROS 2 Jazzy · 高频零 Python
+            </span>
+            <span class="node-badge" style="--node-color: var(--c-tf); --node-soft: var(--c-tf-soft);">
+              单父无环 TF · SensorDataQoS
+            </span>
+          </div>
+          <p class="text-sm" style="color: var(--df-muted)">
+            悬停模块高亮上下游实时流向；点击卡片在下方查看详细话题、QoS 与安全保护约束。
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2.5">
+          <div class="seg-group" role="group" aria-label="部署模式">
+            <button class="seg-btn is-active" data-mode="real_rigid">实车刚性安装</button>
+            <button class="seg-btn" data-mode="sim_ega">EGA 仿真 (RMUL)</button>
+            <button class="seg-btn" data-mode="real_gimbal">云台动态补偿</button>
+          </div>
+
+          <div class="seg-group" role="group" aria-label="画布缩放">
+            <button id="zoom-out" class="seg-btn" title="缩小">－</button>
+            <button id="zoom-fit" class="seg-btn is-active" title="适配当前窗口宽度">适配窗口</button>
+            <button id="zoom-100" class="seg-btn" title="原始比例 100%">100%</button>
+            <button id="zoom-in" class="seg-btn" title="放大">＋</button>
+          </div>
+
+          <button id="theme-toggle" class="control-pill" title="切换浅色 / 深色主题">
+            <span id="theme-icon">☾</span>
+            <span id="theme-label">深色模式</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Filter Bar -->
+      <div class="panel-card px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs font-semibold mr-1" style="color: var(--df-muted)">链路筛选</span>
+          <button class="control-pill is-active" data-chain="all">全部链路</button>
+          <button class="control-pill" data-chain="lidar">
+            <span class="w-2.5 h-2.5 rounded-full inline-block" style="background: var(--c-lidar)"></span>点云与扫描
+          </button>
+          <button class="control-pill" data-chain="imu">
+            <span class="w-2.5 h-2.5 rounded-full inline-block" style="background: var(--c-imu)"></span>IMU 与里程计
+          </button>
+          <button class="control-pill" data-chain="tf">
+            <span class="w-2.5 h-2.5 rounded-full inline-block" style="background: var(--c-tf)"></span>TF 坐标树
+          </button>
+          <button class="control-pill" data-chain="vel">
+            <span class="w-2.5 h-2.5 rounded-full inline-block" style="background: var(--c-vel)"></span>规划控制与门控
+          </button>
+        </div>
+        <div class="flex flex-wrap items-center gap-4 text-xs" style="color: var(--df-muted)">
+          <span class="inline-flex items-center gap-1.5">
+            <span class="w-5 h-0.5 inline-block rounded" style="background: var(--c-lidar)"></span> 实时高频数据流
+          </span>
+          <span class="inline-flex items-center gap-1.5">
+            <span class="w-5 border-t-2 border-dashed inline-block" style="border-color: var(--c-tf)"></span> 静态外参 / 门控 / 低频监督
+          </span>
+        </div>
+      </div>
+
+      <!-- Interactive Canvas -->
+      <div class="panel-card overflow-hidden">
+        <div class="dot-canvas" id="canvas-scroll">
+          <div id="zoom-wrapper" style="position: relative; margin: 0 auto;">
+            <div class="zoom-stage" id="zoom-stage">
+              <div class="board-grid" id="board">
+                <svg id="wire-svg"></svg>
+                <div id="edge-labels-layer"></div>
+
+                <!-- Column 1: 传感器与原始输入 -->
+                <section class="swimlane">
+                  <div class="lane-header">
+                    <span class="text-xs font-bold tracking-wide" style="color: var(--df-text)">1. 传感器与先验输入</span>
+                    <span class="text-xs" style="color: var(--df-muted)">Sources</span>
+                  </div>
+
+                  <div class="node-card" data-id="sensor_lidar" style="--node-color: var(--c-lidar); --node-soft: var(--c-lidar-soft);">
+                    <div class="node-head">
+                      <span class="node-title">Mid360 LiDAR</span>
+                      <span class="node-badge">~10 Hz</span>
+                    </div>
+                    <div class="topic-line" id="txt-lidar-topic">/livox/lidar (PointCloud2)</div>
+                    <div class="meta-row">
+                      <span class="meta-tag" id="txt-lidar-frame">frame: livox_frame</span>
+                      <span class="meta-tag">Best Effort</span>
+                    </div>
+                    <div class="file-chip" id="file-lidar">src/lddc.cpp · sentry_localization.launch.py</div>
+                  </div>
+
+                  <div class="node-card" data-id="sensor_imu" style="--node-color: var(--c-imu); --node-soft: var(--c-imu-soft);">
+                    <div class="node-head">
+                      <span class="node-title">Mid360 / 仿真 IMU</span>
+                      <span class="node-badge" id="badge-imu-rate">200 Hz</span>
+                    </div>
+                    <div class="topic-line" id="txt-imu-topic">/livox/imu (Imu)</div>
+                    <div class="meta-row">
+                      <span class="meta-tag" id="txt-imu-frame">frame: livox_frame</span>
+                      <span class="meta-tag">Best Effort</span>
+                    </div>
+                    <div class="file-chip" id="file-imu">src/lddc.cpp · rm_sim_gazebo.launch.py</div>
+                  </div>
+
+                  <div class="node-card" data-id="joint_state" style="--node-color: var(--c-vel); --node-soft: var(--c-vel-soft);">
+                    <div class="node-head">
+                      <span class="node-title">云台关节反馈</span>
+                      <span class="node-badge" id="badge-joint-req">刚性可选</span>
+                    </div>
+                    <div class="topic-line">/joint_states (JointState)</div>
+                    <div class="meta-row">
+                      <span class="meta-tag" id="txt-joint-note">无云台可设 false</span>
+                      <span class="meta-tag">≤0.5s 超时</span>
+                    </div>
+                    <div class="file-chip">config/robot_interfaces.yaml · sensor_chain.yaml</div>
+                  </div>
+
+                  <div class="node-card push-bottom" data-id="prior_map" style="--node-color: var(--c-neutral); --node-soft: var(--c-neutral-soft);">
+                    <div class="node-head">
+                      <span class="node-title">3D 先验点云地图</span>
+                      <span class="node-badge">Offline</span>
+                    </div>
+                    <div class="topic-line">prior_map (matching_prior)</div>
+                    <div class="meta-row">
+                      <span class="meta-tag">后端初始化 & 重定位</span>
+                    </div>
+                    <div class="file-chip">backend.launch.py · sentry_localization.launch.py</div>
+                  </div>
+                </section>
+
+                <!-- Column 2: C++ 预处理与静态外参 -->
+                <section class="swimlane">
+                  <div class="lane-header">
+                    <span class="text-xs font-bold tracking-wide" style="color: var(--df-text)">2. C++ 预处理与外参</span>
+                    <span class="text-xs" style="color: var(--df-muted)">xxu_bringup</span>
+                  </div>
+
+                  <div class="node-card" data-id="pc_comp" style="--node-color: var(--c-lidar); --node-soft: var(--c-lidar-soft);">
+                    <div class="node-head">
+                      <span class="node-title">pointcloud_frame_republisher</span>
+                      <span class="node-badge">C++</span>
+                    </div>
+                    <div class="topic-line" id="txt-pc-out">→ /livox/lidar_compensated</div>
+                    <div class="meta-row">
+                      <span class="meta-tag">车体自滤除</span>
+                      <span class="meta-tag">target: lio_base_sensor</span>
+                    </div>
+                    <div class="file-chip">src/pointcloud_frame_republisher.cpp</div>
+                  </div>
+
+                  <div class="node-card" data-id="imu_comp" style="--node-color: var(--c-imu); --node-soft: var(--c-imu-soft);">
+                    <div class="node-head">
+                      <span class="node-title">gimbal_imu_compensator</span>
+                      <span class="node-badge">C++</span>
+                    </div>
+                    <div class="topic-line" id="txt-imu-out">→ /livox/imu_lio_compensated</div>
+                    <div class="meta-row">
+                      <span class="meta-tag" id="txt-icomp-mode">刚性外参单样本</span>
+                      <span class="meta-tag">无全局 /tf</span>
+                    </div>
+                    <div class="file-chip">src/gimbal_imu_compensator.cpp</div>
+                  </div>
+
+                  <div class="node-card push-bottom" data-id="static_tf" style="--node-color: var(--c-tf); --node-soft: var(--c-tf-soft);">
+                    <div class="node-head">
+                      <span class="node-title">静态安装外参</span>
+                      <span class="node-badge">/tf_static</span>
+                    </div>
+                    <div class="topic-line" id="txt-stf-edges">base_link → lio_base_sensor<br/>base_link → livox_frame</div>
+                    <div class="meta-row">
+                      <span class="meta-tag">无 base_footprint</span>
+                      <span class="meta-tag">无机械关节 TF</span>
+                    </div>
+                    <div class="file-chip">xxu_bringup/sensor_launch.py · rigid_mount.pending.yaml</div>
+                  </div>
+                </section>
+
+                <!-- Column 3: ZLIO 定位核心 -->
+                <section class="swimlane">
+                  <div class="lane-header">
+                    <span class="text-xs font-bold tracking-wide" style="color: var(--df-text)">3. ZLIO 定位前后端</span>
+                    <span class="text-xs" style="color: var(--df-muted)">z-localization</span>
+                  </div>
+
+                  <div class="node-card" data-id="zlio_fe" style="--node-color: var(--c-lidar); --node-soft: var(--c-lidar-soft);">
+                    <div class="node-head">
+                      <span class="node-title">ZLIO Frontend</span>
+                      <span class="node-badge">C++ LIO</span>
+                    </div>
+                    <div class="topic-line">/cloud_deskewed (~10Hz)<br/>/odometry (IMU 预测频率)<br/>/frontend/frame + session</div>
+                    <div class="meta-row">
+                      <span class="meta-tag" style="color: var(--c-safety); border-color: color-mix(in srgb, var(--c-safety) 35%, transparent);">publish_tf = false</span>
+                      <span class="meta-tag">0.5s 源年龄保护</span>
+                    </div>
+                    <div class="file-chip">frontend/apps/node.cpp · config/lio.yaml</div>
+                  </div>
+
+                  <div class="node-card push-bottom" data-id="zlio_be" style="--node-color: var(--c-tf); --node-soft: var(--c-tf-soft);">
+                    <div class="node-head">
+                      <span class="node-title">ZLIO Backend</span>
+                      <span class="node-badge">GTSAM C++</span>
+                    </div>
+                    <div class="topic-line">/sentry/tf/localization (map→odom)<br/>/backend_node/localization_state<br/>/localization/odometry</div>
+                    <div class="meta-row">
+                      <span class="meta-tag">≤50 Hz 动态边</span>
+                      <span class="meta-tag">禁止 map→body</span>
+                    </div>
+                    <div class="file-chip">backend/apps/node_input.cpp · publisher.cpp · backend.yaml</div>
+                  </div>
+                </section>
+
+                <!-- Column 4: 转换、扫描与安全门控 -->
+                <section class="swimlane">
+                  <div class="lane-header">
+                    <span class="text-xs font-bold tracking-wide" style="color: var(--df-text)">4. 转换、扫描与门控</span>
+                    <span class="text-xs" style="color: var(--df-muted)">Components</span>
+                  </div>
+
+                  <div class="node-card" data-id="pc_to_scan" style="--node-color: var(--c-lidar); --node-soft: var(--c-lidar-soft);">
+                    <div class="node-head">
+                      <span class="node-title">pointcloud_to_laserscan</span>
+                      <span class="node-badge">C++</span>
+                    </div>
+                    <div class="topic-line">→ /scan (LaserScan, ~10Hz)</div>
+                    <div class="meta-row">
+                      <span class="meta-tag">frame: base_link</span>
+                      <span class="meta-tag">静态一次缓存</span>
+                    </div>
+                    <div class="file-chip">pointcloud_to_laserscan_node.cpp</div>
+                  </div>
+
+                  <div class="node-card" data-id="zlio_odom" style="--node-color: var(--c-imu); --node-soft: var(--c-imu-soft);">
+                    <div class="node-head">
+                      <span class="node-title">ZlioBaseOdometry</span>
+                      <span class="node-badge">Component</span>
+                    </div>
+                    <div class="topic-line">→ /odom (child: base_link)<br/>→ /sentry/tf/odometry (30Hz)</div>
+                    <div class="meta-row">
+                      <span class="meta-tag">T_ob = T_os · T_bs⁻¹</span>
+                      <span class="meta-tag">停流不补帧</span>
+                    </div>
+                    <div class="file-chip">src/zlio_base_odometry.cpp · odometry_conversion.hpp</div>
+                  </div>
+
+                  <div class="node-card push-bottom" data-id="watchdog" style="--node-color: var(--c-safety); --node-soft: var(--c-safety-soft);">
+                    <div class="node-head">
+                      <span class="node-title">CmdVelWatchdog</span>
+                      <span class="node-badge">100 Hz 门控</span>
+                    </div>
+                    <div class="topic-line" id="txt-wd-out">→ /cmd_vel (安全放行 / 零速)<br/>→ /tf (map→odom→base_link ≤50Hz)</div>
+                    <div class="meta-row">
+                      <span class="meta-tag">不订阅全局 /tf</span>
+                      <span class="meta-tag">指令 ≤0.3s · 恢复 1s</span>
+                    </div>
+                    <div class="file-chip">src/cmd_vel_watchdog.cpp · localization_health.hpp</div>
+                  </div>
+                </section>
+
+                <!-- Column 5: Nav2 规划控制与底盘执行 -->
+                <section class="swimlane">
+                  <div class="lane-header">
+                    <span class="text-xs font-bold tracking-wide" style="color: var(--df-text)">5. Nav2 规划与底盘执行</span>
+                    <span class="text-xs" style="color: var(--df-muted)">Navigation & Actuation</span>
+                  </div>
+
+                  <div class="node-card" data-id="map_server" style="--node-color: var(--c-neutral); --node-soft: var(--c-neutral-soft);">
+                    <div class="node-head">
+                      <span class="node-title">Nav2 map_server</span>
+                      <span class="node-badge">2D Map</span>
+                    </div>
+                    <div class="topic-line">/map (OccupancyGrid, Transient Local)</div>
+                    <div class="file-chip">launch/navigation.launch.py · map_paths.py</div>
+                  </div>
+
+                  <div class="node-card" data-id="nav2_core" style="--node-color: var(--c-vel); --node-soft: var(--c-vel-soft);">
+                    <div class="node-head">
+                      <span class="node-title">Nav2 Planner & MPPI Omni</span>
+                      <span class="node-badge">base_link</span>
+                    </div>
+                    <div class="topic-line">planner_server → /plan<br/>MPPI Omni (可选 --spin) → /cmd_vel_nav</div>
+                    <div class="meta-row">
+                      <span class="meta-tag">无 fake_vel_transform</span>
+                      <span class="meta-tag">StoppedGoalChecker</span>
+                    </div>
+                    <div class="file-chip">config/nav2_navigation.yaml · navigation_parameters.py</div>
+                  </div>
+
+                  <div class="node-card" data-id="nav2_safety" style="--node-color: var(--c-vel); --node-soft: var(--c-vel-soft);">
+                    <div class="node-head">
+                      <span class="node-title">smoother → collision_monitor</span>
+                      <span class="node-badge">近场防撞</span>
+                    </div>
+                    <div class="topic-line">/cmd_vel_smoothed → /cmd_vel_collision</div>
+                    <div class="meta-row">
+                      <span class="meta-tag">消费 /scan</span>
+                      <span class="meta-tag">多边形减速/急停</span>
+                    </div>
+                    <div class="file-chip">config/nav2_navigation.yaml · ega_folded/geometry.json</div>
+                  </div>
+
+                  <div class="node-card" data-id="chassis_exec" style="--node-color: var(--c-safety); --node-soft: var(--c-safety-soft);">
+                    <div class="node-head">
+                      <span class="node-title" id="txt-chassis-title">实车串口桥 (chassis_lower_bridge)</span>
+                      <span class="node-badge">C++</span>
+                    </div>
+                    <div class="topic-line" id="txt-chassis-line">STM32 USB CDC (50Hz) · /chassis/status · /wheel_odom</div>
+                    <div class="meta-row">
+                      <span class="meta-tag" id="txt-chassis-tag">下位机独立 cmd_timeout=0.3s</span>
+                    </div>
+                    <div class="file-chip" id="file-chassis">src/chassis_lower_bridge.cpp · chassis_protocol.hpp</div>
+                  </div>
+
+                  <div class="node-card push-bottom" data-id="nav2_startup" style="--node-color: var(--c-neutral); --node-soft: var(--c-neutral-soft);">
+                    <div class="node-head">
+                      <span class="node-title">nav2_navigation_startup</span>
+                      <span class="node-badge">低频监督</span>
+                    </div>
+                    <div class="topic-line">仅订阅 ~/localization_ready & ~/tf_ready</div>
+                    <div class="file-chip">scripts/nav2_navigation_startup.py · src/wait_for_odom.cpp</div>
+                  </div>
+                </section>
+
+                <!-- Dedicated Bottom Bus Legend -->
+                <div class="bus-bar">
+                  <div class="flex items-center gap-2 text-xs font-medium" style="color: var(--c-tf)">
+                    <span class="w-2.5 h-2.5 rounded-full inline-block shrink-0" style="background: var(--c-tf)"></span>
+                    <span><strong>/tf_static 静态总线</strong>：启动期一次性读取并缓存，随即释放全局监听（预处理 / 扫描 / 里程计转换 / 看门狗）</span>
+                  </div>
+                  <div class="flex items-center gap-2 text-xs font-medium" style="color: var(--c-vel)">
+                    <span class="w-2.5 h-2.5 rounded-full inline-block shrink-0" style="background: var(--c-vel)"></span>
+                    <span><strong>/joint_states 反馈总线</strong>：云台模式下供补偿器插值，并送入看门狗执行 ≤0.5s 新鲜度门控</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Inspector Drawer Card -->
+      <div class="panel-card p-4 md:p-5">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pb-4 border-b" style="border-color: var(--df-border)">
+          <div class="space-y-1">
+            <div class="flex flex-wrap items-center gap-2.5">
+              <span id="ins-badge" class="node-badge">安全核心</span>
+              <h2 id="ins-title" class="text-base md:text-lg font-bold">xxu_bringup::CmdVelWatchdog</h2>
+            </div>
+            <p id="ins-desc" class="text-sm" style="color: var(--df-muted)"></p>
+          </div>
+          <div id="ins-pkg" class="text-xs font-mono px-3 py-1.5 rounded-lg border shrink-0" style="background: var(--df-subtle); border-color: var(--df-border); color: var(--df-muted)">
+            xxu_bringup (rclcpp_components)
+          </div>
+        </div>
+
+        <div class="inspector-grid">
+          <div class="rounded-xl p-3.5 border" style="background: var(--df-subtle); border-color: var(--df-border)">
+            <div class="text-xs font-bold mb-2 uppercase tracking-wider" style="color: var(--df-muted)">订阅 / 输入端口</div>
+            <div id="ins-in" class="text-xs space-y-1.5 leading-relaxed"></div>
+          </div>
+          <div class="rounded-xl p-3.5 border" style="background: var(--df-subtle); border-color: var(--df-border)">
+            <div class="text-xs font-bold mb-2 uppercase tracking-wider" style="color: var(--df-muted)">发布 / 输出端口</div>
+            <div id="ins-out" class="text-xs space-y-1.5 leading-relaxed"></div>
+          </div>
+          <div class="rounded-xl p-3.5 border" style="background: var(--df-subtle); border-color: var(--df-border)">
+            <div class="text-xs font-bold mb-2 uppercase tracking-wider" style="color: var(--df-muted)">QoS / 时序与硬性约束</div>
+            <div id="ins-notes" class="text-xs space-y-1.5 leading-relaxed"></div>
+          </div>
+        </div>
+
+        <div class="rounded-xl p-3.5 border mt-3.5" style="background: var(--df-subtle); border-color: var(--df-border)">
+          <div class="text-xs font-bold mb-2 uppercase tracking-wider" style="color: var(--df-muted)">相关文件（源码 · Launch · 配置）</div>
+          <div id="ins-files" class="file-pills-wrap"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const NODE_DATA = {
+      sensor_lidar: {
+        badge: '硬件 / 仿真源',
+        color: '--c-lidar',
+        title: 'Mid360 LiDAR 点云输入',
+        pkg: 'livox_ros_driver2 / rm_sim_26',
+        desc: '输出含逐点时间戳（timestamp，float64_ns）的原始三维点云。',
+        inputs: ['Livox MID360 UDP 硬件流（driver:=true）', '或 Gazebo RGL 雷达仿真插件（rmul_navigation）'],
+        outputs: ['实车：/livox/lidar (PointCloud2, frame: livox_frame)', 'EGA 仿真：/mid360/livox_points (frame: livox_lidar)'],
+        notes: ['QoS：SensorDataQoS (Best Effort)', '目标频率：~10 Hz', '实车雷达外参待实测确认（rigid_mount.pending.yaml）'],
+        files: [
+          { kind: '源码', path: 'xxu_nav_2026/src/z-localization/src/livox_ros_driver2/src/lddc.cpp' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/sentry_localization.launch.py' },
+          { kind: '仿真', path: 'xxu_nav_2026/src/xxu_sim_bringup/launch/rmul_navigation.launch.py' },
+          { kind: '模型', path: 'xxu_nav_2026/src/xxu_sim_bringup/models/ega_folded/robot.urdf' }
+        ]
+      },
+      sensor_imu: {
+        badge: '硬件 / 仿真源',
+        color: '--c-imu',
+        title: 'IMU 原始角速度与加速度',
+        pkg: 'livox_ros_driver2 / Gazebo IMU',
+        desc: '提供高频惯性测量数据；实车直通 200 Hz，EGA 仿真经十点均值降采到 100 Hz。',
+        inputs: ['MID360 内置 IMU（实车）或 Gazebo 1ms 步长 IMU（仿真）'],
+        outputs: ['实车：/livox/imu (Imu, ~200 Hz)', '仿真：/imu_raw (Imu, 1000 Hz → 100 Hz)'],
+        notes: ['QoS：SensorDataQoS', '实车严禁开启 imu_interval_samples:=10（仅仿真防漏采）'],
+        files: [
+          { kind: '源码', path: 'xxu_nav_2026/src/z-localization/src/livox_ros_driver2/src/lddc.cpp' },
+          { kind: '仿真', path: 'xxu_nav_2026/src/xxu_sim_bringup/launch/rm_sim_gazebo.launch.py' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/robot_interfaces.yaml' }
+        ]
+      },
+      joint_state: {
+        badge: '机械状态源',
+        color: '--c-vel',
+        title: '云台关节反馈 (/joint_states)',
+        pkg: '云台驱动 / Gazebo JointStatePublisher',
+        desc: '提供带时间戳的云台关节角与角速度，用于解析补偿，避免通过全局 /tf 进行高频动态插值。',
+        inputs: ['实车云台电机编码器 / 仿真关节状态'],
+        outputs: ['/joint_states (sensor_msgs/msg/JointState)'],
+        notes: ['刚性无云台安装时，launch 可设 require_joint_states:=false', '看门狗默认新鲜度超时 ≤ 0.5 s'],
+        files: [
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/robot_interfaces.yaml' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/sensor_chain.yaml' },
+          { kind: '仿真', path: 'xxu_nav_2026/src/xxu_sim_bringup/src/gimbal_stabilizer.cpp' }
+        ]
+      },
+      prior_map: {
+        badge: '离线先验数据',
+        color: '--c-neutral',
+        title: '3D 先验点云地图 (prior_map)',
+        pkg: 'z-localization backend',
+        desc: '后端初始化与闭环重定位使用的离线三维点云先验包，须与 Nav2 二维栅格地图对齐。',
+        inputs: ['启动参数 prior_map:=/path/to/matching_prior'],
+        outputs: ['供 backend_node 加载进行点云配准与因子图约束'],
+        notes: ['不通过高频话题实时传输', '须与实测地图及安装标定一致'],
+        files: [
+          { kind: 'Launch', path: 'xxu_nav_2026/src/z-localization/src/backend/launch/backend.launch.py' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/sentry_localization.launch.py' }
+        ]
+      },
+      pc_comp: {
+        badge: 'C++ 预处理节点',
+        color: '--c-lidar',
+        title: 'pointcloud_frame_republisher',
+        pkg: 'xxu_bringup (C++)',
+        desc: '以 C++ 替代原 Python 点云转换节点。执行车体自滤除、逐点时间戳保留与外参/关节解析补偿。',
+        inputs: ['原始点云 (/livox/lidar 或 /mid360/livox_points)', '刚性模式启动期读一次 /tf_static；云台模式读 /joint_states 线性插值'],
+        outputs: ['补偿后点云 (PointCloud2, frame: lio_base_sensor / frames.sensor)'],
+        notes: ['QoS：SensorDataQoS', '无常驻全局 /tf Listener', '保留行步长、字节序与有限点检验'],
+        files: [
+          { kind: '源码', path: 'xxu_nav_2026/src/xxu_bringup/src/pointcloud_frame_republisher.cpp' },
+          { kind: '头文件', path: 'xxu_nav_2026/src/xxu_bringup/include/xxu_bringup/cloud_layout.hpp' },
+          { kind: '头文件', path: 'xxu_nav_2026/src/xxu_bringup/include/xxu_bringup/sensor_math.hpp' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/sensor_chain.yaml' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/sensor_launch.py' }
+        ]
+      },
+      imu_comp: {
+        badge: 'C++ 预处理节点',
+        color: '--c-imu',
+        title: 'gimbal_imu_compensator',
+        pkg: 'xxu_bringup (C++)',
+        desc: '以 C++ 对原始 IMU 进行杆臂/旋转补偿，或仿真 10 点均值降采，使其与点云严格处于同一虚拟传感器坐标。',
+        inputs: ['原始 IMU (/livox/imu 或 /imu_raw)', '云台模式订阅 /joint_states（支持 4000 条缓存）'],
+        outputs: ['补偿后 IMU (/livox/imu_lio_compensated 或 /imu_lio_compensated)'],
+        notes: ['QoS：SensorDataQoS', '实车保持单样本直通（200 Hz）', 'target_frame 与点云保持一致'],
+        files: [
+          { kind: '源码', path: 'xxu_nav_2026/src/xxu_bringup/src/gimbal_imu_compensator.cpp' },
+          { kind: '头文件', path: 'xxu_nav_2026/src/xxu_bringup/include/xxu_bringup/sensor_math.hpp' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/sensor_chain.yaml' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/sensor_launch.py' }
+        ]
+      },
+      static_tf: {
+        badge: '静态 TF 发布',
+        color: '--c-tf',
+        title: 'static_transform_publisher (/tf_static)',
+        pkg: 'tf2_ros / xxu_bringup/sensor_launch.py',
+        desc: '经过 TF 瘦身后，所有物理传感器均作为 base_link 的直接静态子帧发布，移除 base_footprint 与机械关节分支。',
+        inputs: ['刚性安装 YAML（计算 T_base_lidar = T_base_sensor × T_sensor_lidar）或 EGA URDF 固定链'],
+        outputs: ['/tf_static：base_link → lio_base_sensor、base_link → livox_frame / livox_lidar'],
+        notes: ['Transient Local 静态发布', '遇到移动关节、断链或环路时 launch 阶段直接拒绝启动'],
+        files: [
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/sensor_launch.py' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/rigid_sensor.launch.py' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/rigid_mount.pending.yaml' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/robot_interfaces.yaml' }
+        ]
+      },
+      zlio_fe: {
+        badge: 'ZLIO 前端',
+        color: '--c-lidar',
+        title: 'z-localization Frontend',
+        pkg: 'z-localization/src/frontend (C++)',
+        desc: 'LiDAR-IMU 紧耦合里程计前端。直接发布已去畸变的局部导航点云 /cloud_deskewed，不再发布全局 TF。',
+        inputs: ['预处理后的 PointCloud2 与 Imu（SensorDataQoS）', '服务：/zlio/reset_internal (ResetFrontend)'],
+        outputs: ['/cloud_deskewed (PointCloud2, local sensor frame, ~10Hz)', '/odometry (Odometry, IMU 频率预测)', '/frontend/frame, /frontend/odometry, /frontend/session'],
+        notes: ['显式设置 publish_tf=false（开启将报错）', '保留单调性与 0.5 s 源年龄保护', '/frontend/cloud_registered 仅用于可视化，不接扫描'],
+        files: [
+          { kind: '源码', path: 'xxu_nav_2026/src/z-localization/src/frontend/apps/node.cpp' },
+          { kind: '头文件', path: 'xxu_nav_2026/src/z-localization/src/frontend/apps/node.hpp' },
+          { kind: '源码', path: 'xxu_nav_2026/src/z-localization/src/frontend/apps/visualization.cpp' },
+          { kind: '配置', path: 'xxu_nav_2026/src/z-localization/config/lio.yaml' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/z-localization/src/frontend/launch/lio.launch.py' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/z-localization/src/bringup/launch/bringup.launch.py' }
+        ]
+      },
+      zlio_be: {
+        badge: 'ZLIO 后端',
+        color: '--c-tf',
+        title: 'z-localization Backend (GTSAM)',
+        pkg: 'z-localization/src/backend (C++)',
+        desc: '基于 GTSAM 与系统 Eigen 3.4 的因子图全局定位后端，输出 map → odom 与定位健康状态。',
+        inputs: ['/frontend/frame, /frontend/odometry, /frontend/session', 'prior_map 先验图；服务 /localization_reset, /backend_node/relocalize'],
+        outputs: ['/sentry/tf/localization (TFMessage: map → odom, ≤50Hz)', '/localization/odometry (Odometry)', '/backend_node/localization_state (NORMAL / OBS_DEGRADED / LOST)'],
+        notes: ['ZLIO 模式抑制 legacy map → body TF', 'GTSAM 与 Eigen 3.4 编译期对齐检查'],
+        files: [
+          { kind: '头文件', path: 'xxu_nav_2026/src/z-localization/src/backend/apps/node.hpp' },
+          { kind: '源码', path: 'xxu_nav_2026/src/z-localization/src/backend/apps/node_input.cpp' },
+          { kind: '源码', path: 'xxu_nav_2026/src/z-localization/src/backend/apps/publisher.cpp' },
+          { kind: '配置', path: 'xxu_nav_2026/src/z-localization/config/backend.yaml' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/z-localization/src/backend/launch/backend.launch.py' }
+        ]
+      },
+      pc_to_scan: {
+        badge: 'C++ 扫描转换',
+        color: '--c-lidar',
+        title: 'pointcloud_to_laserscan_node',
+        pkg: 'pointcloud_to_laserscan (C++)',
+        desc: '直接订阅前端发布的局部去畸变云 /cloud_deskewed，利用一次缓存的静态 T_base_sensor 投影为二维扫描。',
+        inputs: ['/cloud_deskewed (SensorDataQoS)', '/tf_static（首次获取 T_base_sensor 后释放订阅与 Buffer）'],
+        outputs: ['/scan (sensor_msgs/msg/LaserScan, frame_id: base_link, ~10Hz)'],
+        notes: ['QoS：SensorDataQoS (best_effort)', '无动态 MessageFilter / TF 时间戳插值', '源帧改变时拒绝复用旧缓存'],
+        files: [
+          { kind: '源码', path: 'xxu_nav_2026/src/pointcloud_to_laserscan/src/pointcloud_to_laserscan_node.cpp' },
+          { kind: '头文件', path: 'xxu_nav_2026/src/pointcloud_to_laserscan/include/pointcloud_to_laserscan/pointcloud_to_laserscan_node.hpp' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/sentry_localization.launch.py' }
+        ]
+      },
+      zlio_odom: {
+        badge: 'C++ 组件',
+        color: '--c-imu',
+        title: 'xxu_bringup::ZlioBaseOdometry',
+        pkg: 'xxu_bringup (rclcpp_components)',
+        desc: '与 CmdVelWatchdog 共居同一 component_container_mt。将传感器坐标里程计通过逆外参映射为底盘 base_link 里程计。',
+        inputs: ['/odometry (ZLIO 前端, SensorDataQoS)', '外参来源：parameters 或一次性 /tf_static'],
+        outputs: ['/odom (Odometry, frame: odom → child: base_link, SensorDataQoS)', '/sentry/tf/odometry (TFMessage: odom → base_link, 默认 30Hz, 限 20–50Hz)'],
+        notes: ['公式：T_odom_base = T_odom_sensor × inverse(T_base_sensor)', '速度与协方差按刚体伴随/杆臂 Jacobian 严格区分', '同时间戳停流不重复补帧'],
+        files: [
+          { kind: '源码', path: 'xxu_nav_2026/src/xxu_bringup/src/zlio_base_odometry.cpp' },
+          { kind: '头文件', path: 'xxu_nav_2026/src/xxu_bringup/include/xxu_bringup/odometry_conversion.hpp' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/zlio_base_adapter.launch.py' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/sentry_localization.launch.py' }
+        ]
+      },
+      watchdog: {
+        badge: '安全核心 · C++ 组件',
+        color: '--c-safety',
+        title: 'xxu_bringup::CmdVelWatchdog',
+        pkg: 'xxu_bringup (rclcpp_components)',
+        desc: '全系统最后一道速度安全门控与全局核心动态 TF 转发器。不订阅全局 /tf，只接收两条专用 TF 流。',
+        inputs: ['/cmd_vel_collision (TwistStamped)', '/odom, /scan, (可选 /joint_states)', '/backend_node/localization_state, /localization/odometry', '/sentry/tf/odometry, /sentry/tf/localization, /tf_static'],
+        outputs: ['/cmd_vel 或 /rm_sim/cmd_vel_safe (100Hz 墙钟保护)', '/tf (仅转发校验后的 map → odom 与 odom → base_link, ≤50Hz)', '/cmd_vel_watchdog/healthy, ~/localization_ready, ~/tf_ready'],
+        notes: ['超时阈值：指令 ≤0.3s；odom/scan/joint/TF ≤0.5s；定位恢复保持 1.0s', '发现父节点冲突或源时间戳停止推进即拒绝放行', '故障触发后必须收到恢复后的新指令才解锁'],
+        files: [
+          { kind: '源码', path: 'xxu_nav_2026/src/xxu_bringup/src/cmd_vel_watchdog.cpp' },
+          { kind: '头文件', path: 'xxu_nav_2026/src/xxu_bringup/include/xxu_bringup/localization_health.hpp' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/velocity_launch.py' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/sentry_localization.launch.py' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/robot_interfaces.yaml' }
+        ]
+      },
+      map_server: {
+        badge: 'Nav2 地图',
+        color: '--c-neutral',
+        title: 'nav2_map_server',
+        pkg: 'nav2_map_server',
+        desc: '加载与场地先验点云对齐的二维静态栅格地图，供全局代价地图与路径规划使用。',
+        inputs: ['YAML + PGM 二维地图文件（如 rmul_rotating_20261112）'],
+        outputs: ['/map (nav_msgs/msg/OccupancyGrid, Transient Local)'],
+        notes: ['与 prior_map 坐标系原点一致'],
+        files: [
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/navigation.launch.py' },
+          { kind: '模块', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/map_paths.py' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/maps/rmuc_2025.yaml' }
+        ]
+      },
+      nav2_core: {
+        badge: 'Nav2 规划控制',
+        color: '--c-vel',
+        title: 'planner_server & MPPI Omni controller',
+        pkg: 'nav2_planner / nav2_controller / xxu_bringup',
+        desc: '基于真实 base_link 进行二维全向规划与控制。不再使用已移除的 fake_vel_transform 虚拟坐标系。',
+        inputs: ['/map, /scan, /odom, /tf (map→odom→base_link), /tf_static', 'robot_geometry_file 车型轮廓与导航参数'],
+        outputs: ['/plan (Path), /local_plan (Path)', '/cmd_vel_nav (TwistStamped, frame_id: base_link)'],
+        notes: ['支持常规全向导航与显式 --spin 边走边转模式', '折叠 EGA 车型采用 StoppedGoalChecker'],
+        files: [
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/nav2_navigation.yaml' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/nav2_exploration.yaml' },
+          { kind: '模块', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/navigation_parameters.py' },
+          { kind: '模块', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/robot_profiles.py' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/navigation.launch.py' }
+        ]
+      },
+      nav2_safety: {
+        badge: 'Nav2 速度后处理',
+        color: '--c-vel',
+        title: 'velocity_smoother → collision_monitor',
+        pkg: 'nav2_velocity_smoother / nav2_collision_monitor',
+        desc: '对控制器输出进行运动学平滑，并结合实时激光扫描 /scan 进行近场减速与多边形碰撞急停。',
+        inputs: ['/cmd_vel_nav (TwistStamped)', '/scan (LaserScan), /tf'],
+        outputs: ['/cmd_vel_smoothed → /cmd_vel_collision (TwistStamped)'],
+        notes: ['急停/减速多边形配置在 robot_geometry_file', '输出直接送入 CmdVelWatchdog，未过安全门控不直接驱动底盘'],
+        files: [
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/nav2_navigation.yaml' },
+          { kind: '模块', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/navigation_parameters.py' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_sim_bringup/models/ega_folded/navigation_profile.yaml' }
+        ]
+      },
+      chassis_exec: {
+        badge: '执行端 (实车 / 仿真)',
+        color: '--c-safety',
+        title: '底盘控制执行桥',
+        pkg: 'xxu_hardware (chassis_lower_bridge) / xxu_sim_bringup',
+        desc: '实车通过 C++ 串口桥接发往 STM32 下位机；仿真交给 xxu_chassis_controller 解算四轮独立转速驱动 Gazebo 模型。',
+        inputs: ['实车：/cmd_vel (TwistStamped)', '仿真：/rm_sim/cmd_vel_safe (TwistStamped)'],
+        outputs: ['实车：USB CDC 协议 → STM32；发布 /chassis/status, /chassis/wheel_vel, /wheel_odom', '仿真：/{wheel}/cmd_vel 或 /wheel_velocity_controller/commands'],
+        notes: ['实车波特率 115200，50 Hz 下发，cmd_timeout=0.3s 二次保护', '已完整替代原 Python 串口与仿真适配脚本'],
+        files: [
+          { kind: '源码', path: 'xxu_nav_2026/src/xxu_hardware/src/chassis_lower_bridge.cpp' },
+          { kind: '头文件', path: 'xxu_nav_2026/src/xxu_hardware/include/xxu_hardware/chassis_protocol.hpp' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_hardware/launch/chassis_lower_bridge.launch.py' },
+          { kind: '仿真源码', path: 'xxu_nav_2026/src/xxu_chassis_controller/src/chassis_controller.cpp' },
+          { kind: '仿真源码', path: 'xxu_nav_2026/src/xxu_sim_bringup/src/rm_sim_adapter.cpp' },
+          { kind: '仿真源码', path: 'xxu_nav_2026/src/xxu_sim_bringup/src/omni_drive.cpp' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_sim_bringup/config/robot_motion.yaml' }
+        ]
+      },
+      nav2_startup: {
+        badge: '低频监督',
+        color: '--c-neutral',
+        title: 'nav2_navigation_startup (及可选空闲补扫)',
+        pkg: 'xxu_bringup',
+        desc: '低频任务与生命周期监督脚本。已剥离传感器、里程计和全局 TF 订阅，仅消费看门狗发出的就绪布尔信号。',
+        inputs: ['~/localization_ready, ~/tf_ready (来自 CmdVelWatchdog)'],
+        outputs: ['Nav2 生命周期激活管理 / 定位失信时取消动作'],
+        notes: ['不参与任何高频数据路径', '可选 --idle-scan 在空闲 2s 后触发 Spin 补扫'],
+        files: [
+          { kind: '脚本', path: 'xxu_nav_2026/src/xxu_bringup/scripts/nav2_navigation_startup.py' },
+          { kind: '源码', path: 'xxu_nav_2026/src/xxu_bringup/src/wait_for_odom.cpp' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/navigation.launch.py' }
+        ]
+      }
+    };
+
+    const EDGES = [
+      // Col 1 -> Col 2
+      { id: 'e_lidar_comp', from: 'sensor_lidar', to: 'pc_comp', chain: 'lidar', color: '--c-lidar', label: '10 Hz', fromSide: 'right', toSide: 'left', labelT: 0.5 },
+      { id: 'e_imu_comp', from: 'sensor_imu', to: 'imu_comp', chain: 'imu', color: '--c-imu', label: '200 Hz', fromSide: 'right', toSide: 'left', labelT: 0.5 },
+
+      // Col 2 -> Col 3
+      { id: 'e_pc_fe', from: 'pc_comp', to: 'zlio_fe', chain: 'lidar', color: '--c-lidar', label: '补偿点云', fromSide: 'right', toSide: 'left', fromPort: 0.5, toPort: 0.34, labelT: 0.5 },
+      { id: 'e_imu_fe', from: 'imu_comp', to: 'zlio_fe', chain: 'imu', color: '--c-imu', label: '补偿 IMU', fromSide: 'right', toSide: 'left', fromPort: 0.5, toPort: 0.72, labelT: 0.5 },
+
+      // Col 3 internal & Col 1 -> Col 3
+      { id: 'e_fe_be', from: 'zlio_fe', to: 'zlio_be', chain: 'imu', color: '--c-imu', label: '/frontend/frame', fromSide: 'bottom', toSide: 'top', labelT: 0.5 },
+      { id: 'e_map_be', from: 'prior_map', to: 'zlio_be', chain: 'lidar', color: '--c-neutral', label: 'prior_map', dashed: true, fromSide: 'right', toSide: 'left', fromPort: 0.55, toPort: 0.76 },
+
+      // Col 3 -> Col 4
+      { id: 'e_fe_scan', from: 'zlio_fe', to: 'pc_to_scan', chain: 'lidar', color: '--c-lidar', label: '/cloud_deskewed', fromSide: 'right', toSide: 'left', fromPort: 0.28, toPort: 0.48, labelT: 0.5 },
+      { id: 'e_fe_odom', from: 'zlio_fe', to: 'zlio_odom', chain: 'imu', color: '--c-imu', label: '/odometry', fromSide: 'right', toSide: 'left', fromPort: 0.72, toPort: 0.45, labelT: 0.5 },
+      { id: 'e_be_wd_tf', from: 'zlio_be', to: 'watchdog', chain: 'tf', color: '--c-tf', label: '/sentry/tf/localization', fromSide: 'right', toSide: 'left', fromPort: 0.32, toPort: 0.44, labelT: 0.48 },
+      { id: 'e_be_wd_st', from: 'zlio_be', to: 'watchdog', chain: 'vel', color: '--c-safety', label: 'localization_state', dashed: true, fromSide: 'right', toSide: 'left', fromPort: 0.74, toPort: 0.74, labelT: 0.52 },
+
+      // Col 4 internal
+      { id: 'e_odom_wd', from: 'zlio_odom', to: 'watchdog', chain: 'tf', color: '--c-tf', label: '/sentry/tf/odometry', fromSide: 'bottom', toSide: 'top', fromPort: 0.5, toPort: 0.5, labelT: 0.5 },
+      { id: 'e_scan_wd', from: 'pc_to_scan', to: 'watchdog', chain: 'vel', color: '--c-lidar', label: '/scan 监控', dashed: true, fromSide: 'left', toSide: 'left', fromPort: 0.80, toPort: 0.22, leftLoop: -32 },
+
+      // Col 4 -> Col 5
+      { id: 'e_scan_nav', from: 'pc_to_scan', to: 'nav2_core', chain: 'lidar', color: '--c-lidar', label: '/scan', fromSide: 'right', toSide: 'left', fromPort: 0.48, toPort: 0.24, labelT: 0.5 },
+      { id: 'e_odom_nav', from: 'zlio_odom', to: 'nav2_core', chain: 'imu', color: '--c-imu', label: '/odom', fromSide: 'right', toSide: 'left', fromPort: 0.48, toPort: 0.52, labelT: 0.5 },
+      { id: 'e_tf_nav', from: 'watchdog', to: 'nav2_core', chain: 'tf', color: '--c-tf', label: '/tf (核心动态边)', fromSide: 'right', toSide: 'left', fromPort: 0.20, toPort: 0.80, labelT: 0.34, curveBias: 0.42 },
+      { id: 'e_saf_wd', from: 'nav2_safety', to: 'watchdog', chain: 'vel', color: '--c-vel', label: '/cmd_vel_collision', fromSide: 'left', toSide: 'right', fromPort: 0.55, toPort: 0.50, labelT: 0.36 },
+      { id: 'e_wd_ch', from: 'watchdog', to: 'chassis_exec', chain: 'vel', color: '--c-safety', label: '/cmd_vel', fromSide: 'right', toSide: 'left', fromPort: 0.74, toPort: 0.50, labelT: 0.5 },
+      { id: 'e_wd_sup', from: 'watchdog', to: 'nav2_startup', chain: 'vel', color: '--c-neutral', label: '*_ready', dashed: true, fromSide: 'right', toSide: 'left', fromPort: 0.90, toPort: 0.50, labelT: 0.55 },
+
+      // Col 5 internal
+      { id: 'e_map_nav', from: 'map_server', to: 'nav2_core', chain: 'lidar', color: '--c-neutral', label: '/map', dashed: true, fromSide: 'bottom', toSide: 'top', labelT: 0.5 },
+      { id: 'e_nav_saf', from: 'nav2_core', to: 'nav2_safety', chain: 'vel', color: '--c-vel', label: '/cmd_vel_nav', fromSide: 'bottom', toSide: 'top', labelT: 0.5 }
+    ];
+
+    const MODE_PATCHES = {
+      real_rigid: {
+        'txt-lidar-topic': '/livox/lidar (PointCloud2)',
+        'txt-lidar-frame': 'frame: livox_frame',
+        'txt-imu-topic': '/livox/imu (Imu)',
+        'txt-imu-frame': 'frame: livox_frame',
+        'badge-imu-rate': '200 Hz',
+        'badge-joint-req': '刚性可选',
+        'txt-joint-note': '无云台可设 false',
+        'txt-pc-out': '→ /livox/lidar_compensated',
+        'txt-imu-out': '→ /livox/imu_lio_compensated',
+        'txt-icomp-mode': '刚性外参单样本',
+        'txt-stf-edges': 'base_link → lio_base_sensor\nbase_link → livox_frame',
+        'txt-wd-out': '→ /cmd_vel (安全放行 / 零速)\n→ /tf (map→odom→base_link ≤50Hz)',
+        'txt-chassis-title': '实车串口桥 (chassis_lower_bridge)',
+        'txt-chassis-line': 'STM32 USB CDC (50Hz) · /chassis/status · /wheel_odom',
+        'txt-chassis-tag': '下位机独立 cmd_timeout=0.3s',
+        'file-lidar': 'src/lddc.cpp · sentry_localization.launch.py',
+        'file-imu': 'src/lddc.cpp · rigid_sensor.launch.py',
+        'file-chassis': 'src/chassis_lower_bridge.cpp · chassis_protocol.hpp',
+        edgeLabels: { e_imu_comp: '200 Hz', e_wd_ch: '/cmd_vel' }
+      },
+      sim_ega: {
+        'txt-lidar-topic': '/mid360/livox_points (RGL)',
+        'txt-lidar-frame': 'frame: livox_lidar',
+        'txt-imu-topic': '/imu_raw (Gazebo 1kHz)',
+        'txt-imu-frame': 'frame: livox_lidar_imu',
+        'badge-imu-rate': '1k→100Hz',
+        'badge-joint-req': '固定模型可关',
+        'txt-joint-note': 'rmul_navigation',
+        'txt-pc-out': '→ /mid360/livox_points_compensated',
+        'txt-imu-out': '→ /imu_lio_compensated (100Hz)',
+        'txt-icomp-mode': '10点均值降采',
+        'txt-stf-edges': 'base_link → lio_base_sensor\nbase_link → livox_lidar (+imu)',
+        'txt-wd-out': '→ /rm_sim/cmd_vel_safe (安全放行)\n→ /tf (map→odom→base_link ≤50Hz)',
+        'txt-chassis-title': '仿真底盘驱动 (xxu_chassis_controller)',
+        'txt-chassis-line': '四轮独立转速 → /{wheel}/cmd_vel (80 rad/s²)',
+        'txt-chassis-tag': 'Gazebo Harmonic ega_folded',
+        'file-lidar': 'rmul_navigation.launch.py · ega_folded/robot.urdf',
+        'file-imu': 'rm_sim_gazebo.launch.py · sensor_chain.yaml',
+        'file-chassis': 'src/chassis_controller.cpp · rm_sim_adapter.cpp · omni_drive.cpp',
+        edgeLabels: { e_imu_comp: '1k→100Hz', e_wd_ch: '/rm_sim/cmd_vel_safe' }
+      },
+      real_gimbal: {
+        'txt-lidar-topic': '/livox/lidar 或云台点云',
+        'txt-lidar-frame': 'frame: livox_frame / rm_lidar',
+        'txt-imu-topic': '/livox/imu 或 /imu_raw',
+        'txt-imu-frame': '随云台旋转运动',
+        'badge-imu-rate': '200 Hz',
+        'badge-joint-req': '必选开启',
+        'txt-joint-note': 'gimbal_joint 插值',
+        'txt-pc-out': '→ 关节插值补偿点云',
+        'txt-imu-out': '→ 补偿至 lio_base_sensor',
+        'txt-icomp-mode': '角速度/杆臂解析补偿',
+        'txt-stf-edges': 'base_link → lio_base_sensor\n(不将移动云台伪装静态TF)',
+        'txt-wd-out': '→ /cmd_vel 或 /rm_sim/cmd_vel_safe\n→ /tf (map→odom→base_link ≤50Hz)',
+        'txt-chassis-title': '实车 / rm_sim 底盘执行桥',
+        'txt-chassis-line': '底盘自旋与云台旋转相互独立解耦',
+        'txt-chassis-tag': '关节反馈超时 ≤0.5s 停车',
+        'file-lidar': 'src/lddc.cpp · sensor_chain.yaml',
+        'file-imu': 'src/gimbal_imu_compensator.cpp · sensor_chain.yaml',
+        'file-chassis': 'src/chassis_lower_bridge.cpp · rm_sim_adapter.cpp · omni_drive.cpp',
+        edgeLabels: { e_imu_comp: '200 Hz', e_wd_ch: '/cmd_vel' }
+      }
+    };
+
+    const app = document.getElementById('app');
+    const scrollBox = document.getElementById('canvas-scroll');
+    const zoomWrapper = document.getElementById('zoom-wrapper');
+    const zoomStage = document.getElementById('zoom-stage');
+    const board = document.getElementById('board');
+    const wireSvg = document.getElementById('wire-svg');
+    const labelsLayer = document.getElementById('edge-labels-layer');
+
+    let currentMode = 'real_rigid';
+    let currentChain = 'all';
+    let selectedNodeId = 'watchdog';
+    let hoveredNodeId = null;
+    let zoomMode = 'fit';
+    let zoomScale = 1;
+
+    function applyZoom() {
+      const bw = board.offsetWidth;
+      const bh = board.offsetHeight;
+      if (!bw || !bh) return;
+
+      if (zoomMode === 'fit') {
+        const avail = scrollBox.clientWidth - 4;
+        zoomScale = Math.min(1.08, Math.max(0.55, avail / bw));
+      }
+
+      zoomStage.style.transform = `scale(${zoomScale})`;
+      zoomWrapper.style.width = `${Math.ceil(bw * zoomScale)}px`;
+      zoomWrapper.style.height = `${Math.ceil(bh * zoomScale)}px`;
+
+      document.getElementById('zoom-fit').classList.toggle('is-active', zoomMode === 'fit');
+      document.getElementById('zoom-100').classList.toggle('is-active', zoomMode === 'manual' && Math.abs(zoomScale - 1) < 0.01);
+    }
+
+    document.getElementById('zoom-fit').addEventListener('click', () => {
+      zoomMode = 'fit';
+      applyZoom();
+    });
+    document.getElementById('zoom-100').addEventListener('click', () => {
+      zoomMode = 'manual';
+      zoomScale = 1;
+      applyZoom();
+    });
+    document.getElementById('zoom-in').addEventListener('click', () => {
+      zoomMode = 'manual';
+      zoomScale = Math.min(1.4, +(zoomScale + 0.1).toFixed(2));
+      applyZoom();
+    });
+    document.getElementById('zoom-out').addEventListener('click', () => {
+      zoomMode = 'manual';
+      zoomScale = Math.max(0.55, +(zoomScale - 0.1).toFixed(2));
+      applyZoom();
+    });
+
+    function initTheme() {
+      const hostBg = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
+      if (!hostBg) {
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        setTheme(prefersDark ? 'dark' : 'light');
+      } else {
+        const isLight = document.documentElement.classList.contains('light');
+        updateThemeButton(isLight ? 'light' : 'dark', true);
+      }
+    }
+
+    function setTheme(theme) {
+      app.setAttribute('data-theme', theme);
+      updateThemeButton(theme, false);
+    }
+
+    function updateThemeButton(theme, hostManaged) {
+      const icon = document.getElementById('theme-icon');
+      const label = document.getElementById('theme-label');
+      if (theme === 'dark') {
+        icon.textContent = '☀';
+        label.textContent = '浅色模式';
+      } else {
+        icon.textContent = '☾';
+        label.textContent = '深色模式';
+      }
+      if (hostManaged && !app.hasAttribute('data-theme')) {
+        label.textContent = '切换主题';
+      }
+    }
+
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+      const cur = app.getAttribute('data-theme');
+      if (cur === 'dark') setTheme('light');
+      else if (cur === 'light') setTheme('dark');
+      else {
+        const isLight = document.documentElement.classList.contains('light');
+        setTheme(isLight ? 'dark' : 'light');
+      }
+    });
+
+    function getLayoutRect(el) {
+      let x = 0, y = 0, cur = el;
+      while (cur && cur !== board) {
+        x += cur.offsetLeft;
+        y += cur.offsetTop;
+        cur = cur.offsetParent;
+      }
+      return { left: x, top: y, width: el.offsetWidth, height: el.offsetHeight };
+    }
+
+    function getAnchor(el, side, port = 0.5) {
+      const r = getLayoutRect(el);
+      if (side === 'left') return { x: r.left, y: r.top + r.height * port };
+      if (side === 'right') return { x: r.left + r.width, y: r.top + r.height * port };
+      if (side === 'top') return { x: r.left + r.width * port, y: r.top };
+      return { x: r.left + r.width * port, y: r.top + r.height };
+    }
+
+    function cubicPoint(p0, p1, p2, p3, t) {
+      const u = 1 - t;
+      return {
+        x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
+        y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y
+      };
+    }
+
+    function drawWires() {
+      const w = board.offsetWidth;
+      const h = board.offsetHeight;
+      wireSvg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      wireSvg.innerHTML = '';
+      labelsLayer.innerHTML = '';
+
+      const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      ['--c-lidar', '--c-imu', '--c-tf', '--c-vel', '--c-safety', '--c-neutral'].forEach(cv => {
+        const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+        marker.setAttribute('id', `arr-${cv.replace('--c-', '')}`);
+        marker.setAttribute('viewBox', '0 0 10 10');
+        marker.setAttribute('refX', '8.5');
+        marker.setAttribute('refY', '5');
+        marker.setAttribute('markerWidth', '6.5');
+        marker.setAttribute('markerHeight', '6.5');
+        marker.setAttribute('orient', 'auto');
+        const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        p.setAttribute('d', 'M 0 1.2 L 9 5 L 0 8.8 z');
+        p.setAttribute('fill', `var(${cv})`);
+        marker.appendChild(p);
+        defs.appendChild(marker);
+      });
+      wireSvg.appendChild(defs);
+
+      const modePatch = MODE_PATCHES[currentMode].edgeLabels || {};
+
+      EDGES.forEach(edge => {
+        const fromEl = board.querySelector(`.node-card[data-id="${edge.from}"]`);
+        const toEl = board.querySelector(`.node-card[data-id="${edge.to}"]`);
+        if (!fromEl || !toEl) return;
+
+        const p0 = getAnchor(fromEl, edge.fromSide, edge.fromPort ?? 0.5);
+        const p3 = getAnchor(toEl, edge.toSide, edge.toPort ?? 0.5);
+
+        let d = '';
+        let labelPos = { x: (p0.x + p3.x) / 2, y: (p0.y + p3.y) / 2 };
+
+        if (edge.leftLoop) {
+          const cx = Math.min(p0.x, p3.x) + edge.leftLoop;
+          const p1 = { x: cx - 14, y: p0.y };
+          const p2 = { x: cx - 14, y: p3.y };
+          d = `M ${p0.x} ${p0.y} C ${p1.x} ${p1.y}, ${p2.x} ${p2.y}, ${p3.x} ${p3.y}`;
+          labelPos = cubicPoint(p0, p1, p2, p3, 0.5);
+        } else if (edge.fromSide === 'bottom' && edge.toSide === 'top') {
+          const dy = Math.max(20, Math.abs(p3.y - p0.y) * 0.45);
+          const p1 = { x: p0.x, y: p0.y + dy };
+          const p2 = { x: p3.x, y: p3.y - dy };
+          d = `M ${p0.x} ${p0.y} C ${p1.x} ${p1.y}, ${p2.x} ${p2.y}, ${p3.x} ${p3.y}`;
+          labelPos = cubicPoint(p0, p1, p2, p3, edge.labelT ?? 0.5);
+        } else if (edge.id === 'e_map_be') {
+          const busTop = h - 76;
+          const x1 = p0.x + 26;
+          const x2 = p3.x - 26;
+          d = `M ${p0.x} ${p0.y} L ${x1} ${p0.y} L ${x1} ${busTop} L ${x2} ${busTop} L ${x2} ${p3.y} L ${p3.x} ${p3.y}`;
+          labelPos = { x: (x1 + x2) / 2, y: busTop };
+        } else {
+          const dx = Math.abs(p3.x - p0.x);
+          const bend = Math.max(32, dx * (edge.curveBias || 0.46));
+          const dir0 = edge.fromSide === 'left' ? -1 : 1;
+          const dir3 = edge.toSide === 'left' ? -1 : 1;
+          const p1 = { x: p0.x + dir0 * bend, y: p0.y };
+          const p2 = { x: p3.x + dir3 * bend, y: p3.y };
+          d = `M ${p0.x} ${p0.y} C ${p1.x} ${p1.y}, ${p2.x} ${p2.y}, ${p3.x} ${p3.y}`;
+          labelPos = cubicPoint(p0, p1, p2, p3, edge.labelT ?? 0.5);
+        }
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('class', 'wire-path');
+        path.setAttribute('data-edge-id', edge.id);
+        path.setAttribute('data-from', edge.from);
+        path.setAttribute('data-to', edge.to);
+        path.setAttribute('data-chain', edge.chain);
+        path.setAttribute('stroke', `var(${edge.color})`);
+        path.setAttribute('stroke-width', edge.dashed ? '1.8' : '2.2');
+        if (edge.dashed) path.setAttribute('stroke-dasharray', '6 4');
+        path.setAttribute('marker-end', `url(#arr-${edge.color.replace('--c-', '')})`);
+        wireSvg.appendChild(path);
+
+        const text = modePatch[edge.id] || edge.label;
+        if (text) {
+          const pill = document.createElement('div');
+          pill.className = 'edge-label-pill';
+          pill.dataset.edgeId = edge.id;
+          pill.dataset.from = edge.from;
+          pill.dataset.to = edge.to;
+          pill.dataset.chain = edge.chain;
+          pill.style.left = `${labelPos.x}px`;
+          pill.style.top = `${labelPos.y}px`;
+          pill.style.color = `var(${edge.color})`;
+          pill.textContent = text;
+          labelsLayer.appendChild(pill);
+        }
+      });
+
+      applyVisualStates();
+      applyZoom();
+    }
+
+    function applyVisualStates() {
+      const focusId = hoveredNodeId;
+      const activeNodes = new Set();
+
+      if (focusId) {
+        activeNodes.add(focusId);
+        EDGES.forEach(e => {
+          if (e.from === focusId || e.to === focusId) {
+            activeNodes.add(e.from);
+            activeNodes.add(e.to);
+          }
+        });
+      } else if (currentChain !== 'all') {
+        EDGES.forEach(e => {
+          if (e.chain === currentChain) {
+            activeNodes.add(e.from);
+            activeNodes.add(e.to);
+          }
+        });
+      }
+
+      document.querySelectorAll('.node-card').forEach(card => {
+        const id = card.dataset.id;
+        card.classList.toggle('is-selected', id === selectedNodeId);
+        const dim = (focusId || currentChain !== 'all') && !activeNodes.has(id);
+        card.classList.toggle('is-dimmed', dim);
+      });
+
+      document.querySelectorAll('.wire-path').forEach(p => {
+        const from = p.getAttribute('data-from');
+        const to = p.getAttribute('data-to');
+        const chain = p.getAttribute('data-chain');
+
+        let match = true;
+        let highlight = false;
+        if (focusId) {
+          match = from === focusId || to === focusId;
+          highlight = match;
+        } else if (currentChain !== 'all') {
+          match = chain === currentChain;
+          highlight = match;
+        }
+
+        p.classList.toggle('is-dimmed', !match);
+        p.classList.toggle('is-highlighted', highlight);
+        p.classList.toggle('is-flowing', highlight);
+      });
+
+      document.querySelectorAll('.edge-label-pill').forEach(pill => {
+        const from = pill.dataset.from;
+        const to = pill.dataset.to;
+        const chain = pill.dataset.chain;
+        let match = true;
+        if (focusId) match = from === focusId || to === focusId;
+        else if (currentChain !== 'all') match = chain === currentChain;
+        pill.classList.toggle('is-dimmed', !match);
+      });
+    }
+
+    function applyMode(mode) {
+      currentMode = mode;
+      document.querySelectorAll('[data-mode]').forEach(btn => {
+        btn.classList.toggle('is-active', btn.dataset.mode === mode);
+      });
+      const patch = MODE_PATCHES[mode];
+      Object.entries(patch).forEach(([id, val]) => {
+        if (id === 'edgeLabels') return;
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (val.includes('\n')) {
+          el.innerHTML = val.split('\n').join('<br/>');
+        } else {
+          el.textContent = val;
+        }
+      });
+      requestAnimationFrame(drawWires);
+    }
+
+    function selectNode(id) {
+      selectedNodeId = id;
+      const data = NODE_DATA[id];
+      if (data) {
+        const badge = document.getElementById('ins-badge');
+        badge.textContent = data.badge;
+        badge.style.setProperty('--node-color', `var(${data.color})`);
+        badge.style.setProperty('--node-soft', `var(${data.color}-soft)`);
+        document.getElementById('ins-title').textContent = data.title;
+        document.getElementById('ins-pkg').textContent = data.pkg;
+        document.getElementById('ins-desc').textContent = data.desc;
+        document.getElementById('ins-in').innerHTML = data.inputs.map(i => `<div>• ${i}</div>`).join('');
+        document.getElementById('ins-out').innerHTML = data.outputs.map(i => `<div>• ${i}</div>`).join('');
+        document.getElementById('ins-notes').innerHTML = data.notes.map(i => `<div>• ${i}</div>`).join('');
+
+        const filesEl = document.getElementById('ins-files');
+        filesEl.innerHTML = '';
+        (data.files || []).forEach(f => {
+          const pill = document.createElement('div');
+          pill.className = 'file-pill';
+
+          const kind = document.createElement('span');
+          kind.className = 'file-kind';
+          kind.textContent = f.kind;
+
+          const link = document.createElement('a');
+          link.className = 'file-path';
+          link.href = `../${f.path}`;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = f.path;
+
+          const copyBtn = document.createElement('button');
+          copyBtn.className = 'copy-path-btn';
+          copyBtn.type = 'button';
+          copyBtn.textContent = '复制';
+          copyBtn.addEventListener('click', () => {
+            navigator.clipboard?.writeText(f.path).then(() => {
+              copyBtn.textContent = '已复制';
+              setTimeout(() => { copyBtn.textContent = '复制'; }, 1200);
+            }).catch(() => {});
+          });
+
+          pill.appendChild(kind);
+          pill.appendChild(link);
+          pill.appendChild(copyBtn);
+          filesEl.appendChild(pill);
+        });
+      }
+      applyVisualStates();
+    }
+
+    document.querySelectorAll('[data-mode]').forEach(btn => {
+      btn.addEventListener('click', () => applyMode(btn.dataset.mode));
+    });
+
+    document.querySelectorAll('[data-chain]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentChain = btn.dataset.chain;
+        document.querySelectorAll('[data-chain]').forEach(b => b.classList.toggle('is-active', b === btn));
+        applyVisualStates();
+      });
+    });
+
+    document.querySelectorAll('.node-card').forEach(card => {
+      card.addEventListener('click', () => selectNode(card.dataset.id));
+      card.addEventListener('mouseenter', () => {
+        hoveredNodeId = card.dataset.id;
+        applyVisualStates();
+      });
+      card.addEventListener('mouseleave', () => {
+        hoveredNodeId = null;
+        applyVisualStates();
+      });
+    });
+
+    const ro = new ResizeObserver(() => requestAnimationFrame(drawWires));
+    ro.observe(board);
+    window.addEventListener('resize', () => requestAnimationFrame(applyZoom));
+    window.addEventListener('load', () => {
+      initTheme();
+      applyMode('real_rigid');
+      selectNode('watchdog');
+      requestAnimationFrame(drawWires);
+    });
+  </script>
+</body>
+</html>

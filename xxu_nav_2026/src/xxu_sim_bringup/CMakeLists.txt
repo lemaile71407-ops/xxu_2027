@@ -11,7 +11,11 @@ find_package(nav_msgs REQUIRED)
 find_package(rosgraph_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
-add_library(xxu_sim_components SHARED src/simulation_adapters.cpp)
+add_library(xxu_sim_components SHARED
+  src/clock_rate_limiter.cpp
+  src/rm_sim_adapter.cpp
+  src/gimbal_stabilizer.cpp
+  src/omni_drive.cpp)
 target_compile_features(xxu_sim_components PUBLIC cxx_std_17)
 ament_target_dependencies(xxu_sim_components rclcpp rclcpp_components geometry_msgs nav_msgs rosgraph_msgs sensor_msgs std_msgs)
 rclcpp_components_register_node(xxu_sim_components PLUGIN "xxu_sim_bringup::RmSimAdapter" EXECUTABLE rm_sim_adapter)
