@@ -67,8 +67,8 @@ RMUL ZLIO 主线与独立导航统一使用真实底盘坐标（`base_link`）�
 
 ## 共享启动与参数来源
 
-- [nav2_navigation.yaml](../../src/xxu_bringup/config/nav2_navigation.yaml) 与 [nav2_exploration.yaml](../../src/xxu_bringup/config/nav2_exploration.yaml)保存各自基础参数；通用车型外包络与模式参数通过 `robot_geometry_file`（及同目录可选 `navigation_profile.yaml`）由 `RobotGeometryParameters` 叠加（`nav2_fake_profile.yaml` 已撤除）。
-- 共享启动实现按职责划分： [navigation_parameters.py](../../src/xxu_bringup/xxu_bringup/navigation_parameters.py) 构造 Nav2 参数，[velocity_launch.py](../../src/xxu_bringup/xxu_bringup/velocity_launch.py) 构造速度保护门控（`cmd_vel_watchdog`），[sensor_launch.py](../../src/xxu_bringup/xxu_bringup/sensor_launch.py) 只构造传感器预处理，估计器统一由 ZLIO bringup 启动，[robot_profiles.py](../../src/xxu_bringup/xxu_bringup/robot_profiles.py) 处理车型参数，[map_paths.py](../../src/xxu_bringup/xxu_bringup/map_paths.py) 解析建图保存位置。原 [launch_helpers.py](../../src/xxu_bringup/xxu_bringup/launch_helpers.py) 保留兼容导出；新调用按需导入对应模块。
+- [nav2_navigation.yaml](../../src/xxu_bringup/config/nav2_navigation.yaml) 保存基础导航参数；通用车型外包络与模式参数通过 `robot_geometry_file`（及同目录可选 `navigation_profile.yaml`）由 `RobotGeometryParameters` 叠加（`nav2_fake_profile.yaml` 已撤除）。
+- 共享启动实现按职责划分： [navigation_parameters.py](../../src/xxu_bringup/xxu_bringup/navigation_parameters.py) 构造 Nav2 参数，[velocity_launch.py](../../src/xxu_bringup/xxu_bringup/velocity_launch.py) 构造速度保护门控（`cmd_vel_watchdog`），[sensor_launch.py](../../src/xxu_bringup/xxu_bringup/sensor_launch.py) 只构造传感器预处理，估计器统一由 ZLIO bringup 启动，[robot_profiles.py](../../src/xxu_bringup/xxu_bringup/robot_profiles.py) 处理车型参数。原 [launch_helpers.py](../../src/xxu_bringup/xxu_bringup/launch_helpers.py) 保留兼容导出；新调用按需导入对应模块。
 - 实车与 `rm_sim` 共用 `xxu_bringup` 中 `velocity_chain` / `cmd_vel_watchdog` 的接口定义；调用处按需指定输入/输出话题、关节话题及定位健康检查参数。`rm_sim` 最终安全输出为 `/rm_sim/cmd_vel_safe`；CAD 车型交给 `xxu_chassis_controller` 发布逐轮指令，实车通过 `xxu_hardware` 串口桥接下发。
 
 共享代码安装在 `xxu_bringup` 包内；实车串口通信桥位于 `xxu_hardware`，Gazebo 仿真启动与 CAD/场地模型位于 `xxu_sim_bringup`。[interfaces.py](../../src/xxu_bringup/xxu_bringup/interfaces.py) 单独提供接口数据读取，运行节点可直接使用，无需导入 Nav2 启动代码。`xxu_description` 只安装模型、显示和 ros2_control 资源；修改集成代码或新增 Python 模块后需重新构建并加载工作空间。
@@ -105,16 +105,9 @@ EGA 仿真使用 [start_rmul.sh](start_rmul.sh) 统一准备安装环境和匹�
 
 180° 转后定位稳定性回归使用 [check_yaw_stability.py](check_yaw_stability.py)，默认两种路线各三轮，每目标停车后继续观察 10 s 仿真时间，任一轮失信或缺少新鲜证据即失败。它同时监测静止全窗口的原始与适配里程计速度，保留窗口前后停车检查。可选 `--frontend-noise-profile tools/navigation/ega_imu_sample_noise.yaml` 仅在结果目录生成原 100 Hz 流的仿真噪声对照配置，单独校正噪声仍为 4/6。区间平均隔离候选在同输出噪声强度下完整 6/6 通过，候选模型与补偿副本尚未加入默认链；详见报告的最新源速度回归节。它只通过显式测试 profile 验收航向，未改默认车型；固定判据、执行命令及实际结果以[阶段三回归记录](../../../docs/validation/nav2_stage3_20261108.md#2026-11-11180-转后定位稳定性回归)为准。
 
-单独启动自主探索时，通过 `robot_geometry_file` 显式指定与仿真相同的车型几何；该入口默认值为空，不会从另一个 launch 进程继承车型选择。例如，在加载重建后的工作空间后使用 EGA：
+车型参数叠加的离线回归为 `python3 tools/navigation/test_vehicle_parameters.py`，不启动节点。
 
-```bash
-ros2 launch xxu_slam_toolbox autonomous_mapping.launch.py \
-  robot_geometry_file:=$(ros2 pkg prefix --share xxu_sim_bringup)/models/ega_folded/geometry.json
-```
-
-该参数为探索的局部/全局 costmap 和停车检测区域应用车型几何；可选配置仅使用 `exploration` 分支。对应离线回归为 `python3 tools/navigation/test_vehicle_parameters.py`，覆盖真实探索启动描述的参数展开，不启动节点。
-
-启动文件读取接口契约，Nav2、探索、LIO、RViz 和 CAD 车型 SDF/URDF 通过以下离线检查维护一致性（只需 Python 与 PyYAML）：
+启动文件读取接口契约，Nav2、LIO、RViz 和 CAD 车型 SDF/URDF 通过以下离线检查维护一致性（只需 Python 与 PyYAML）：
 
 ```bash
 python3 tools/navigation/check_interfaces.py
@@ -124,9 +117,7 @@ python3 tools/navigation/check_interfaces.py
 
 审查修复的回归检查保存在 [test_review_repairs.py](test_review_repairs.py)。加载 ROS Jazzy 与重建后的工作空间，执行 `python3 tools/navigation/test_review_repairs.py` 可检查命令时间戳、清理范围、模型契约和停车判定，不启动 ROS 节点。设置 `XXU_REVIEW_CHASSIS_EXECUTABLE` 为重建后的底盘可执行文件路径，还会在隔离域 193 和专用话题中验证异常输入停车及恢复；该选项启动测试节点，不接入机器人驱动。构建与实测范围见[审查修复核验](../../../docs/validation/review_repairs_20261027.md)。
 
-建图的 `map_save_path` 仍可显式指定。默认先取绝对路径环境变量 `XXU_MAP_DIR`，否则通过已安装 `maps/auto_map.yaml` 的有效软链接定位可写源码目录；复制安装或无可写源码时回退到 `~/.ros/xxu_maps/auto_map` 并提示。地图路径不再依赖启动目录。`mapping.launch.py` 与 `autonomous_mapping.launch.py` 会将启动参数 `use_sim_time` 重写进 `slam_params_file`，实车传入 `use_sim_time:=false` 时不会被静态 YAML 中的默认值覆盖（由 `test_slam_toolbox_launch.py` 覆盖启动展开回归）。
-
-实车 ZLIO/TDT 建图与导航统一走 3D 建图路线：使用 `sentry_localization.launch.py mode:=mapping` + `/backend_node/save_map` 生成 3D `map.pcd` 与先验图，再用离线工具按通行高度带在同一 `map` 坐标系下导出 Nav2 二维图（`.pgm` + `.yaml`，可选 `--keyframes` 沿关键帧局部清零自由区）。该模式由 `backend_node` 独占发布 `map → odom`，**不要与 `xxu_slam_toolbox` 的 `mapping.launch.py` / `autonomous_mapping.launch.py` 同时启动**：
+实车 ZLIO/TDT 建图与导航统一走 3D 建图路线：使用 `sentry_localization.launch.py mode:=mapping` + `/backend_node/save_map` 生成 3D `map.pcd` 与先验图，再用离线工具按通行高度带在同一 `map` 坐标系下导出 Nav2 二维图（`.pgm` + `.yaml`，可选 `--keyframes` 沿关键帧局部清零自由区）。该模式由 `backend_node` 独占发布 `map → odom`：
 
 ```bash
 python3 tools/navigation/pcd_to_nav2_map.py \
@@ -208,8 +199,7 @@ python3 tools/navigation/analyze_mppi_benchmark.py \
 | 离线与隔离测试 | [test_chassis_lower_bridge.py](test_chassis_lower_bridge.py) | STM32 串口协议编解码、状态机与 C++ PTY 环回测试 |
 | 离线与隔离测试 | [test_rigid_mount.py](test_rigid_mount.py) | 实车刚性安装多底盘外参、预处理与帧传递回归 |
 | 离线与隔离测试 | [test_rigid_mount_calibration.py](test_rigid_mount_calibration.py) | 刚性外参在线/离线标定工具与闭环校验回归 |
-| 离线与隔离测试 | [test_vehicle_parameters.py](test_vehicle_parameters.py) | 车型几何与探索/导航参数叠加回归 |
-| 离线与隔离测试 | [test_slam_toolbox_launch.py](test_slam_toolbox_launch.py) | `xxu_slam_toolbox` 启动参数展开与 `use_sim_time` 重写回归 |
+| 离线与隔离测试 | [test_vehicle_parameters.py](test_vehicle_parameters.py) | 车型几何与导航参数叠加回归 |
 | 离线与隔离测试 | [test_pcd_to_nav2_map.py](test_pcd_to_nav2_map.py) | `pcd_to_nav2_map.py` 3D→2D 地图导出单元与实测冒烟测试 |
 | 离线与隔离测试 | [test_zlio_navigation.py](test_zlio_navigation.py) | ZLIO 转换契约、C++ 管线与 `BridgeReadiness` / `NavigationStartup` 测试 |
 | 离线与隔离测试 | [test_idle_scan.py](test_idle_scan.py) | `IdleScan` 空闲自旋抢占与安全取消单元测试 |

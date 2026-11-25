@@ -29,7 +29,7 @@ source install/setup.zsh
 若仅构建实车侧导航与硬件驱动（不拉取或构建 Gazebo 仿真包）：
 
 ```bash
-colcon build --symlink-install --packages-up-to xxu_hardware xxu_slam_toolbox pointcloud_to_laserscan frontend backend
+colcon build --symlink-install --packages-up-to xxu_hardware pointcloud_to_laserscan frontend backend
 ```
 
 ## 启动入口
@@ -56,7 +56,7 @@ colcon build --symlink-install --packages-up-to xxu_hardware xxu_slam_toolbox po
 
 ## 建图与探索
 
-保留 [xxu_slam_toolbox](xxu_nav_2026/src/xxu_slam_toolbox) 的建图与自主探索入口，运行前需提供匹配的 ZLIO 底盘里程计、TF 与激光输入（详见 [LIO 工具说明](xxu_nav_2026/tools/lio/README.md)）。新组合的建图与探索尚未完成本轮验收。
+实车建图统一走 3D 建图路线：通过 `sentry_localization.launch.py mode:=mapping` 启动前端/后端建图并调用 `/backend_node/save_map` 保存 3D `map.pcd` 与先验图，再使用 [pcd_to_nav2_map.py](xxu_nav_2026/tools/navigation/pcd_to_nav2_map.py) 导出 Nav2 二维栅格地图（`.pgm` + `.yaml`）。详见 [导航工具说明](xxu_nav_2026/tools/navigation/README.md) 与 [LIO 工具说明](xxu_nav_2026/tools/lio/README.md)。
 
 ## 源码结构
 
@@ -69,9 +69,7 @@ xxu_nav_2026/src/
 ├── xxu_chassis_controller/         # 全向底盘 Twist 到四轮角速度转换
 ├── xxu_livox_sim/                  # Livox Mid-360 激光雷达仿真
 ├── z-localization/                # ZLIO 前端、TDT 后端及统一定位启动
-├── xxu_slam_toolbox/               # SLAM 与自主探索入口
-├── pointcloud_to_laserscan/        # PointCloud2 转 LaserScan
-└── m-explore-ros2/                 # explore_lite / map_merge 子模块
+└── pointcloud_to_laserscan/        # PointCloud2 转 LaserScan
 ```
 
 ## 常用排查

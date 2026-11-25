@@ -3,7 +3,6 @@
 New code should import from the focused modules directly.
 """
 from .interfaces import InterfaceContract, interfaces
-from .map_paths import default_map_save_path
 from .navigation_parameters import RobotGeometryParameters, nav2_parameters
 from .robot_profiles import RobotGeometryFile, RobotProfile, robot_profile
 from .sensor_launch import sensor_chain_defaults

@@ -69,12 +69,8 @@ def check(workspace, contract_path=None):
     references.update({"frame:" + key: name for key, name in contract["frames"].items()})
     errors = []
     checked = 0
-    files = [src / "xxu_bringup/config" / name for name in (
-        "nav2_navigation.yaml", "nav2_exploration.yaml")]
-    files += [src / "xxu_slam_toolbox/config" / name for name in (
-        "slam_toolbox_mapping.yaml", "explore_lite.yaml")]
+    files = [src / "xxu_bringup/config/nav2_navigation.yaml"]
     files += sorted((src / "xxu_bringup/rviz").glob("*.rviz"))
-    files += sorted((src / "xxu_slam_toolbox/rviz").glob("*.rviz"))
     for file in files:
         data = yaml.safe_load(file.read_text())
         for path, value in leaves(data):

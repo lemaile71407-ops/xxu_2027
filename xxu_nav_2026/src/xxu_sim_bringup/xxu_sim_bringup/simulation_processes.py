@@ -11,7 +11,6 @@ import time
 LAUNCHES = {
     "xxu_sim_bringup": {"rm_sim_gazebo.launch.py", "rmul_navigation.launch.py"},
     "xxu_bringup": {"rm_sim_gazebo.launch.py", "rmul_navigation.launch.py"},
-    "xxu_slam_toolbox": {"mapping.launch.py", "autonomous_mapping.launch.py"},
 }
 
 

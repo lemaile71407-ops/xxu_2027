@@ -208,47 +208,7 @@ class VehicleParametersTest(unittest.TestCase):
                                   False)
                     self.assertIs(parameters['gimbal_imu_compensator']['fixed_sensor'], True)
 
-    def test_autonomous_mapping_resolves_selected_vehicle(self):
-        launch_file = SHARE.parent / 'xxu_slam_toolbox/launch/autonomous_mapping.launch.py'
-        spec = importlib.util.spec_from_file_location('autonomous_mapping', launch_file)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        radius = json.loads(GEOMETRY.read_text())['robot_radius']
-        for geometry in ['', str(GEOMETRY)]:
-            with self.subTest(geometry=geometry):
-                nodes = []
-
-                def capture_node(**kwargs):
-                    nodes.append(kwargs)
-                    return Node(**kwargs)
-
-                with patch.object(module, 'Node', side_effect=capture_node), \
-                        patch.object(module, 'get_package_share_directory', return_value=str(SHARE)), \
-                        patch.object(module, 'FindPackageShare', side_effect=lambda name: TextSubstitution(text=str(SHARE.parent / name))), \
-                        patch.object(module, 'default_map_save_path', return_value='/tmp/xxu_test_map'):
-                    description = module.generate_launch_description()
-                declarations = [action for action in description.entities
-                                if isinstance(action, DeclareLaunchArgument)]
-                self.assertIn('robot_geometry_file', [action.name for action in declarations])
-                context = LaunchContext()
-                context.launch_configurations.update(robot_geometry_file=geometry)
-                for action in declarations:
-                    action.execute(context)
-                controller = next(node for node in nodes if node['package'] == 'nav2_controller')
-                selected = controller['parameters'][0]
-                after = yaml.safe_load(Path(selected.perform(context)).read_text())
-                before = self.resolve('exploration')
-                if not geometry:
-                    self.assertEqual(after, before)
-                    continue
-                for name in ['local_costmap', 'global_costmap']:
-                    self.assertEqual(after[name][name]['ros__parameters']['robot_radius'], radius)
-                points = json.loads(after['collision_monitor']['ros__parameters']['EmergencyStop']['points'])
-                for a, b in zip(points, points[1:] + points[:1]):
-                    edge_distance = abs(a[0] * b[1] - a[1] * b[0]) / math.dist(a, b)
-                    self.assertGreaterEqual(edge_distance, radius + .03 - 1e-5)
-
-    def resolve(self, mode, geometry_file='', *, candidate=False):
+    def resolve(self, mode='navigation', geometry_file='', *, candidate=False):
         with tempfile.TemporaryDirectory() as folder:
             if candidate:
                 geometry_copy = Path(folder) / 'geometry.json'
@@ -257,7 +217,7 @@ class VehicleParametersTest(unittest.TestCase):
                     NAV_PROFILE.read_text())
                 geometry_file = geometry_copy
             _, selected, _ = nav2_parameters(
-                str(SHARE / f'config/nav2_{mode}.yaml'), 'true',
+                str(SHARE / 'config/nav2_navigation.yaml'), 'true',
                 str(SHARE), mode=mode, robot_geometry_file=str(geometry_file))
             return yaml.safe_load(Path(selected.perform(LaunchContext())).read_text())
 

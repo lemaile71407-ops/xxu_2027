@@ -60,27 +60,6 @@ class ShutdownTest(unittest.TestCase):
                     ros.try_shutdown.assert_called_once()
                     ros.shutdown.assert_not_called()
 
-    def test_map_save_exits_with_failure_on_interrupt(self):
-        from rclpy.executors import ExternalShutdownException
-        module = load('shutdown_save_map', WORKSPACE / 'src/xxu_slam_toolbox/scripts/save_map.py')
-        for exception in (KeyboardInterrupt, ExternalShutdownException):
-            for phase in ('service', 'result'):
-                with self.subTest(exception=exception.__name__, phase=phase), tempfile.TemporaryDirectory() as folder:
-                    ros, node = Mock(), Mock()
-                    ros.create_node.return_value = node
-                    client = node.create_client.return_value
-                    client.wait_for_service.return_value = True
-                    wait = client.wait_for_service if phase == 'service' else ros.spin_until_future_complete
-                    wait.side_effect = exception()
-                    args = SimpleNamespace(map_path=str(Path(folder) / 'map'), timeout=1., service='/probe/save')
-                    with patch.object(module, 'rclpy', ros), patch.object(module, 'parse_args', return_value=args):
-                        self.assertEqual(module.main(), 1)
-                    wait.assert_called_once()
-                    self.assertEqual(client.call_async.call_count, int(phase == 'result'))
-                    node.destroy_node.assert_called_once()
-                    ros.try_shutdown.assert_called_once()
-                    ros.shutdown.assert_not_called()
-
 
 class FreshnessTest(unittest.TestCase):
     def test_installed_cpp_gate_source_stamp_and_steady_timeout(self):
@@ -98,7 +77,7 @@ class ProcessOwnershipTest(unittest.TestCase):
             3: process(3, 0, 'xxu_sim_bringup', 'rmul_navigation.launch.py', '/other'),
             4: process(4, 0, 'xxu_hardware', 'chassis_lower_bridge.launch.py', '/work'),
             5: process(5, 0, 'other_robot', 'simulation.launch.py', '/work'),
-            6: process(6, 0, 'xxu_slam_toolbox', 'mapping.launch.py', '/work/src'),
+            6: process(6, 0, 'xxu_sim_bringup', 'rm_sim_gazebo.launch.py', '/work/src'),
             7: Process(7, 4, '7', ('chassis_lower_bridge.py',), Path('/work')),
         }
         self.assertEqual(select_trees(processes, Path('/work')), ({1, 6}, {1, 2, 6}))
@@ -122,13 +101,6 @@ class ContractTest(unittest.TestCase):
         source = WORKSPACE / 'src/xxu_bringup'
         code = (f'import sys; sys.path.insert(0, {str(source)!r}); '
                 'import xxu_bringup.interfaces; '
-                'assert not any(x.startswith(("launch", "nav2_common")) for x in sys.modules)')
-        subprocess.run([sys.executable, '-I', '-c', code], check=True)
-
-    def test_map_path_module_does_not_import_launch_or_nav2(self):
-        source = WORKSPACE / 'src/xxu_bringup'
-        code = (f'import sys; sys.path.insert(0, {str(source)!r}); '
-                'import xxu_bringup.map_paths; '
                 'assert not any(x.startswith(("launch", "nav2_common")) for x in sys.modules)')
         subprocess.run([sys.executable, '-I', '-c', code], check=True)
 
