@@ -21,7 +21,8 @@ def setup(context):
         raise ValueError("odom_frame must be distinct from rigid mount frames")
     actions = rigid_sensor_actions(
         mount, use_sim_time=ParameterValue(LaunchConfiguration("use_sim_time"), value_type=bool),
-        publish_mount_tf=lc("publish_mount_tf") == "true")
+        publish_mount_tf=lc("publish_mount_tf") == "true",
+        self_filter_geometry_file=lc("self_filter_geometry_file"))
     if lc("start_base_adapter") == "true":
         share = Path(get_package_share_directory("xxu_bringup"))
         actions.append(IncludeLaunchDescription(
@@ -40,6 +41,7 @@ def generate_launch_description():
     share = Path(get_package_share_directory("xxu_bringup"))
     defaults = {
         "mount_file": str(share / "config/rigid_mount.pending.yaml"),
+        "self_filter_geometry_file": "",
         "source_child_frame": "imu", "odom_frame": "odom",
         "input_topic": "/odometry", "output_topic": "/odom",
     }

@@ -72,6 +72,7 @@ def setup(context):
             name='livox_lidar_publisher', output='screen', parameters=[{
                 'xfer_format': 0 if pointcloud2 else 1, 'multi_topic': 0, 'data_src': 0,
                 'output_data_type': 0, 'publish_freq': 10.0, 'frame_id': args['lidar_frame'],
+                'imu_frame_id': args['imu_source_frame'],
                 'user_config_path': args['driver_config'], 'cmdline_input_bd_code': 'livox0000000001',
             }], remappings=[('/livox/lidar', args['lidar_topic']), ('/livox/imu', args['imu_topic'])]))
 

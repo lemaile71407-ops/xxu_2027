@@ -1,4 +1,6 @@
 # Sensor preprocessing only; ZLIO is composed by the localization entry.
+# Real-robot deployment uses sentry_localization.launch.py or rigid_sensor.launch.py
+# with a measured mount_file for the rigid sensor extrinsics.
 real:
   pointcloud:
     executable: pointcloud_frame_republisher
@@ -6,23 +8,10 @@ real:
     parameters:
       target_frame: '@frame:lidar_compensated'
       expected_source_frame: '@frame:lidar'
-      use_point_timestamps: true
-      use_joint_interpolation: true
-      joint_name: gimbal_joint
-      joint_axis:
-      - 0.0
-      - 0.0
-      - 1.0
-      sensor_offset:
-      - 0.0
-      - 0.08637
-      - 0.0
-      sensor_rpy:
-      - -0.2967059728
-      - 0.0
-      - 0.0
-      max_joint_sample_gap: 0.05
-      time_reset_threshold: 0.5
+      use_point_timestamps: false
+      use_joint_interpolation: false
+      sensor_offset: [0.0, 0.0, 0.0]
+      sensor_rpy: [0.0, 0.0, 0.0]
       pending_timeout: 0.25
       pending_queue_size: 3
     remappings:
@@ -32,23 +21,10 @@ real:
     name: gimbal_imu_compensator
     parameters:
       target_frame: '@frame:lidar_compensated'
-      joint_name: gimbal_joint
-      joint_axis:
-      - 0.0
-      - 0.0
-      - 1.0
-      sensor_offset:
-      - 0.011
-      - 0.0957429
-      - -0.0490015
-      sensor_rpy:
-      - -0.2967059728
-      - 0.0
-      - 0.0
+      fixed_sensor: true
+      sensor_offset: [0.0, 0.0, 0.0]
+      sensor_rpy: [0.0, 0.0, 0.0]
       angular_acceleration_time_constant: 0.05
-      joint_acceleration_time_constant: 0.05
-      max_joint_acceleration: 100.0
-      max_joint_sample_gap: 0.05
       time_reset_threshold: 0.5
     remappings:
       imu_out: '@topic:radar.imu_compensated'

@@ -303,7 +303,8 @@ class CppPipelineTest(CppHarness):
         process = subprocess.Popen(['ros2', 'launch', 'xxu_bringup', 'sentry_localization.launch.py',
             f'mount_file:={path}', f'frontend_config:={workspace}/src/z-localization/config/lio.yaml',
             f'backend_config:={workspace}/src/z-localization/config/backend.smoke.yaml', 'mode:=mapping',
-            'driver:=false', 'use_sim_time:=true'], stdout=log, stderr=subprocess.STDOUT,
+            'enable_watchdog:=true', 'driver:=false', 'use_sim_time:=true'],
+            stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
             env=dict(os.environ, ROS_DOMAIN_ID=str(self.domain), ROS_LOCALHOST_ONLY='1'))
         self.processes.append((process, log))
         statics = self.received(TFMessage, '/tf_static', QoSProfile(depth=100, durability=DurabilityPolicy.TRANSIENT_LOCAL))
@@ -469,7 +470,13 @@ class CppPipelineTest(CppHarness):
         now.clock.nanosec = 310000000; clock.publish(now); self.spin(.05)
         self.assertEqual(output[-1].twist.linear.x, 0.)
         now.clock.sec = 101; now.clock.nanosec = 0; clock.publish(now); self.spin(.03)
-        command.header.stamp.sec = 101; pub.publish(command); self.spin(.07)
+        command.header.stamp.sec = 101; command.header.stamp.nanosec = 20_000_000
+        pub.publish(command); self.spin(.07)
+        self.assertEqual(output[-1].twist.linear.x, 1., 'small cross-process clock lead should be tolerated')
+        command.header.frame_id = 'map'; command.header.stamp.nanosec = 0
+        pub.publish(command); self.spin(.05)
+        self.assertEqual(output[-1].twist.linear.x, 0., 'wrong command frame_id must close gate')
+        command.header.frame_id = 'base_link'; pub.publish(command); self.spin(.05)
         self.assertEqual(output[-1].twist.linear.x, 1.)
         self.spin(.35)
         self.assertEqual(output[-1].twist.linear.x, 0.)
@@ -531,6 +538,32 @@ class CppPipelineTest(CppHarness):
         self.spin(.56, stale_tf_and_command)
         self.assertEqual(safe[-1].twist.linear.x, 0., 'reordered TF must not refresh the gate')
         self.assertTrue(all(t.header.stamp.sec >= 100 for msg in relayed for t in msg.transforms))
+
+        # A real ROS /clock rewind (e.g. bag loop or sim restart) resets dynamic TF state cleanly.
+        clock.clock.sec = 10
+        clock.clock.nanosec = 0
+        self.spin(.06, lambda: clock_pub.publish(clock))
+
+        def post_rewind():
+            clock.clock.nanosec += 20_000_000
+            clock_pub.publish(clock)
+            send(clock.clock.sec, clock.clock.nanosec)
+            command()
+
+        self.spin(.15, post_rewind)
+        self.assertEqual(safe[-1].twist.linear.x, .25, 'gate must recover after ROS clock rewind')
+
+        # Repeated identical TF stamps must not keep the gate open indefinitely.
+        frozen_sec, frozen_nsec = clock.clock.sec, clock.clock.nanosec
+
+        def frozen_tf():
+            clock.clock.nanosec += 20_000_000
+            clock_pub.publish(clock)
+            send(frozen_sec, frozen_nsec)
+            command()
+
+        self.spin(.56, frozen_tf)
+        self.assertEqual(safe[-1].twist.linear.x, 0., 'frozen TF timestamp must time out the gate')
 
     def test_watchdog_tf_stream_loss_and_localization_recovery(self):
         self.start('cmd_vel_watchdog', {
@@ -842,6 +875,56 @@ class CppPipelineTest(CppHarness):
             for actual, expected in zip(struct.unpack_from('<fff', projected.data, offset), (-1.99, 1.02, 0.)):
                 self.assertAlmostEqual(actual, expected, places=5)
             self.assertEqual(bytes(projected.data[offset+12:offset+32]), bytes(payload[12:32]))
+
+    def test_self_filter_rejects_invalid_geometry_and_normalizes_wheel_axis(self):
+        binary = Path(get_package_prefix('xxu_bringup')) / 'lib' / 'xxu_bringup' / 'pointcloud_frame_republisher'
+        for name, spec in (
+            ('empty_hull', {'self_filter': {'frame': 'base_link', 'tolerance': 0.0, 'hull_planes': [[]]}}),
+            ('missing_tol', {'self_filter': {'frame': 'base_link', 'hull_planes': []}}),
+            ('zero_axis', {
+                'self_filter': {'frame': 'base_link', 'tolerance': 0.0, 'hull_planes': []},
+                'wheels': [{'center': [0., 0., 0.], 'axis': [0., 0., 0.], 'radius': 0.1, 'width': 0.1}],
+            }),
+        ):
+            with self.subTest(case=name):
+                path = Path(self.logs.name) / f'{name}.yaml'
+                path.write_text(yaml.safe_dump(spec))
+                result = subprocess.run(
+                    [str(binary), '--ros-args', '-p', 'target_frame:=base_link',
+                     '-p', f'self_filter_geometry_file:={path}'],
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=5,
+                    env=dict(os.environ, ROS_DOMAIN_ID=str(self.domain), ROS_LOCALHOST_ONLY='1'))
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+
+        # Non-unit wheel axis [0, 0, 0.5] must normalize to [0, 0, 1] and keep a point at z=0.08 (> width/2=0.05).
+        valid_path = Path(self.logs.name) / 'non_unit_wheel.yaml'
+        valid_path.write_text(yaml.safe_dump({
+            'self_filter': {'frame': 'base_link', 'tolerance': 0.0, 'hull_planes': []},
+            'wheels': [{'center': [0., 0., 0.], 'axis': [0., 0., 0.5], 'radius': 0.1, 'width': 0.1}],
+        }))
+        self.start('pointcloud_frame_republisher', {
+            'target_frame': 'base_link', 'expected_source_frame': 'base_link',
+            'self_filter_geometry_file': str(valid_path),
+        }, [('points_in', '/probe/wheel_in'), ('points_out', '/probe/wheel_out')])
+        cloud_out = self.received(PointCloud2, '/probe/wheel_out')
+        clouds = self.node.create_publisher(PointCloud2, '/probe/wheel_in', qos_profile_sensor_data)
+        cloud = PointCloud2()
+        cloud.header.frame_id = 'base_link'
+        cloud.height = 1
+        cloud.width = 2
+        cloud.point_step = 12
+        cloud.row_step = 24
+        cloud.fields = [PointField(name=n, offset=4*i, datatype=PointField.FLOAT32, count=1) for i, n in enumerate('xyz')]
+        # Point 0 inside cylinder (z=0.02, r=0.02), Point 1 outside width (z=0.08, r=0.02)
+        cloud.data = struct.pack('<ffffff', 0.02, 0.0, 0.02, 0.02, 0.0, 0.08)
+        def feed():
+            cloud.header.stamp = self.node.get_clock().now().to_msg()
+            clouds.publish(cloud)
+        self.spin(0.8, feed)
+        self.assertTrue(cloud_out)
+        self.assertEqual(cloud_out[-1].width, 1)
+        kept = struct.unpack_from('<fff', cloud_out[-1].data, 0)
+        self.assertAlmostEqual(kept[2], 0.08, places=5)
 
 
 if __name__ == '__main__':

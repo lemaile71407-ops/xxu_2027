@@ -172,6 +172,10 @@ private:
     const bool mismatched_frame = !config_.expected_source_frame.empty() &&
                                   message->header.frame_id != config_.expected_source_frame;
     if (empty_frame || mismatched_frame) {
+      RCLCPP_WARN_THROTTLE(get_logger(), log_clock_, 5000,
+                           "Dropping cloud with unexpected frame '%s' (expected '%s')",
+                           message->header.frame_id.c_str(),
+                           config_.expected_source_frame.c_str());
       return;
     }
 
@@ -324,11 +328,14 @@ private:
   void process_pending()
   {
     while (!pending_.empty()) {
+      const bool within_timeout =
+        steady_seconds() - pending_.front().received_sec <= config_.pending_timeout_sec;
+      if (!within_timeout) {
+        pending_.pop_front();
+        continue;
+      }
       try {
-        const bool processed = process_cloud(pending_.front());
-        const bool within_timeout =
-          steady_seconds() - pending_.front().received_sec <= config_.pending_timeout_sec;
-        if (!processed && within_timeout) {
+        if (!process_cloud(pending_.front())) {
           if (retry_timer_->is_canceled()) {
             retry_timer_->reset();
           }

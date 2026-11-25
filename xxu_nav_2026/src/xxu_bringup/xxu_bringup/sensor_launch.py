@@ -95,11 +95,14 @@ def load_rigid_mount(path):
     frames = data.get("frames", {})
     if not isinstance(frames, dict):
         raise ValueError("Rigid mount frames must be a mapping")
+    reserved_frames = {"map", "odom", "base_footprint"}
     for key in ("base", "sensor", "lidar", "imu_source"):
         value = frames.get(key)
         if (not isinstance(value, str) or not value or value.startswith("/")
                 or any(c.isspace() for c in value)):
             raise ValueError(f"frames.{key} must be a nonempty TF frame without a leading slash or whitespace")
+        if value in reserved_frames:
+            raise ValueError(f"frames.{key} cannot use reserved navigation TF frame: {value}")
     if len({frames[key] for key in ("base", "sensor", "lidar")}) != 3:
         raise ValueError("Rigid mount base, sensor and lidar frames must be distinct")
     for key in ("base_to_sensor", "sensor_to_lidar"):
@@ -124,9 +127,20 @@ def load_rigid_mount(path):
     return data
 
 
-def rigid_sensor_actions(mount, *, use_sim_time, publish_mount_tf=True):
+def rigid_sensor_actions(mount, *, use_sim_time, publish_mount_tf=True, self_filter_geometry_file=""):
     """Build the same rigid extrinsics into static TF and preprocessing."""
     frames = mount["frames"]
+    pointcloud_parameters = {
+        "use_sim_time": False, "target_frame": frames["sensor"],
+        "expected_source_frame": frames["lidar"],
+        "use_point_timestamps": False, "use_joint_interpolation": False,
+    }
+    if self_filter_geometry_file:
+        geometry_path = Path(self_filter_geometry_file)
+        if not geometry_path.is_file():
+            raise ValueError(f"self_filter_geometry_file must be an existing file: {geometry_path}")
+        # The C++ filter checks that the geometry frame matches target_frame.
+        pointcloud_parameters["self_filter_geometry_file"] = str(geometry_path)
     actions = []
     if publish_mount_tf:
         sensor = _pose(**mount['base_to_sensor'])
@@ -137,12 +151,9 @@ def rigid_sensor_actions(mount, *, use_sim_time, publish_mount_tf=True):
     # preserves all point-time fields without the dynamic TF group limit.
     actions.append(Node(
         package="xxu_bringup", executable="pointcloud_frame_republisher",
-        name="rigid_pointcloud_transform", output="screen", parameters=[{
-            "use_sim_time": False, "target_frame": frames["sensor"],
-            "expected_source_frame": frames["lidar"],
-            "use_point_timestamps": False, "use_joint_interpolation": False,
-        }], remappings=[("points_in", mount["topics"]["points_in"]),
-                        ("points_out", mount["topics"]["points_out"])]))
+        name="rigid_pointcloud_transform", output="screen", parameters=[pointcloud_parameters],
+        remappings=[("points_in", mount["topics"]["points_in"]),
+                    ("points_out", mount["topics"]["points_out"])]))
     actions.append(Node(
         package="xxu_bringup", executable="gimbal_imu_compensator",
         name="rigid_imu_transform", output="screen", parameters=[{
@@ -176,6 +187,7 @@ def sensor_preprocessing(platform, *, use_sim_time, profile=None,
     geometry = profile.geometry if profile else {}
     if platform == "rm_sim":
         overrides["pointcloud"].update(self_filter_geometry_file=profile.geometry_file if profile else "",
+                                        use_point_timestamps=not bool(geometry),
                                         use_joint_interpolation=not bool(geometry))
         overrides["imu"]["fixed_sensor"] = bool(geometry)
     if geometry:

@@ -18,6 +18,7 @@ from launch.actions import DeclareLaunchArgument, GroupAction
 from launch.utilities import normalize_to_list_of_substitutions, perform_substitutions
 from launch.substitutions import TextSubstitution
 from launch_ros.actions import Node
+from launch_ros.utilities import evaluate_parameters, normalize_parameters
 import yaml
 
 from xxu_bringup.launch_helpers import (
@@ -32,6 +33,16 @@ GEOMETRY = SIM_SHARE / 'models/ega_folded/geometry.json'
 NAV_PROFILE = GEOMETRY.parent / 'navigation_profile.yaml'
 if not NAV_PROFILE.is_file():
     NAV_PROFILE = GEOMETRY.parent / 'navigation_profile.candidate.yaml'
+
+
+def active_nodes(actions, context):
+    for action in actions:
+        if action.condition is not None and not action.condition.evaluate(context):
+            continue
+        if isinstance(action, Node):
+            yield action
+        elif isinstance(action, GroupAction):
+            yield from active_nodes(action.get_sub_entities(), context)
 
 
 class VehicleParametersTest(unittest.TestCase):
@@ -95,23 +106,74 @@ class VehicleParametersTest(unittest.TestCase):
         for action in description.entities:
             if isinstance(action, DeclareLaunchArgument):
                 action.execute(context)
-        packages = []
-
-        def visit(actions):
-            for action in actions:
-                if action.condition is not None and not action.condition.evaluate(context):
-                    continue
-                if isinstance(action, Node):
-                    packages.append(perform_substitutions(context, normalize_to_list_of_substitutions(
-                        action.node_package)))
-                elif isinstance(action, GroupAction):
-                    visit(action.get_sub_entities())
-
-        visit(description.entities)
+        packages = [
+            perform_substitutions(context, normalize_to_list_of_substitutions(node.node_package))
+            for node in active_nodes(description.entities, context)
+        ]
         self.assertEqual(packages.count('nav2_map_server'), 1)
         self.assertEqual(packages.count('nav2_controller'), 1)
         self.assertNotIn('nav2_amcl', packages)
         self.assertNotIn('xxu_gicp_localization', packages)
+
+    def test_navigation_launch_startup_modes(self):
+        spec = importlib.util.spec_from_file_location(
+            'navigation_startup_modes', SHARE / 'launch/navigation.launch.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        core_nodes = [
+            'map_server', 'lifecycle_manager_localization', 'controller_server',
+            'smoother_server', 'planner_server', 'behavior_server', 'bt_navigator',
+            'waypoint_follower', 'velocity_smoother', 'collision_monitor',
+            'lifecycle_manager_navigation',
+        ]
+        for localization, autostart, idle_scan, rviz, manager_autostart, idle_scan_only in (
+            ('true', 'true', 'false', 'true', False, False),
+            ('true', 'true', 'true', 'false', False, False),
+            ('true', 'false', 'false', 'false', False, None),
+            ('true', 'false', 'true', 'false', False, True),
+            ('false', 'true', 'false', 'true', True, None),
+            ('false', 'true', 'true', 'false', True, True),
+            ('false', 'false', 'false', 'false', False, None),
+            ('false', 'false', 'true', 'false', False, True),
+        ):
+            with self.subTest(localization=localization, autostart=autostart,
+                              idle_scan=idle_scan, rviz=rviz):
+                context = LaunchContext()
+                context.launch_configurations.update(enable_localization=localization,
+                                                     autostart=autostart, idle_scan=idle_scan, rviz=rviz)
+                node_options = {}
+
+                def capture_node(**options):
+                    node = Node(**options)
+                    node_options[node] = options
+                    return node
+
+                with patch.object(module, 'Node', side_effect=capture_node):
+                    description = module.generate_launch_description()
+                for action in description.entities:
+                    if isinstance(action, DeclareLaunchArgument):
+                        action.execute(context)
+                active = [node_options[node] for node in active_nodes(description.entities, context)]
+                expected = list(core_nodes)
+                if rviz == 'true':
+                    expected.append('rviz2_navigation')
+                if idle_scan_only is not None:
+                    expected.append('nav2_navigation_startup')
+                self.assertCountEqual(
+                    [options.get('name', options['executable']) for options in active], expected)
+
+                parameters = {
+                    options['name']: evaluate_parameters(
+                        context, normalize_parameters(options['parameters']))[0]
+                    for options in active
+                    if options.get('name') in ('lifecycle_manager_navigation', 'nav2_navigation_startup')
+                }
+                self.assertIs(parameters['lifecycle_manager_navigation']['autostart'], manager_autostart)
+                if idle_scan_only is not None:
+                    startup = parameters['nav2_navigation_startup']
+                    self.assertIs(startup['require_localization'], True)
+                    self.assertIs(startup.get('idle_scan_only', False), idle_scan_only)
+                    self.assertIs(startup['idle_scan'], idle_scan == 'true')
 
     def test_navigation_servers_can_be_constructed_without_localization(self):
         spec = importlib.util.spec_from_file_location(
@@ -130,12 +192,21 @@ class VehicleParametersTest(unittest.TestCase):
         profile = RobotProfile('ega_folded', str(GEOMETRY), json.loads(GEOMETRY.read_text()))
         for platform in ['real', 'rm_sim']:
             with self.subTest(platform=platform), \
-                    patch('xxu_bringup.sensor_launch.Node', side_effect=lambda **kw: kw):
+                    patch('xxu_bringup.sensor_launch.Node', wraps=Node) as node_factory:
                 actions = sensor_preprocessing(
                     platform, use_sim_time='true', profile=profile if platform == 'rm_sim' else None)
                 self.assertTrue(actions)
-                self.assertTrue(all(action['package'] == 'xxu_bringup' for action in actions))
-                self.assertTrue(all(action['parameters'][0]['use_sim_time'] is False for action in actions))
+                self.assertTrue(all(isinstance(action, Node) for action in actions))
+                parameters = {}
+                for call in node_factory.call_args_list:
+                    self.assertEqual(call.kwargs['package'], 'xxu_bringup')
+                    node_parameters = call.kwargs['parameters'][0]
+                    self.assertIs(node_parameters['use_sim_time'], False)
+                    parameters[call.kwargs['executable']] = node_parameters
+                if platform == 'real':
+                    self.assertIs(parameters['pointcloud_frame_republisher']['use_joint_interpolation'],
+                                  False)
+                    self.assertIs(parameters['gimbal_imu_compensator']['fixed_sensor'], True)
 
     def test_autonomous_mapping_resolves_selected_vehicle(self):
         launch_file = SHARE.parent / 'xxu_slam_toolbox/launch/autonomous_mapping.launch.py'

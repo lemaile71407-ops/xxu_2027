@@ -83,8 +83,45 @@ TfRelayGate::TfRelayGate(rclcpp::Node & node, const TfRelayConfig & config)
     [this](tf2_msgs::msg::TFMessage::ConstSharedPtr message) { on_tf(*message, "static", true); });
 }
 
+void TfRelayGate::reset_dynamic_state()
+{
+  buffer_.clear();
+  for (const auto & [child, transform] : static_transforms_) {
+    (void)child;
+    buffer_.setTransform(transform, "static", true);
+  }
+  relayed_edges_.clear();
+  for (auto & [frames, received_time] : pair_receipt_times_) {
+    (void)frames;
+    received_time.reset();
+  }
+  if (relay_timer_ && !relay_timer_->is_canceled()) {
+    relay_timer_->cancel();
+  }
+  next_timer_due_sec_.reset();
+  availability_dirty_ = true;
+  paths_stable_ = false;
+  map_to_odom_available_ = false;
+  target_to_source_available_ = false;
+}
+
+void TfRelayGate::check_clock_reset()
+{
+  const std::int64_t ros_now_ns = node_.get_clock()->now().nanoseconds();
+  if (ros_now_ns <= 0) {
+    return;
+  }
+  const auto threshold_ns = static_cast<std::int64_t>(config_.time_reset_threshold_sec * 1.0e9);
+  if (last_ros_time_ns_ && *last_ros_time_ns_ - ros_now_ns >= threshold_ns) {
+    RCLCPP_WARN(node_.get_logger(), "Detected ROS clock rewind; resetting dynamic TF relay state");
+    reset_dynamic_state();
+  }
+  last_ros_time_ns_ = ros_now_ns;
+}
+
 TfGateStatus TfRelayGate::evaluate(double steady_now)
 {
+  check_clock_reset();
   if (!has_parent_conflict_ && availability_dirty_) {
     refresh_availability();
   }
@@ -176,6 +213,7 @@ void TfRelayGate::relay_pending()
 void TfRelayGate::on_tf(const tf2_msgs::msg::TFMessage & message, const std::string & authority,
                         bool is_static)
 {
+  check_clock_reset();
   for (const auto & transform : message.transforms) {
     const std::string parent = normalize_frame_name(transform.header.frame_id);
     const std::string child = normalize_frame_name(transform.child_frame_id);
@@ -187,11 +225,13 @@ void TfRelayGate::on_tf(const tf2_msgs::msg::TFMessage & message, const std::str
     }
 
     const std::int64_t stamp = is_static ? 0 : stamp_ns(transform.header.stamp);
+    bool stamp_advanced = true;
     if (!is_static) {
       const auto edge_it = relayed_edges_.find(child);
       if (stamp < 0 || (edge_it != relayed_edges_.end() && stamp < edge_it->second.last_stamp_ns)) {
         continue;
       }
+      stamp_advanced = (edge_it == relayed_edges_.end()) || (stamp > edge_it->second.last_stamp_ns);
     }
 
     const auto known_parent = known_parents_.find(child);
@@ -199,6 +239,12 @@ void TfRelayGate::on_tf(const tf2_msgs::msg::TFMessage & message, const std::str
       has_parent_conflict_ = true;
       RCLCPP_ERROR_THROTTLE(node_.get_logger(), *node_.get_clock(), 2000,
                             "Rejecting multiple TF parents for %s", child.c_str());
+      continue;
+    }
+    if (known_parent == known_parents_.end() && creates_cycle(parent, child)) {
+      has_parent_conflict_ = true;
+      RCLCPP_ERROR_THROTTLE(node_.get_logger(), *node_.get_clock(), 2000,
+                            "Rejecting cyclic TF edge %s -> %s", parent.c_str(), child.c_str());
       continue;
     }
 
@@ -217,22 +263,19 @@ void TfRelayGate::on_tf(const tf2_msgs::msg::TFMessage & message, const std::str
     }
 
     if (known_parent == known_parents_.end()) {
-      if (creates_cycle(parent, child)) {
-        has_parent_conflict_ = true;
-        RCLCPP_ERROR_THROTTLE(node_.get_logger(), *node_.get_clock(), 2000,
-                              "Rejecting cyclic TF edge %s -> %s", parent.c_str(), child.c_str());
-        continue;
-      }
       known_parents_.emplace(child, parent);
     }
     if (is_static) {
+      static_transforms_[child] = transform;
       continue;
     }
 
     const double steady_now = steady_seconds();
-    const auto pair_it = pair_receipt_times_.find({parent, child});
-    if (pair_it != pair_receipt_times_.end()) {
-      pair_it->second = steady_now;
+    if (stamp_advanced) {
+      const auto pair_it = pair_receipt_times_.find({parent, child});
+      if (pair_it != pair_receipt_times_.end()) {
+        pair_it->second = steady_now;
+      }
     }
 
     RelayEdge & edge = relayed_edges_[child];

@@ -124,7 +124,14 @@ python3 tools/navigation/check_interfaces.py
 
 审查修复的回归检查保存在 [test_review_repairs.py](test_review_repairs.py)。加载 ROS Jazzy 与重建后的工作空间，执行 `python3 tools/navigation/test_review_repairs.py` 可检查命令时间戳、清理范围、模型契约和停车判定，不启动 ROS 节点。设置 `XXU_REVIEW_CHASSIS_EXECUTABLE` 为重建后的底盘可执行文件路径，还会在隔离域 193 和专用话题中验证异常输入停车及恢复；该选项启动测试节点，不接入机器人驱动。构建与实测范围见[审查修复核验](../../../docs/validation/review_repairs_20261027.md)。
 
-建图的 `map_save_path` 仍可显式指定。默认先取绝对路径环境变量 `XXU_MAP_DIR`，否则通过已安装 `maps/auto_map.yaml` 的有效软链接定位可写源码目录；复制安装或无可写源码时回退到 `~/.ros/xxu_maps/auto_map` 并提示。地图路径不再依赖启动目录。
+建图的 `map_save_path` 仍可显式指定。默认先取绝对路径环境变量 `XXU_MAP_DIR`，否则通过已安装 `maps/auto_map.yaml` 的有效软链接定位可写源码目录；复制安装或无可写源码时回退到 `~/.ros/xxu_maps/auto_map` 并提示。地图路径不再依赖启动目录。`mapping.launch.py` 与 `autonomous_mapping.launch.py` 会将启动参数 `use_sim_time` 重写进 `slam_params_file`，实车传入 `use_sim_time:=false` 时不会被静态 YAML 中的默认值覆盖（由 `test_slam_toolbox_launch.py` 覆盖启动展开回归）。
+
+若使用 ZLIO/TDT 建图模式（`mode:=mapping` + `/backend_node/save_map`）生成 3D `map.pcd`，可用离线工具按通行高度带在同一 `map` 坐标系下导出 Nav2 二维图（`.pgm` + `.yaml`，可选 `--keyframes` 沿关键帧局部清零自由区）：
+
+```bash
+python3 tools/navigation/pcd_to_nav2_map.py \
+  --pcd /path/to/map.pcd --output /path/to/nav2.yaml
+```
 
 CAD 底盘共用原控制器：`wheel_radii` 可选逐轮半径，`wheel_command_topics` 可选四个 Float64 出口，`max_wheel_acceleration` 默认 0（不限制），`require_fresh_stamp` 默认 false。CAD 仿真显式设置 80 rad/s²、100 Hz 和双重超时检查；零指令及超时绕过斜坡直接停车。新参数取默认值时，实车和旧 Gazebo 仍使用原 Float64MultiArray 输出。
 
@@ -191,6 +198,7 @@ python3 tools/navigation/analyze_mppi_benchmark.py \
 |---|---|---|
 | 启动与场地构建 | [start_rmul.sh](start_rmul.sh) | RMUL 仿真导航统一启动入口（支持 `tested_sim` / `baseline`、`--idle-scan`、`--spin`、`--dynamic-vehicle`） |
 | 启动与场地构建 | [generate_rmuc_map.py](generate_rmuc_map.py) | 根据固定场地碰撞几何生成 RMUC 二维地图 |
+| 地图导出 | [pcd_to_nav2_map.py](pcd_to_nav2_map.py) | 从 ZLIO/TDT 3D `map.pcd` 按高度带离线导出同坐标系 Nav2 `.pgm` / `.yaml` |
 | 启动与场地构建 | [prepare_rmul_field.py](prepare_rmul_field.py) | 重新转换 RMUL 场地模型与碰撞网格 |
 | 启动与场地构建 | [recolor_rmul_field.py](recolor_rmul_field.py) | 生成 RMUL 场地贴地外观纹理与 `rmul_2027_collision.stl` |
 | 构建与补丁 | [build_rgl.sh](build_rgl.sh) | 构建默认 RGL Gazebo 插件 |
@@ -201,6 +209,8 @@ python3 tools/navigation/analyze_mppi_benchmark.py \
 | 离线与隔离测试 | [test_rigid_mount.py](test_rigid_mount.py) | 实车刚性安装多底盘外参、预处理与帧传递回归 |
 | 离线与隔离测试 | [test_rigid_mount_calibration.py](test_rigid_mount_calibration.py) | 刚性外参在线/离线标定工具与闭环校验回归 |
 | 离线与隔离测试 | [test_vehicle_parameters.py](test_vehicle_parameters.py) | 车型几何与探索/导航参数叠加回归 |
+| 离线与隔离测试 | [test_slam_toolbox_launch.py](test_slam_toolbox_launch.py) | `xxu_slam_toolbox` 启动参数展开与 `use_sim_time` 重写回归 |
+| 离线与隔离测试 | [test_pcd_to_nav2_map.py](test_pcd_to_nav2_map.py) | `pcd_to_nav2_map.py` 3D→2D 地图导出单元与实测冒烟测试 |
 | 离线与隔离测试 | [test_zlio_navigation.py](test_zlio_navigation.py) | ZLIO 转换契约、C++ 管线与 `BridgeReadiness` / `NavigationStartup` 测试 |
 | 离线与隔离测试 | [test_idle_scan.py](test_idle_scan.py) | `IdleScan` 空闲自旋抢占与安全取消单元测试 |
 | 离线与隔离测试 | [test_review_repairs.py](test_review_repairs.py) | 时间戳、进程归属、模块导入边界与停车判定回归 |

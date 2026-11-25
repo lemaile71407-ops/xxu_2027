@@ -4,13 +4,15 @@
 from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
+from launch.actions import (
+    DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, TimerAction,
+)
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from nav2_common.launch import RewrittenYaml
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from nav2_common.launch import RewrittenYaml
 from xxu_bringup.interfaces import interfaces
 from xxu_bringup.map_paths import default_map_save_path
 from xxu_bringup.navigation_parameters import nav2_parameters
@@ -45,6 +47,16 @@ def generate_launch_description():
     map_save_path = LaunchConfiguration("map_save_path")
     rviz = LaunchConfiguration("rviz")
     rviz_config = LaunchConfiguration("rviz_config")
+    configured_slam_params = RewrittenYaml(
+        source_file=slam_params_file,
+        param_rewrites={
+            # Replace existing values in custom selectors and add the default node's key.
+            "use_sim_time": use_sim_time,
+            "slam_toolbox.ros__parameters.use_sim_time": use_sim_time,
+        },
+        convert_types=True,
+    )
+
     _, selected_nav_params, nav2_base_frame = nav2_parameters(
         nav2_params_file, use_sim_time,
         get_package_share_directory("xxu_bringup"), mode="exploration",
@@ -121,7 +133,7 @@ def generate_launch_description():
         ]),
         launch_arguments={
             "use_sim_time": use_sim_time,
-            "slam_params_file": slam_params_file,
+            "slam_params_file": configured_slam_params,
             "autostart": "true",
         }.items(),
     )
@@ -231,6 +243,7 @@ def generate_launch_description():
         condition=IfCondition(auto_save_map),
         parameters=[{
             "map_path": map_save_path,
+            "use_sim_time": use_sim_time,
         }],
     )
 
@@ -245,7 +258,7 @@ def generate_launch_description():
         declare_map_save_path,
         declare_rviz,
         declare_rviz_config,
-        slam_toolbox,
+        GroupAction([slam_toolbox]),
         map_autosaver,
         TimerAction(
             period=8.0,

@@ -25,6 +25,7 @@ struct TfRelayConfig {
   std::string source_frame = "base_link";
   bool require_tf = true;
   double tf_timeout_sec = 0.5;
+  double time_reset_threshold_sec = 0.5;
   double tf_publish_rate_hz = 50.0;
   std::vector<std::string> input_topics;
   std::vector<std::pair<std::string, std::string>> required_pairs;
@@ -63,6 +64,8 @@ private:
     std::optional<geometry_msgs::msg::TransformStamped> pending_transform;
   };
 
+  void check_clock_reset();
+  void reset_dynamic_state();
   void advance_deadline(RelayEdge & edge, double steady_now) const;
   void schedule_timer(double due_sec, double steady_now);
   void relay_pending();
@@ -86,8 +89,10 @@ private:
 
   std::map<std::pair<std::string, std::string>, std::optional<double>> pair_receipt_times_;
   std::map<std::string, std::string> known_parents_;
+  std::map<std::string, geometry_msgs::msg::TransformStamped> static_transforms_;
   std::map<std::string, RelayEdge> relayed_edges_;
   std::optional<double> next_timer_due_sec_;
+  std::optional<std::int64_t> last_ros_time_ns_;
 
   tf2::BufferCore buffer_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> broadcaster_;

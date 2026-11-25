@@ -49,7 +49,7 @@ ZLIO 应订阅本配置的两个输出话题，将 `sensor.body_from_lidar` 设�
 
 ## C++ 定位与底盘适配
 
-实车刚性安装组合入口为 `ros2 launch xxu_bringup sentry_localization.launch.py`，必须显式传入 `mount_file`、`frontend_config`、`backend_config` 和匹配的 `prior_map`。`mount_file` 要求已测量确认且 `frames.base=base_link`；待测模板不能启动。`driver:=true` 时另需设备网络配置 `driver_config`，驱动输出 PointCloud2，预处理、前端、底盘桥接、看门狗和扫描均为 C++。组合入口不启动底盘硬件或下发目标。原始 CustomMsg 仍可由统一前端 `input_type:=livox` 直接接收；不要给 PointCloud2 入口发送 CustomMsg。
+实车刚性安装组合入口为 `ros2 launch xxu_bringup sentry_localization.launch.py`，必须显式传入 `mount_file`、`frontend_config`、`backend_config`；`mode:=localization`（默认）还需传入匹配的 `prior_map`，`mode:=mapping` 可不传 `prior_map`。`mount_file` 要求已测量确认且 `frames.base=base_link`；待测模板不能启动。`driver:=true` 时另需设备网络配置 `driver_config`，驱动输出 PointCloud2 并同时接收 `frame_id`（`frames.lidar`）与 `imu_frame_id`（`frames.imu_source`），预处理、前端、底盘桥接、看门狗和扫描均为 C++。组合入口不启动底盘硬件或下发目标。默认参数适配刚性实车：`require_joint_states:=false`（不要求 `/joint_states`，接入关节发布器时可显式传 `true`），`enable_watchdog:=auto`（仅在 `mode:=localization` 启动 `cmd_vel_watchdog`；`mode:=mapping` 或 `enable_watchdog:=false` 时不启看门狗避免 100 Hz 零速抢占 `/cmd_vel`，同时里程计与后端直接向 `/tf` 发布动态变换）。`self_filter_geometry_file`（`rigid_sensor.launch.py` 与 `sentry_localization.launch.py` 均支持）和 `scan_self_filter_radius`（`sentry_localization.launch.py` 支持，默认 `0.0`）默认关闭，按需显式传入即可。原始 CustomMsg 仍可由统一前端 `input_type:=livox` 直接接收；不要给 PointCloud2 入口发送 CustomMsg。
 
 前端直接发布局部 `/cloud_deskewed`（PointCloud2、SensorDataQoS），扫描节点直接消费它并输出 `base_link` 下的 `/scan`。前端的 TF 默认关闭，C++ 桥接发布 `/odom`，`child_frame_id=base_link`。刚性安装入口会生成仅覆盖前端雷达/IMU外参为单位变换的临时算法配置，避免输入预处理后再次应用外参；不修改原 YAML 的体素、噪声或时间调度参数。
 

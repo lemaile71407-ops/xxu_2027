@@ -2,6 +2,7 @@
 """Exercise the installed C++ calibration toolchain with synthetic inputs and a read-only bag."""
 import array
 from contextlib import contextmanager
+import importlib.util
 from itertools import groupby
 import math
 import os
@@ -200,6 +201,37 @@ def write_bag(path, storage='mcap', stationary_only=False, *, scale=9.81, odom_l
         for record in records:
             writer.write(*record)
     writer.close()
+
+
+class CalibrationLaunchTest(unittest.TestCase):
+    def test_driver_forwards_distinct_lidar_and_imu_frames(self):
+        launch_file = (Path(__file__).resolve().parents[2] /
+                       'src/xxu_bringup/launch/rigid_mount_calibration.launch.py')
+        spec = importlib.util.spec_from_file_location('calibration_launch', launch_file)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        with tempfile.TemporaryDirectory() as folder:
+            driver_config = Path(folder) / 'driver.json'
+            driver_config.write_text('{}')
+            context = LaunchContext()
+            context.launch_configurations.update(
+                driver='true', driver_config=str(driver_config), start_zlio='false',
+                lidar_frame='calibration_lidar', imu_source_frame='calibration_imu',
+            )
+            actions = module.generate_launch_description().entities
+            for action in actions:
+                if isinstance(action, DeclareLaunchArgument):
+                    action.execute(context)
+            setup_action = next(action for action in actions if isinstance(action, OpaqueFunction))
+            with patch.object(module, 'Node', side_effect=lambda **options: options):
+                nodes = setup_action.execute(context)
+
+        drivers = [node for node in nodes if node['executable'] == 'livox_ros_driver2_node']
+        self.assertEqual(len(drivers), 1)
+        parameters = drivers[0]['parameters'][0]
+        self.assertEqual(parameters['frame_id'], 'calibration_lidar')
+        self.assertEqual(parameters['imu_frame_id'], 'calibration_imu')
 
 
 class CalibrationIntegration(unittest.TestCase):

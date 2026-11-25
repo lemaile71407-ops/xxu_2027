@@ -4,7 +4,9 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, LogInfo
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import (
+    AndSubstitution, LaunchConfiguration, NotSubstitution, OrSubstitution, PathJoinSubstitution,
+)
 from ament_index_python.packages import get_package_share_directory
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
@@ -120,10 +122,14 @@ def generate_launch_description():
     rviz_config = LaunchConfiguration("rviz_config")
     autostart = LaunchConfiguration("autostart")
     enable_localization = LaunchConfiguration("enable_localization")
+    idle_scan = LaunchConfiguration("idle_scan")
     localization_mode = LaunchConfiguration("localization_mode")
     cmd_vel_in_topic = LaunchConfiguration("cmd_vel_in_topic")
     cmd_vel_out_topic = LaunchConfiguration("cmd_vel_out_topic")
     planner_tolerance = LaunchConfiguration("planner_tolerance")
+
+    wait_for_localization = AndSubstitution(enable_localization, autostart)
+    navigation_autostart = AndSubstitution(NotSubstitution(enable_localization), autostart)
 
     # Keep standalone Nav2 aligned with the complex_mapping Gazebo world.
     default_map = PathJoinSubstitution([bringup_share, "maps", "complex_map.yaml"])
@@ -159,9 +165,12 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "enable_localization",
             default_value="true",
-            description="Enable external localization and map navigation",
+            description="Use external localization readiness for automatic navigation activation",
         ),
-        LogInfo(msg="Map navigation uses external localization state and TF (ZLIO/TDT)."),
+        LogInfo(
+            msg="Map navigation uses external localization state and TF (ZLIO/TDT).",
+            condition=IfCondition(enable_localization),
+        ),
         DeclareLaunchArgument(
             "use_sim_time",
             default_value="true",
@@ -212,7 +221,6 @@ def generate_launch_description():
             description="Navfn endpoint tolerance in metres",
         ),
         GroupAction(
-            condition=IfCondition(enable_localization),
             actions=[
                 map_server_node(configured_params, map_file, use_sim_time),
                 localization_lifecycle_manager(use_sim_time, autostart, ['map_server']),
@@ -224,9 +232,7 @@ def generate_launch_description():
                     output="screen",
                     parameters=[{
                         "use_sim_time": use_sim_time,
-                        # Activation waits for localization in the selected mode.
-                        # nav2_navigation_startup starts this manager once it exists.
-                        "autostart": False,
+                        "autostart": ParameterValue(navigation_autostart, value_type=bool),
                         "node_names": navigation_lifecycle_nodes,
                     }],
                 ),
@@ -235,9 +241,14 @@ def generate_launch_description():
                     executable="nav2_navigation_startup.py",
                     name="nav2_navigation_startup",
                     output="screen",
-                    parameters=[{"use_sim_time": use_sim_time,
-                                 "require_localization": True,
-                                 "idle_scan": ParameterValue(LaunchConfiguration('idle_scan'), value_type=bool)}],
+                    condition=IfCondition(OrSubstitution(wait_for_localization, idle_scan)),
+                    parameters=[{
+                        "use_sim_time": use_sim_time,
+                        # Idle scans also require healthy localization before commanding a spin.
+                        "require_localization": True,
+                        "idle_scan": ParameterValue(idle_scan, value_type=bool),
+                        "idle_scan_only": ParameterValue(NotSubstitution(wait_for_localization), value_type=bool),
+                    }],
                 ),
                 Node(
                     package="rviz2",

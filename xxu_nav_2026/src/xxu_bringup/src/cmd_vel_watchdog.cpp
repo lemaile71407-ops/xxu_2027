@@ -165,7 +165,17 @@ private:
     command_sub_ = create_subscription<geometry_msgs::msg::TwistStamped>(
       config_.input_topic, rclcpp::SensorDataQoS(),
       [this](geometry_msgs::msg::TwistStamped::ConstSharedPtr message) {
-        if (!is_finite_twist(message->twist)) {
+        const std::string command_frame =
+          TfRelayGate::normalize_frame_name(message->header.frame_id);
+        const std::string expected_frame =
+          TfRelayGate::normalize_frame_name(config_.output_frame_id);
+        const bool valid_frame = command_frame.empty() || command_frame == expected_frame;
+        if (!is_finite_twist(message->twist) || !valid_frame) {
+          if (!valid_frame) {
+            RCLCPP_WARN_THROTTLE(get_logger(), log_clock_, 2000,
+                                 "Rejecting velocity command in unexpected frame '%s' (expected '%s')",
+                                 command_frame.c_str(), expected_frame.c_str());
+          }
           command_received_sec_.reset();
           return;
         }
@@ -231,7 +241,7 @@ private:
   {
     const auto stamp = stamp_ns(latest_command_.header.stamp);
     const auto age_ns = ros_now.nanoseconds() - stamp;
-    return stamp >= 0 && age_ns >= 0 &&
+    return stamp > 0 && age_ns >= -50000000LL &&
            static_cast<double>(age_ns) <= config_.command_timeout_sec * 1.0e9;
   }
 
@@ -341,6 +351,7 @@ private:
 
   // Configuration
   WatchdogConfig config_;
+  rclcpp::Clock log_clock_{RCL_STEADY_TIME};
   double readiness_interval_sec_ = 0.15;
 
   // Health and command state

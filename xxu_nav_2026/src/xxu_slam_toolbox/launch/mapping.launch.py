@@ -2,12 +2,13 @@
 
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from nav2_common.launch import RewrittenYaml
 from xxu_bringup.map_paths import default_map_save_path
 
 
@@ -28,6 +29,16 @@ def generate_launch_description():
     map_save_path = LaunchConfiguration("map_save_path")
     rviz = LaunchConfiguration("rviz")
     rviz_config = LaunchConfiguration("rviz_config")
+
+    configured_slam_params = RewrittenYaml(
+        source_file=slam_params_file,
+        param_rewrites={
+            # Replace existing values in custom selectors and add the default node's key.
+            "use_sim_time": use_sim_time,
+            "slam_toolbox.ros__parameters.use_sim_time": use_sim_time,
+        },
+        convert_types=True,
+    )
 
     declare_use_sim_time = DeclareLaunchArgument(
         "use_sim_time",
@@ -70,7 +81,7 @@ def generate_launch_description():
         ]),
         launch_arguments={
             "use_sim_time": use_sim_time,
-            "slam_params_file": slam_params_file,
+            "slam_params_file": configured_slam_params,
             "autostart": "true",
         }.items(),
     )
@@ -93,6 +104,7 @@ def generate_launch_description():
         condition=IfCondition(auto_save_map),
         parameters=[{
             "map_path": map_save_path,
+            "use_sim_time": use_sim_time,
         }],
     )
 
@@ -103,7 +115,7 @@ def generate_launch_description():
         declare_map_save_path,
         declare_rviz,
         declare_rviz_config,
-        slam_toolbox,
+        GroupAction([slam_toolbox]),
         map_autosaver,
         rviz_node,
     ])
