@@ -126,7 +126,7 @@ python3 tools/navigation/check_interfaces.py
 
 建图的 `map_save_path` 仍可显式指定。默认先取绝对路径环境变量 `XXU_MAP_DIR`，否则通过已安装 `maps/auto_map.yaml` 的有效软链接定位可写源码目录；复制安装或无可写源码时回退到 `~/.ros/xxu_maps/auto_map` 并提示。地图路径不再依赖启动目录。`mapping.launch.py` 与 `autonomous_mapping.launch.py` 会将启动参数 `use_sim_time` 重写进 `slam_params_file`，实车传入 `use_sim_time:=false` 时不会被静态 YAML 中的默认值覆盖（由 `test_slam_toolbox_launch.py` 覆盖启动展开回归）。
 
-若使用 ZLIO/TDT 建图模式（`mode:=mapping` + `/backend_node/save_map`）生成 3D `map.pcd`，可用离线工具按通行高度带在同一 `map` 坐标系下导出 Nav2 二维图（`.pgm` + `.yaml`，可选 `--keyframes` 沿关键帧局部清零自由区）：
+实车 ZLIO/TDT 建图与导航统一走 3D 建图路线：使用 `sentry_localization.launch.py mode:=mapping` + `/backend_node/save_map` 生成 3D `map.pcd` 与先验图，再用离线工具按通行高度带在同一 `map` 坐标系下导出 Nav2 二维图（`.pgm` + `.yaml`，可选 `--keyframes` 沿关键帧局部清零自由区）。该模式由 `backend_node` 独占发布 `map → odom`，**不要与 `xxu_slam_toolbox` 的 `mapping.launch.py` / `autonomous_mapping.launch.py` 同时启动**：
 
 ```bash
 python3 tools/navigation/pcd_to_nav2_map.py \
