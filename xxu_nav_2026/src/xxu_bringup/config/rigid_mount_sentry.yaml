@@ -1,0 +1,29 @@
+# Real-robot rigid mount extrinsics (initial ruler measurement).
+# Chassis: 0.60 m (L) x 0.58 m (W), base_link at chassis geometric center (0.175 m above ground).
+# Mid-360: mounted flat (roll=0, pitch=0), logo facing +X (cable connector facing -X, yaw=0),
+#          lidar base 0.28 m above ground -> (-0.20, 0.0, +0.105) m relative to base_link.
+# Note: Verify stationary /livox/imu linear_acceleration.z (~1.0 -> 9.81; ~9.81 -> 1.0) on hardware,
+#       and optionally refine lever arm & gravity alignment with rigid_mount_calibration.launch.py.
+version: 1
+mounting: rigid
+calibration_confirmed: true
+frames:
+  base: base_link
+  sensor: lio_base_sensor
+  lidar: livox_frame
+  imu_source: livox_frame
+base_to_sensor:
+  xyz: [-0.20, 0.0, 0.105]
+  rpy: [0.0, 0.0, 0.0]
+# Mid-360 factory IMU-to-LiDAR internal offset (matches z-localization/config/lio.yaml).
+sensor_to_lidar:
+  xyz: [-0.011, -0.02329, 0.04412]
+  rpy: [0.0, 0.0, 0.0]
+sensor_from_imu_rpy: [0.0, 0.0, 0.0]
+# livox_ros_driver2 outputs Mid-360 IMU acceleration in g (~1.0 at rest); change to 1.0 if m/s^2.
+imu_acceleration_scale: 9.81
+topics:
+  points_in: /livox/lidar
+  points_out: /livox/lidar_compensated
+  imu_in: /livox/imu
+  imu_out: /livox/imu_lio_compensated

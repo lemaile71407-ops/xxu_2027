@@ -478,10 +478,10 @@
               XXU 2026 ROS 2 全链路数据流图
             </h1>
             <span class="node-badge" style="--node-color: var(--c-imu); --node-soft: var(--c-imu-soft);">
-              ROS 2 Jazzy · 高频零 Python
+              ROS 2 Jazzy · EventsExecutor + 零拷贝
             </span>
             <span class="node-badge" style="--node-color: var(--c-tf); --node-soft: var(--c-tf-soft);">
-              单父无环 TF · SensorDataQoS
+              单父无环 TF · 3D→2D 统一建图
             </span>
           </div>
           <p class="text-sm" style="color: var(--df-muted)">
@@ -583,11 +583,11 @@
                   <div class="node-card" data-id="joint_state" style="--node-color: var(--c-vel); --node-soft: var(--c-vel-soft);">
                     <div class="node-head">
                       <span class="node-title">云台关节反馈</span>
-                      <span class="node-badge" id="badge-joint-req">刚性可选</span>
+                      <span class="node-badge" id="badge-joint-req">默认 false</span>
                     </div>
                     <div class="topic-line">/joint_states (JointState)</div>
                     <div class="meta-row">
-                      <span class="meta-tag" id="txt-joint-note">无云台可设 false</span>
+                      <span class="meta-tag" id="txt-joint-note">刚性默认关闭</span>
                       <span class="meta-tag">≤0.5s 超时</span>
                     </div>
                     <div class="file-chip">config/robot_interfaces.yaml · sensor_chain.yaml</div>
@@ -598,9 +598,9 @@
                       <span class="node-title">3D 先验点云地图</span>
                       <span class="node-badge">Offline</span>
                     </div>
-                    <div class="topic-line">prior_map (matching_prior)</div>
+                    <div class="topic-line">prior_map (matching_prior / map.pcd)</div>
                     <div class="meta-row">
-                      <span class="meta-tag">后端初始化 & 重定位</span>
+                      <span class="meta-tag">mode:=mapping 生成</span>
                     </div>
                     <div class="file-chip">backend.launch.py · sentry_localization.launch.py</div>
                   </div>
@@ -620,10 +620,10 @@
                     </div>
                     <div class="topic-line" id="txt-pc-out">→ /livox/lidar_compensated</div>
                     <div class="meta-row">
-                      <span class="meta-tag">车体自滤除</span>
+                      <span class="meta-tag">RobotSelfFilter</span>
                       <span class="meta-tag">target: lio_base_sensor</span>
                     </div>
-                    <div class="file-chip">src/pointcloud_frame_republisher.cpp</div>
+                    <div class="file-chip">pointcloud_frame_republisher.cpp · robot_self_filter.cpp</div>
                   </div>
 
                   <div class="node-card" data-id="imu_comp" style="--node-color: var(--c-imu); --node-soft: var(--c-imu-soft);">
@@ -633,23 +633,23 @@
                     </div>
                     <div class="topic-line" id="txt-imu-out">→ /livox/imu_lio_compensated</div>
                     <div class="meta-row">
-                      <span class="meta-tag" id="txt-icomp-mode">刚性外参单样本</span>
-                      <span class="meta-tag">无全局 /tf</span>
+                      <span class="meta-tag" id="txt-icomp-mode">g→m/s² 标定 · 单样本</span>
+                      <span class="meta-tag">joint_history.hpp</span>
                     </div>
-                    <div class="file-chip">src/gimbal_imu_compensator.cpp</div>
+                    <div class="file-chip">src/gimbal_imu_compensator.cpp · sensor_chain.yaml</div>
                   </div>
 
                   <div class="node-card push-bottom" data-id="static_tf" style="--node-color: var(--c-tf); --node-soft: var(--c-tf-soft);">
                     <div class="node-head">
-                      <span class="node-title">静态安装外参</span>
+                      <span class="node-title">静态外参与标定</span>
                       <span class="node-badge">/tf_static</span>
                     </div>
                     <div class="topic-line" id="txt-stf-edges">base_link → lio_base_sensor<br/>base_link → livox_frame</div>
                     <div class="meta-row">
                       <span class="meta-tag">无 base_footprint</span>
-                      <span class="meta-tag">无机械关节 TF</span>
+                      <span class="meta-tag">三动作外参标定</span>
                     </div>
-                    <div class="file-chip">xxu_bringup/sensor_launch.py · rigid_mount.pending.yaml</div>
+                    <div class="file-chip">rigid_mount_sentry.yaml · rigid_mount_calibration.launch.py</div>
                   </div>
                 </section>
 
@@ -678,9 +678,9 @@
                       <span class="node-title">ZLIO Backend</span>
                       <span class="node-badge">GTSAM C++</span>
                     </div>
-                    <div class="topic-line">/sentry/tf/localization (map→odom)<br/>/backend_node/localization_state<br/>/localization/odometry</div>
+                    <div class="topic-line">/sentry/tf/localization (map→odom)<br/>/backend_node/localization_state<br/>/backend_node/save_map (3D 建图)</div>
                     <div class="meta-row">
-                      <span class="meta-tag">≤50 Hz 动态边</span>
+                      <span class="meta-tag">≤50 Hz · extends 配置</span>
                       <span class="meta-tag">禁止 map→body</span>
                     </div>
                     <div class="file-chip">backend/apps/node_input.cpp · publisher.cpp · backend.yaml</div>
@@ -691,7 +691,7 @@
                 <section class="swimlane">
                   <div class="lane-header">
                     <span class="text-xs font-bold tracking-wide" style="color: var(--df-text)">4. 转换、扫描与门控</span>
-                    <span class="text-xs" style="color: var(--df-muted)">Components</span>
+                    <span class="text-xs" style="color: var(--df-muted)">EventsExecutor</span>
                   </div>
 
                   <div class="node-card" data-id="pc_to_scan" style="--node-color: var(--c-lidar); --node-soft: var(--c-lidar-soft);">
@@ -702,7 +702,7 @@
                     <div class="topic-line">→ /scan (LaserScan, ~10Hz)</div>
                     <div class="meta-row">
                       <span class="meta-tag">frame: base_link</span>
-                      <span class="meta-tag">静态一次缓存</span>
+                      <span class="meta-tag">self_filter_radius</span>
                     </div>
                     <div class="file-chip">pointcloud_to_laserscan_node.cpp</div>
                   </div>
@@ -710,7 +710,7 @@
                   <div class="node-card" data-id="zlio_odom" style="--node-color: var(--c-imu); --node-soft: var(--c-imu-soft);">
                     <div class="node-head">
                       <span class="node-title">ZlioBaseOdometry</span>
-                      <span class="node-badge">Component</span>
+                      <span class="node-badge">零拷贝组件</span>
                     </div>
                     <div class="topic-line">→ /odom (child: base_link)<br/>→ /sentry/tf/odometry (30Hz)</div>
                     <div class="meta-row">
@@ -727,10 +727,10 @@
                     </div>
                     <div class="topic-line" id="txt-wd-out">→ /cmd_vel (安全放行 / 零速)<br/>→ /tf (map→odom→base_link ≤50Hz)</div>
                     <div class="meta-row">
-                      <span class="meta-tag">不订阅全局 /tf</span>
+                      <span class="meta-tag">TfRelayGate 单父校验</span>
                       <span class="meta-tag">指令 ≤0.3s · 恢复 1s</span>
                     </div>
-                    <div class="file-chip">src/cmd_vel_watchdog.cpp · localization_health.hpp</div>
+                    <div class="file-chip">src/cmd_vel_watchdog.cpp · tf_relay_gate.cpp</div>
                   </div>
                 </section>
 
@@ -744,10 +744,10 @@
                   <div class="node-card" data-id="map_server" style="--node-color: var(--c-neutral); --node-soft: var(--c-neutral-soft);">
                     <div class="node-head">
                       <span class="node-title">Nav2 map_server</span>
-                      <span class="node-badge">2D Map</span>
+                      <span class="node-badge">3D→2D Map</span>
                     </div>
-                    <div class="topic-line">/map (OccupancyGrid, Transient Local)</div>
-                    <div class="file-chip">launch/navigation.launch.py · map_paths.py</div>
+                    <div class="topic-line">/map (OccupancyGrid) · 由 map.pcd 导出</div>
+                    <div class="file-chip">launch/navigation.launch.py · tools/navigation/pcd_to_nav2_map.py</div>
                   </div>
 
                   <div class="node-card" data-id="nav2_core" style="--node-color: var(--c-vel); --node-soft: var(--c-vel-soft);">
@@ -757,10 +757,10 @@
                     </div>
                     <div class="topic-line">planner_server → /plan<br/>MPPI Omni (可选 --spin) → /cmd_vel_nav</div>
                     <div class="meta-row">
-                      <span class="meta-tag">无 fake_vel_transform</span>
+                      <span class="meta-tag">原生 BackUp</span>
                       <span class="meta-tag">StoppedGoalChecker</span>
                     </div>
-                    <div class="file-chip">config/nav2_navigation.yaml · navigation_parameters.py</div>
+                    <div class="file-chip">config/nav2_navigation.yaml · config/sentry_geometry.json</div>
                   </div>
 
                   <div class="node-card" data-id="nav2_safety" style="--node-color: var(--c-vel); --node-soft: var(--c-vel-soft);">
@@ -773,7 +773,7 @@
                       <span class="meta-tag">消费 /scan</span>
                       <span class="meta-tag">多边形减速/急停</span>
                     </div>
-                    <div class="file-chip">config/nav2_navigation.yaml · ega_folded/geometry.json</div>
+                    <div class="file-chip">config/nav2_navigation.yaml · sentry_geometry.json</div>
                   </div>
 
                   <div class="node-card" data-id="chassis_exec" style="--node-color: var(--c-safety); --node-soft: var(--c-safety-soft);">
@@ -794,7 +794,7 @@
                       <span class="node-badge">低频监督</span>
                     </div>
                     <div class="topic-line">仅订阅 ~/localization_ready & ~/tf_ready</div>
-                    <div class="file-chip">scripts/nav2_navigation_startup.py · src/wait_for_odom.cpp</div>
+                    <div class="file-chip">scripts/nav2_navigation_startup.py · xxu_bringup/idle_scan.py</div>
                   </div>
                 </section>
 
@@ -861,10 +861,10 @@
         color: '--c-lidar',
         title: 'Mid360 LiDAR 点云输入',
         pkg: 'livox_ros_driver2 / rm_sim_26',
-        desc: '输出含逐点时间戳（timestamp，float64_ns）的原始三维点云。',
+        desc: '输出含逐点 UNIX 纪元纳秒时间戳（timestamp，float64_ns）的原始三维点云。',
         inputs: ['Livox MID360 UDP 硬件流（driver:=true）', '或 Gazebo RGL 雷达仿真插件（rmul_navigation）'],
         outputs: ['实车：/livox/lidar (PointCloud2, frame: livox_frame)', 'EGA 仿真：/mid360/livox_points (frame: livox_lidar)'],
-        notes: ['QoS：SensorDataQoS (Best Effort)', '目标频率：~10 Hz', '实车雷达外参待实测确认（rigid_mount.pending.yaml）'],
+        notes: ['QoS：SensorDataQoS (Best Effort)', '目标频率：~10 Hz，point_time_absolute:=true', '实车雷达外参配置见 rigid_mount_sentry.yaml（尺测初值，实车标定待现场完成）'],
         files: [
           { kind: '源码', path: 'xxu_nav_2026/src/z-localization/src/livox_ros_driver2/src/lddc.cpp' },
           { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/sentry_localization.launch.py' },
@@ -877,10 +877,10 @@
         color: '--c-imu',
         title: 'IMU 原始角速度与加速度',
         pkg: 'livox_ros_driver2 / Gazebo IMU',
-        desc: '提供高频惯性测量数据；实车直通 200 Hz，EGA 仿真经十点均值降采到 100 Hz。',
-        inputs: ['MID360 内置 IMU（实车）或 Gazebo 1ms 步长 IMU（仿真）'],
+        desc: '提供高频惯性测量数据；实车直通 200 Hz（支持独立 imu_frame_id），EGA 仿真经十点均值降采到 100 Hz。',
+        inputs: ['MID360 内置 IMU（实车，输出单位通常为 g）或 Gazebo 1ms 步长 IMU（仿真）'],
         outputs: ['实车：/livox/imu (Imu, ~200 Hz)', '仿真：/imu_raw (Imu, 1000 Hz → 100 Hz)'],
-        notes: ['QoS：SensorDataQoS', '实车严禁开启 imu_interval_samples:=10（仅仿真防漏采）'],
+        notes: ['QoS：SensorDataQoS', '实车严禁开启 imu_interval_samples:=10（仅仿真防漏采）', 'Mid-360 静止加速度为 g 时需设 imu_acceleration_scale: 9.81'],
         files: [
           { kind: '源码', path: 'xxu_nav_2026/src/z-localization/src/livox_ros_driver2/src/lddc.cpp' },
           { kind: '仿真', path: 'xxu_nav_2026/src/xxu_sim_bringup/launch/rm_sim_gazebo.launch.py' },
@@ -895,7 +895,7 @@
         desc: '提供带时间戳的云台关节角与角速度，用于解析补偿，避免通过全局 /tf 进行高频动态插值。',
         inputs: ['实车云台电机编码器 / 仿真关节状态'],
         outputs: ['/joint_states (sensor_msgs/msg/JointState)'],
-        notes: ['刚性无云台安装时，launch 可设 require_joint_states:=false', '看门狗默认新鲜度超时 ≤ 0.5 s'],
+        notes: ['sentry_localization.launch.py 默认 require_joint_states:=false', '启用关节保护时看门狗超时阈值 ≤ 0.5 s'],
         files: [
           { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/robot_interfaces.yaml' },
           { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/sensor_chain.yaml' },
@@ -907,13 +907,14 @@
         color: '--c-neutral',
         title: '3D 先验点云地图 (prior_map)',
         pkg: 'z-localization backend',
-        desc: '后端初始化与闭环重定位使用的离线三维点云先验包，须与 Nav2 二维栅格地图对齐。',
+        desc: '后端初始化与闭环重定位使用的离线三维点云先验包，由 3D 建图（mode:=mapping + /backend_node/save_map）生成，并与导出的 2D 栅格图同源对齐。',
         inputs: ['启动参数 prior_map:=/path/to/matching_prior'],
-        outputs: ['供 backend_node 加载进行点云配准与因子图约束'],
-        notes: ['不通过高频话题实时传输', '须与实测地图及安装标定一致'],
+        outputs: ['供 backend_node 加载进行点云配准与因子图约束', '离线工具 pcd_to_nav2_map.py 从 map.pcd 导出 Nav2 2D 图'],
+        notes: ['不通过高频话题实时传输', '须与导出二维地图及安装标定一致'],
         files: [
           { kind: 'Launch', path: 'xxu_nav_2026/src/z-localization/src/backend/launch/backend.launch.py' },
-          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/sentry_localization.launch.py' }
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/sentry_localization.launch.py' },
+          { kind: '工具', path: 'xxu_nav_2026/tools/navigation/pcd_to_nav2_map.py' }
         ]
       },
       pc_comp: {
@@ -921,15 +922,17 @@
         color: '--c-lidar',
         title: 'pointcloud_frame_republisher',
         pkg: 'xxu_bringup (C++)',
-        desc: '以 C++ 替代原 Python 点云转换节点。执行车体自滤除、逐点时间戳保留与外参/关节解析补偿。',
-        inputs: ['原始点云 (/livox/lidar 或 /mid360/livox_points)', '刚性模式启动期读一次 /tf_static；云台模式读 /joint_states 线性插值'],
+        desc: '以 C++ 替代原 Python 点云转换节点。集成独立 RobotSelfFilter 车体自滤除、逐点时间戳保留与外参/关节解析补偿。',
+        inputs: ['原始点云 (/livox/lidar 或 /mid360/livox_points)', 'self_filter_geometry_file (sentry_geometry.json / ega_folded/geometry.json)', '刚性模式读静态外参；云台模式读 /joint_states 线性插值'],
         outputs: ['补偿后点云 (PointCloud2, frame: lio_base_sensor / frames.sensor)'],
         notes: ['QoS：SensorDataQoS', '无常驻全局 /tf Listener', '保留行步长、字节序与有限点检验'],
         files: [
           { kind: '源码', path: 'xxu_nav_2026/src/xxu_bringup/src/pointcloud_frame_republisher.cpp' },
+          { kind: '源码', path: 'xxu_nav_2026/src/xxu_bringup/src/robot_self_filter.cpp' },
           { kind: '头文件', path: 'xxu_nav_2026/src/xxu_bringup/include/xxu_bringup/cloud_layout.hpp' },
           { kind: '头文件', path: 'xxu_nav_2026/src/xxu_bringup/include/xxu_bringup/sensor_math.hpp' },
           { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/sensor_chain.yaml' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/sentry_geometry.json' },
           { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/sensor_launch.py' }
         ]
       },
@@ -938,29 +941,33 @@
         color: '--c-imu',
         title: 'gimbal_imu_compensator',
         pkg: 'xxu_bringup (C++)',
-        desc: '以 C++ 对原始 IMU 进行杆臂/旋转补偿，或仿真 10 点均值降采，使其与点云严格处于同一虚拟传感器坐标。',
-        inputs: ['原始 IMU (/livox/imu 或 /imu_raw)', '云台模式订阅 /joint_states（支持 4000 条缓存）'],
-        outputs: ['补偿后 IMU (/livox/imu_lio_compensated 或 /imu_lio_compensated)'],
-        notes: ['QoS：SensorDataQoS', '实车保持单样本直通（200 Hz）', 'target_frame 与点云保持一致'],
+        desc: '以 C++ 对原始 IMU 进行倍率缩放（imu_acceleration_scale）、杆臂/旋转补偿或仿真 10 点均值降采，使其与点云严格处于同一虚拟传感器坐标。',
+        inputs: ['原始 IMU (/livox/imu 或 /imu_raw)', '云台模式订阅 /joint_states（joint_history.hpp 缓存管理）'],
+        outputs: ['补偿后 IMU (/livox/imu_lio_compensated 或 /imu_lio_compensated，单位 m/s²)'],
+        notes: ['QoS：SensorDataQoS', '实车保持单样本直通（200 Hz），ZLIO 后端统一取 imu_acceleration_scale=1.0', 'target_frame 与点云保持一致'],
         files: [
           { kind: '源码', path: 'xxu_nav_2026/src/xxu_bringup/src/gimbal_imu_compensator.cpp' },
+          { kind: '头文件', path: 'xxu_nav_2026/src/xxu_bringup/include/xxu_bringup/joint_history.hpp' },
           { kind: '头文件', path: 'xxu_nav_2026/src/xxu_bringup/include/xxu_bringup/sensor_math.hpp' },
           { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/sensor_chain.yaml' },
           { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/sensor_launch.py' }
         ]
       },
       static_tf: {
-        badge: '静态 TF 发布',
+        badge: '静态外参与标定',
         color: '--c-tf',
-        title: 'static_transform_publisher (/tf_static)',
-        pkg: 'tf2_ros / xxu_bringup/sensor_launch.py',
-        desc: '经过 TF 瘦身后，所有物理传感器均作为 base_link 的直接静态子帧发布，移除 base_footprint 与机械关节分支。',
-        inputs: ['刚性安装 YAML（计算 T_base_lidar = T_base_sensor × T_sensor_lidar）或 EGA URDF 固定链'],
-        outputs: ['/tf_static：base_link → lio_base_sensor、base_link → livox_frame / livox_lidar'],
-        notes: ['Transient Local 静态发布', '遇到移动关节、断链或环路时 launch 阶段直接拒绝启动'],
+        title: 'static_transform_publisher & 刚性外参标定',
+        pkg: 'tf2_ros / xxu_bringup',
+        desc: '经过 TF 瘦身后，物理传感器作为 base_link 直接静态子帧发布；支持通过在线 Trigger 或离线 MCAP 三动作（静止/直行/自旋）标定确认刚性外参。',
+        inputs: ['刚性安装 YAML（rigid_mount_sentry.yaml，计算 T_base_lidar = T_base_sensor × T_sensor_lidar）或 EGA URDF 固定链'],
+        outputs: ['/tf_static：base_link → lio_base_sensor、base_link → livox_frame / livox_lidar', '标定确认门控后导出已确认外参 YAML'],
+        notes: ['Transient Local 静态发布；遇移动关节、断链或环路拒绝启动', '在线标定默认隔离 /calibration/lidar_odometry，防污染生产话题'],
         files: [
           { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/sensor_launch.py' },
           { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/rigid_sensor.launch.py' },
+          { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/rigid_mount_calibration.launch.py' },
+          { kind: '源码', path: 'xxu_nav_2026/src/xxu_bringup/src/calibration/rigid_mount_calibration_node.cpp' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/rigid_mount_sentry.yaml' },
           { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/rigid_mount.pending.yaml' },
           { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/robot_interfaces.yaml' }
         ]
@@ -988,10 +995,10 @@
         color: '--c-tf',
         title: 'z-localization Backend (GTSAM)',
         pkg: 'z-localization/src/backend (C++)',
-        desc: '基于 GTSAM 与系统 Eigen 3.4 的因子图全局定位后端，输出 map → odom 与定位健康状态。',
-        inputs: ['/frontend/frame, /frontend/odometry, /frontend/session', 'prior_map 先验图；服务 /localization_reset, /backend_node/relocalize'],
-        outputs: ['/sentry/tf/localization (TFMessage: map → odom, ≤50Hz)', '/localization/odometry (Odometry)', '/backend_node/localization_state (NORMAL / OBS_DEGRADED / LOST)'],
-        notes: ['ZLIO 模式抑制 legacy map → body TF', 'GTSAM 与 Eigen 3.4 编译期对齐检查'],
+        desc: '基于 GTSAM 与系统 Eigen 3.4 的因子图全局定位与 3D 建图后端，支持 mode:=config/mapping/localization 与 backend_config extends 继承。',
+        inputs: ['/frontend/frame, /frontend/odometry, /frontend/session', 'prior_map 先验图；服务 /localization_reset, /backend_node/relocalize, /backend_node/save_map'],
+        outputs: ['/sentry/tf/localization (启用看门狗时) 或直接发 /tf (map → odom, ≤50Hz)', '/localization/odometry (Odometry)', '/backend_node/localization_state (NORMAL / OBS_DEGRADED / LOST)', '3D 建图保存 map.pcd + 先验子图'],
+        notes: ['ZLIO 模式抑制 legacy map → body TF', '实车统一走 3D 建图（已移除 xxu_slam_toolbox 2D SLAM 冲突入口）'],
         files: [
           { kind: '头文件', path: 'xxu_nav_2026/src/z-localization/src/backend/apps/node.hpp' },
           { kind: '源码', path: 'xxu_nav_2026/src/z-localization/src/backend/apps/node_input.cpp' },
@@ -1005,7 +1012,7 @@
         color: '--c-lidar',
         title: 'pointcloud_to_laserscan_node',
         pkg: 'pointcloud_to_laserscan (C++)',
-        desc: '直接订阅前端发布的局部去畸变云 /cloud_deskewed，利用一次缓存的静态 T_base_sensor 投影为二维扫描。',
+        desc: '直接订阅前端发布的局部去畸变云 /cloud_deskewed，支持 scan_self_filter_radius 近身滤除，利用一次缓存的静态 T_base_sensor 投影为二维扫描。',
         inputs: ['/cloud_deskewed (SensorDataQoS)', '/tf_static（首次获取 T_base_sensor 后释放订阅与 Buffer）'],
         outputs: ['/scan (sensor_msgs/msg/LaserScan, frame_id: base_link, ~10Hz)'],
         notes: ['QoS：SensorDataQoS (best_effort)', '无动态 MessageFilter / TF 时间戳插值', '源帧改变时拒绝复用旧缓存'],
@@ -1019,11 +1026,11 @@
         badge: 'C++ 组件',
         color: '--c-imu',
         title: 'xxu_bringup::ZlioBaseOdometry',
-        pkg: 'xxu_bringup (rclcpp_components)',
-        desc: '与 CmdVelWatchdog 共居同一 component_container_mt。将传感器坐标里程计通过逆外参映射为底盘 base_link 里程计。',
-        inputs: ['/odometry (ZLIO 前端, SensorDataQoS)', '外参来源：parameters 或一次性 /tf_static'],
-        outputs: ['/odom (Odometry, frame: odom → child: base_link, SensorDataQoS)', '/sentry/tf/odometry (TFMessage: odom → base_link, 默认 30Hz, 限 20–50Hz)'],
-        notes: ['公式：T_odom_base = T_odom_sensor × inverse(T_base_sensor)', '速度与协方差按刚体伴随/杆臂 Jacobian 严格区分', '同时间戳停流不重复补帧'],
+        pkg: 'xxu_bringup (component_container_events)',
+        desc: '与 CmdVelWatchdog 同居 component_container_events（EventsExecutor + use_intra_process_comms）。将传感器里程计逆外参映射为底盘 base_link 里程计。',
+        inputs: ['/odometry (localization.frontend_odometry, SensorDataQoS)', '外参来源：parameters 或一次性 /tf_static'],
+        outputs: ['/odom (localization.odometry, frame: odom → child: base_link, SensorDataQoS)', '/sentry/tf/odometry (TFMessage: odom → base_link, 默认 30Hz, 限 20–50Hz)'],
+        notes: ['公式：T_odom_base = T_odom_sensor × inverse(T_base_sensor)', '速度与协方差按刚体伴随/杆臂 Jacobian 严格区分', '同时间戳停流不重复补帧；enable_watchdog=false 时直接发 /tf'],
         files: [
           { kind: '源码', path: 'xxu_nav_2026/src/xxu_bringup/src/zlio_base_odometry.cpp' },
           { kind: '头文件', path: 'xxu_nav_2026/src/xxu_bringup/include/xxu_bringup/odometry_conversion.hpp' },
@@ -1035,13 +1042,15 @@
         badge: '安全核心 · C++ 组件',
         color: '--c-safety',
         title: 'xxu_bringup::CmdVelWatchdog',
-        pkg: 'xxu_bringup (rclcpp_components)',
-        desc: '全系统最后一道速度安全门控与全局核心动态 TF 转发器。不订阅全局 /tf，只接收两条专用 TF 流。',
+        pkg: 'xxu_bringup (component_container_events)',
+        desc: '全系统最后一道速度安全门控，并通过独立 TfRelayGate 类实现核心动态 TF 限频转发与单父校验，不订阅全局 /tf。',
         inputs: ['/cmd_vel_collision (TwistStamped)', '/odom, /scan, (可选 /joint_states)', '/backend_node/localization_state, /localization/odometry', '/sentry/tf/odometry, /sentry/tf/localization, /tf_static'],
-        outputs: ['/cmd_vel 或 /rm_sim/cmd_vel_safe (100Hz 墙钟保护)', '/tf (仅转发校验后的 map → odom 与 odom → base_link, ≤50Hz)', '/cmd_vel_watchdog/healthy, ~/localization_ready, ~/tf_ready'],
-        notes: ['超时阈值：指令 ≤0.3s；odom/scan/joint/TF ≤0.5s；定位恢复保持 1.0s', '发现父节点冲突或源时间戳停止推进即拒绝放行', '故障触发后必须收到恢复后的新指令才解锁'],
+        outputs: ['/cmd_vel 或 /rm_sim/cmd_vel_safe (100Hz 墙钟保护)', '/tf (TfRelayGate 仅转发校验后的 map → odom 与 odom → base_link, ≤50Hz)', '/cmd_vel_watchdog/healthy, ~/localization_ready, ~/tf_ready'],
+        notes: ['超时阈值：指令 ≤0.3s；odom/scan/joint/TF ≤0.5s；定位恢复保持 1.0s', 'enable_watchdog:=auto（mapping/无先验定位时自动旁路）', '发现父节点冲突或源时间戳停止推进即拒绝放行'],
         files: [
           { kind: '源码', path: 'xxu_nav_2026/src/xxu_bringup/src/cmd_vel_watchdog.cpp' },
+          { kind: '源码', path: 'xxu_nav_2026/src/xxu_bringup/src/tf_relay_gate.cpp' },
+          { kind: '头文件', path: 'xxu_nav_2026/src/xxu_bringup/src/tf_relay_gate.hpp' },
           { kind: '头文件', path: 'xxu_nav_2026/src/xxu_bringup/include/xxu_bringup/localization_health.hpp' },
           { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/velocity_launch.py' },
           { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/sentry_localization.launch.py' },
@@ -1053,13 +1062,13 @@
         color: '--c-neutral',
         title: 'nav2_map_server',
         pkg: 'nav2_map_server',
-        desc: '加载与场地先验点云对齐的二维静态栅格地图，供全局代价地图与路径规划使用。',
-        inputs: ['YAML + PGM 二维地图文件（如 rmul_rotating_20261112）'],
+        desc: '加载二维静态栅格地图。实车与 ZLIO 先验点云通过 pcd_to_nav2_map.py 从 3D map.pcd 同坐标系导出（已移除 xxu_slam_toolbox / m-explore-ros2）。',
+        inputs: ['YAML + PGM 二维地图文件（如 rmul_rotating_20261112 或 pcd_to_nav2_map.py 导出图）'],
         outputs: ['/map (nav_msgs/msg/OccupancyGrid, Transient Local)'],
-        notes: ['与 prior_map 坐标系原点一致'],
+        notes: ['与 prior_map 坐标系原点一致', '可选 --keyframes 沿关键帧局部清零自由区'],
         files: [
           { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/navigation.launch.py' },
-          { kind: '模块', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/map_paths.py' },
+          { kind: '工具', path: 'xxu_nav_2026/tools/navigation/pcd_to_nav2_map.py' },
           { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/maps/rmuc_2025.yaml' }
         ]
       },
@@ -1068,13 +1077,13 @@
         color: '--c-vel',
         title: 'planner_server & MPPI Omni controller',
         pkg: 'nav2_planner / nav2_controller / xxu_bringup',
-        desc: '基于真实 base_link 进行二维全向规划与控制。不再使用已移除的 fake_vel_transform 虚拟坐标系。',
-        inputs: ['/map, /scan, /odom, /tf (map→odom→base_link), /tf_static', 'robot_geometry_file 车型轮廓与导航参数'],
+        desc: '基于真实 base_link 进行二维全向规划与控制。已清理遗留 pb_* 控制器与探索插件，后退行为统一为原生 nav2_behaviors::BackUp。',
+        inputs: ['/map, /scan, /odom, /tf (map→odom→base_link), /tf_static', 'robot_geometry_file (sentry_geometry.json / ega_folded/geometry.json)'],
         outputs: ['/plan (Path), /local_plan (Path)', '/cmd_vel_nav (TwistStamped, frame_id: base_link)'],
         notes: ['支持常规全向导航与显式 --spin 边走边转模式', '折叠 EGA 车型采用 StoppedGoalChecker'],
         files: [
           { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/nav2_navigation.yaml' },
-          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/nav2_exploration.yaml' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/sentry_geometry.json' },
           { kind: '模块', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/navigation_parameters.py' },
           { kind: '模块', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/robot_profiles.py' },
           { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/navigation.launch.py' }
@@ -1088,9 +1097,10 @@
         desc: '对控制器输出进行运动学平滑，并结合实时激光扫描 /scan 进行近场减速与多边形碰撞急停。',
         inputs: ['/cmd_vel_nav (TwistStamped)', '/scan (LaserScan), /tf'],
         outputs: ['/cmd_vel_smoothed → /cmd_vel_collision (TwistStamped)'],
-        notes: ['急停/减速多边形配置在 robot_geometry_file', '输出直接送入 CmdVelWatchdog，未过安全门控不直接驱动底盘'],
+        notes: ['急停/减速轮廓来自 sentry_geometry.json 或 ega_folded/geometry.json', '输出直接送入 CmdVelWatchdog，未过安全门控不直接驱动底盘'],
         files: [
           { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/nav2_navigation.yaml' },
+          { kind: '配置', path: 'xxu_nav_2026/src/xxu_bringup/config/sentry_geometry.json' },
           { kind: '模块', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/navigation_parameters.py' },
           { kind: '配置', path: 'xxu_nav_2026/src/xxu_sim_bringup/models/ega_folded/navigation_profile.yaml' }
         ]
@@ -1119,12 +1129,13 @@
         color: '--c-neutral',
         title: 'nav2_navigation_startup (及可选空闲补扫)',
         pkg: 'xxu_bringup',
-        desc: '低频任务与生命周期监督脚本。已剥离传感器、里程计和全局 TF 订阅，仅消费看门狗发出的就绪布尔信号。',
+        desc: '低频任务与生命周期监督脚本。已剥离传感器、里程计和全局 TF 订阅，仅消费看门狗发出的就绪布尔信号；空闲补扫逻辑抽离至 idle_scan.py。',
         inputs: ['~/localization_ready, ~/tf_ready (来自 CmdVelWatchdog)'],
         outputs: ['Nav2 生命周期激活管理 / 定位失信时取消动作'],
         notes: ['不参与任何高频数据路径', '可选 --idle-scan 在空闲 2s 后触发 Spin 补扫'],
         files: [
           { kind: '脚本', path: 'xxu_nav_2026/src/xxu_bringup/scripts/nav2_navigation_startup.py' },
+          { kind: '模块', path: 'xxu_nav_2026/src/xxu_bringup/xxu_bringup/idle_scan.py' },
           { kind: '源码', path: 'xxu_nav_2026/src/xxu_bringup/src/wait_for_odom.cpp' },
           { kind: 'Launch', path: 'xxu_nav_2026/src/xxu_bringup/launch/navigation.launch.py' }
         ]
@@ -1174,18 +1185,18 @@
         'txt-imu-topic': '/livox/imu (Imu)',
         'txt-imu-frame': 'frame: livox_frame',
         'badge-imu-rate': '200 Hz',
-        'badge-joint-req': '刚性可选',
-        'txt-joint-note': '无云台可设 false',
+        'badge-joint-req': '默认 false',
+        'txt-joint-note': '刚性默认关闭',
         'txt-pc-out': '→ /livox/lidar_compensated',
         'txt-imu-out': '→ /livox/imu_lio_compensated',
-        'txt-icomp-mode': '刚性外参单样本',
+        'txt-icomp-mode': 'g→m/s² 标定 · 单样本',
         'txt-stf-edges': 'base_link → lio_base_sensor\nbase_link → livox_frame',
         'txt-wd-out': '→ /cmd_vel (安全放行 / 零速)\n→ /tf (map→odom→base_link ≤50Hz)',
         'txt-chassis-title': '实车串口桥 (chassis_lower_bridge)',
         'txt-chassis-line': 'STM32 USB CDC (50Hz) · /chassis/status · /wheel_odom',
         'txt-chassis-tag': '下位机独立 cmd_timeout=0.3s',
         'file-lidar': 'src/lddc.cpp · sentry_localization.launch.py',
-        'file-imu': 'src/lddc.cpp · rigid_sensor.launch.py',
+        'file-imu': 'src/lddc.cpp · rigid_mount_sentry.yaml',
         'file-chassis': 'src/chassis_lower_bridge.cpp · chassis_protocol.hpp',
         edgeLabels: { e_imu_comp: '200 Hz', e_wd_ch: '/cmd_vel' }
       },
