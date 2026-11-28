@@ -376,6 +376,49 @@ class MountTest(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, 'scan_min_height'):
                         sentry.setup(context)
 
+    def test_sentry_overhead_clearance_is_opt_in_and_validated(self):
+        actions_default, _ = self.sentry_actions()
+        names_default = [node['name'] for node in self.sentry_bridge_components(actions_default)]
+        self.assertNotIn('overhead_clearance', names_default)
+
+        actions_enabled, frames = self.sentry_actions(
+            enable_overhead_clearance='true',
+            overhead_base_height='0.175',
+            overhead_min_height='0.22',
+            overhead_max_height='0.55',
+            overhead_detection_radius='1.4',
+            overhead_release_hold_sec='2.0',
+            overhead_release_travel_distance='0.9',
+        )
+        overhead = next(
+            node for node in self.sentry_bridge_components(actions_enabled)
+            if node['name'] == 'overhead_clearance'
+        )
+        self.assertEqual(overhead['plugin'], 'xxu_bringup::OverheadClearanceNode')
+        params = overhead['parameters'][0]
+        self.assertEqual(params['extrinsics_source'], 'parameters')
+        self.assertEqual(params['base_frame'], 'base_link')
+        self.assertEqual(params['sensor_frame'], frames['sensor'])
+        self.assertEqual(params['cloud_topic'], '/cloud_deskewed')
+        self.assertEqual(params['odom_topic'], '/odom')
+        self.assertAlmostEqual(params['base_height_m'], 0.175)
+        self.assertAlmostEqual(params['max_overhead_height_m'], 0.55)
+        self.assertAlmostEqual(params['release_travel_distance_m'], 0.9)
+
+        with tempfile.TemporaryDirectory() as folder:
+            mount_path = Path(folder) / 'mount.yaml'
+            mount_path.write_text(yaml.safe_dump(measured()))
+            config = Path(folder) / 'lio.yaml'
+            config.write_text('{}')
+            context = launch_context(
+                sentry, mount_file=str(mount_path),
+                frontend_config=str(config), backend_config=str(config),
+                enable_overhead_clearance='true',
+                overhead_min_height='0.6', overhead_max_height='0.5',
+            )
+            with self.assertRaisesRegex(ValueError, 'overhead_max_height'):
+                sentry.setup(context)
+
     def test_cpp_sensor_and_mount_runtime(self):
         import subprocess
         subprocess.run([sys.executable, str(Path(__file__).with_name('test_cpp_bridge_pipeline.py')),

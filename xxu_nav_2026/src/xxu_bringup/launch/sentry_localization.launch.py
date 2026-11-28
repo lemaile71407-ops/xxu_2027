@@ -58,6 +58,29 @@ def setup(context):
         raise ValueError('scan_self_filter_radius must be a finite non-negative number') from error
     if scan_self_filter_radius < 0.0:
         raise ValueError('scan_self_filter_radius must be a finite non-negative number')
+    overhead_clearance_enabled = _launch_bool(
+        arg('enable_overhead_clearance'), 'enable_overhead_clearance')
+    overhead_base_height = _finite_float(arg('overhead_base_height'), 'overhead_base_height')
+    if overhead_base_height < 0.0:
+        raise ValueError('overhead_base_height must be a finite non-negative number')
+    overhead_min_height = _finite_float(arg('overhead_min_height'), 'overhead_min_height')
+    if overhead_min_height < 0.0:
+        raise ValueError('overhead_min_height must be a finite non-negative number')
+    overhead_max_height = _finite_float(arg('overhead_max_height'), 'overhead_max_height')
+    if not overhead_max_height > overhead_min_height:
+        raise ValueError('overhead_max_height must be greater than overhead_min_height')
+    overhead_detection_radius = _finite_float(
+        arg('overhead_detection_radius'), 'overhead_detection_radius')
+    if overhead_detection_radius <= 0.15:
+        raise ValueError('overhead_detection_radius must be greater than 0.15')
+    overhead_release_hold_sec = _finite_float(
+        arg('overhead_release_hold_sec'), 'overhead_release_hold_sec')
+    if overhead_release_hold_sec < 0.0:
+        raise ValueError('overhead_release_hold_sec must be a finite non-negative number')
+    overhead_release_travel_distance = _finite_float(
+        arg('overhead_release_travel_distance'), 'overhead_release_travel_distance')
+    if overhead_release_travel_distance < 0.0:
+        raise ValueError('overhead_release_travel_distance must be a finite non-negative number')
     simulated = _launch_bool(arg('use_sim_time'), 'use_sim_time')
     simulated_arg = 'true' if simulated else 'false'
     publish_mount_tf = _launch_bool(arg('publish_mount_tf'), 'publish_mount_tf')
@@ -108,6 +131,25 @@ def setup(context):
                 'required_tf_pairs': ['odom->base_link'],
                 'tf_source_frame': frames['lidar']}],
             extra_arguments=[{'use_intra_process_comms': True}]))
+    if overhead_clearance_enabled:
+        bridge_components.append(ComposableNode(
+            package='xxu_bringup', plugin='xxu_bringup::OverheadClearanceNode',
+            name='overhead_clearance', parameters=[{
+                'use_sim_time': simulated,
+                'cloud_topic': contract.topic('localization.deskewed_cloud'),
+                'odom_topic': contract.topic('localization.odometry'),
+                'base_frame': 'base_link',
+                'sensor_frame': frames['sensor'],
+                'extrinsics_source': 'parameters',
+                'base_from_sensor_xyz': mount['base_to_sensor']['xyz'],
+                'base_from_sensor_rpy': mount['base_to_sensor']['rpy'],
+                'base_height_m': overhead_base_height,
+                'min_overhead_height_m': overhead_min_height,
+                'max_overhead_height_m': overhead_max_height,
+                'detection_radius_m': overhead_detection_radius,
+                'release_hold_sec': overhead_release_hold_sec,
+                'release_travel_distance_m': overhead_release_travel_distance}],
+            extra_arguments=[{'use_intra_process_comms': True}]))
     actions = [RegisterEventHandler(OnShutdown(on_shutdown=[
         OpaqueFunction(function=lambda context: temporary.cleanup())]))]
     actions += sensor_actions
@@ -157,6 +199,13 @@ def generate_launch_description():
         'use_sim_time': 'false', 'publish_mount_tf': 'true', 'require_joint_states': 'false',
         'self_filter_geometry_file': '', 'scan_self_filter_radius': '0.0',
         'scan_min_height': '0.05', 'scan_max_height': '0.5',
+        'enable_overhead_clearance': 'false',
+        'overhead_base_height': '0.0',
+        'overhead_min_height': '0.22',
+        'overhead_max_height': '0.55',
+        'overhead_detection_radius': '1.5',
+        'overhead_release_hold_sec': '1.5',
+        'overhead_release_travel_distance': '0.8',
     }
     return LaunchDescription([
         *(DeclareLaunchArgument(name, default_value=value) for name, value in defaults.items()),

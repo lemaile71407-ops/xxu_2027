@@ -30,7 +30,9 @@ add_library(xxu_sentry_components SHARED
   src/tf_relay_gate.cpp
   src/gimbal_imu_compensator.cpp
   src/pointcloud_frame_republisher.cpp
-  src/robot_self_filter.cpp)
+  src/robot_self_filter.cpp
+  src/overhead_clearance.cpp
+  src/overhead_clearance_node.cpp)
 target_compile_features(xxu_sentry_components PUBLIC cxx_std_17)
 target_include_directories(xxu_sentry_components PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -57,6 +59,8 @@ rclcpp_components_register_node(xxu_sentry_components
   PLUGIN "xxu_bringup::GimbalImuCompensator" EXECUTABLE gimbal_imu_compensator EXECUTOR EventsExecutor)
 rclcpp_components_register_node(xxu_sentry_components
   PLUGIN "xxu_bringup::PointCloudFrameRepublisher" EXECUTABLE pointcloud_frame_republisher EXECUTOR EventsExecutor)
+rclcpp_components_register_node(xxu_sentry_components
+  PLUGIN "xxu_bringup::OverheadClearanceNode" EXECUTABLE overhead_clearance_node EXECUTOR EventsExecutor)
 install(TARGETS xxu_sentry_components LIBRARY DESTINATION lib)
 add_executable(component_container_events src/component_container_events.cpp)
 ament_target_dependencies(component_container_events rclcpp rclcpp_components)
@@ -126,6 +130,9 @@ if(BUILD_TESTING)
   target_include_directories(sentry_bridge_test PRIVATE include)
   target_link_libraries(sentry_bridge_test Eigen3::Eigen)
   ament_target_dependencies(sentry_bridge_test rclcpp sensor_msgs nav_msgs geometry_msgs)
+  ament_add_gtest(overhead_clearance_test test/overhead_clearance_test.cpp)
+  target_link_libraries(overhead_clearance_test xxu_sentry_components Eigen3::Eigen)
+  ament_target_dependencies(overhead_clearance_test rclcpp sensor_msgs nav_msgs std_msgs)
 endif()
 
 install(
