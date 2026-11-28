@@ -136,6 +136,7 @@ install(
 install(
   PROGRAMS
     scripts/nav2_navigation_startup.py
+    scripts/waypoint_mapping_runner.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

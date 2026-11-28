@@ -73,7 +73,7 @@ RMUL ZLIO 主线与独立导航统一使用真实底盘坐标（`base_link`）�
 
 共享代码安装在 `xxu_bringup` 包内；实车串口通信桥位于 `xxu_hardware`，Gazebo 仿真启动与 CAD/场地模型位于 `xxu_sim_bringup`。[interfaces.py](../../src/xxu_bringup/xxu_bringup/interfaces.py) 单独提供接口数据读取，运行节点可直接使用，无需导入 Nav2 启动代码。`xxu_description` 只安装模型、显示和 ros2_control 资源；修改集成代码或新增 Python 模块后需重新构建并加载工作空间。
 
-[navigation.launch.py](../../src/xxu_bringup/launch/navigation.launch.py) 已收敛为仅使用外部定位（ZLIO/TDT）：`localization_mode` 仅保留兼容参数 `external`（旧 AMCL/GICP 已移除），启动 `map_server`、Nav2 导航服务器与 `nav2_navigation_startup` 等待定位就绪和 TF；运行中的速度安全门控由 `cmd_vel_watchdog` 负责，启动等待不等于任务恢复联锁。
+[navigation.launch.py](../../src/xxu_bringup/launch/navigation.launch.py) 默认使用外部定位（ZLIO/TDT），启动 `map_server`、Nav2 导航服务器与 `nav2_navigation_startup`，等待定位和 TF 就绪。建图入口通过 `use_map_server:=false`、`enable_localization:=false`、`wait_for_tf_only:=true` 启用无地图导航。运行中的速度安全门控由 `cmd_vel_watchdog` 负责。
 
 EGA 仿真使用 [start_rmul.sh](start_rmul.sh) 统一准备安装环境和匹配输入。在 `xxu_nav_2026` 目录执行：
 
@@ -105,6 +105,21 @@ EGA 仿真使用 [start_rmul.sh](start_rmul.sh) 统一准备安装环境和匹�
 
 180° 转后定位稳定性回归使用 [check_yaw_stability.py](check_yaw_stability.py)，默认两种路线各三轮，每目标停车后继续观察 10 s 仿真时间，任一轮失信或缺少新鲜证据即失败。它同时监测静止全窗口的原始与适配里程计速度，保留窗口前后停车检查。可选 `--frontend-noise-profile tools/navigation/ega_imu_sample_noise.yaml` 仅在结果目录生成原 100 Hz 流的仿真噪声对照配置，单独校正噪声仍为 4/6。区间平均隔离候选在同输出噪声强度下完整 6/6 通过，候选模型与补偿副本尚未加入默认链；详见报告的最新源速度回归节。它只通过显式测试 profile 验收航向，未改默认车型；固定判据、执行命令及实际结果以[阶段三回归记录](../../../docs/validation/nav2_stage3_20261108.md#2026-11-11180-转后定位稳定性回归)为准。
 
+### RMUL 仿真多点 3D 建图
+
+从 `xxu_nav_2026` 执行 `./tools/navigation/start_rmul_mapping.sh`。入口使用 `ega_folded`、带时间戳的 RGL 插件和 Z-Localization 建图后端。Nav2 等待 `map → odom` TF 就绪后使用 [建图参数](../../src/xxu_bringup/config/nav2_mapping.yaml) 和滚动代价地图。默认执行 [11 点闭环](../../src/xxu_bringup/waypoints/rmul_2027_mapping_loop.csv)，坐标相对于出生位姿 `(2.0, 2.0, yaw=0)`。任务结束后调用后端保存服务，默认输出目录为 `maps/rmul_mapping_<时间戳>`。
+
+`--headless` 关闭界面，`--manual` 改为手动发送导航目标，`--no-save` 关闭任务结束后的自动保存。`--save-dir` 指定输出目录，`--waypoints` 指定 CSV，`--scan-max-height` 指定相对地面的扫描上限。首轮验证见 [RMUL 建图核验](#rmul-建图核验)。
+
+### RMUL 建图核验
+
+2026-11-28 至 2026-11-29，ROS 2 Jazzy 下重新构建并安装了 `xxu_bringup` 和 `xxu_sim_bringup`：
+- 静态与单元回归：`start_rmul_mapping.sh --headless --manual --no-save -- --show-args` 展开通过；`check_interfaces.py` 的 88 项绑定通过；`test_pcd_to_nav2_map.py`（13 项）、`test_rmul_mapping.py`（8 项）、`test_vehicle_parameters.py`（15 项）全部通过；`test_review_repairs.py`（9 项中 8 项通过，包括跨进程 C++ 看门狗用例；1 项底盘输入用例因未重编/指定底盘可执行文件而跳过）。
+- Gazebo 闭环实测（隔离域 `ROS_DOMAIN_ID=95`，`start_rmul_mapping.sh --headless --save-dir /tmp/xxu_rmul_mapping_verify_005`，`map_voxel_resolution:=0.05`）：总耗时 `380.1 s`，`nav2_navigation_startup` 经 TF 就绪激活 Nav2，`cmd_vel_watchdog` 正常放行，11/11 航点全部到达（`Missed waypoints: none`），`backend_node` 接纳 2 次 `loop scan-to-map` 回环并成功保存 3D 地图包（`606` 个关键帧、`51714` 点 `map.pcd`，首尾 XY 闭合误差 `0.0192 m`、Z 误差 `0.0008 m`）。
+- 离线 2D 导出验证：对实测 `map.pcd` 使用 `pcd_to_nav2_map.py --fit-ground-plane --free-from-ground --ground-clear-radius 0.08` 导出，`--min-z 0.10 --max-z 0.34` 时两洞口内占用分别为 `30` 和 `33` 格，`--max-z 0.22` 时两洞口内占用均降至 `0` 格且围墙轮廓连续。上述为仿真与离线导出验证，实车建图及实车过洞仍待验证。
+
+### 导航回归
+
 车型参数叠加的离线回归为 `python3 tools/navigation/test_vehicle_parameters.py`，不启动节点。
 
 启动文件读取接口契约，Nav2、LIO、RViz 和 CAD 车型 SDF/URDF 通过以下离线检查维护一致性（只需 Python 与 PyYAML）：
@@ -117,11 +132,12 @@ python3 tools/navigation/check_interfaces.py
 
 审查修复的回归检查保存在 [test_review_repairs.py](test_review_repairs.py)。加载 ROS Jazzy 与重建后的工作空间，执行 `python3 tools/navigation/test_review_repairs.py` 可检查命令时间戳、清理范围、模型契约和停车判定，不启动 ROS 节点。设置 `XXU_REVIEW_CHASSIS_EXECUTABLE` 为重建后的底盘可执行文件路径，还会在隔离域 193 和专用话题中验证异常输入停车及恢复；该选项启动测试节点，不接入机器人驱动。构建与实测范围见[审查修复核验](../../../docs/validation/review_repairs_20261027.md)。
 
-实车 ZLIO/TDT 建图与导航统一走 3D 建图路线：使用 `sentry_localization.launch.py mode:=mapping` + `/backend_node/save_map` 生成 3D `map.pcd` 与先验图，再用离线工具按通行高度带在同一 `map` 坐标系下导出 Nav2 二维图（`.pgm` + `.yaml`，可选 `--keyframes` 沿关键帧局部清零自由区）。该模式由 `backend_node` 独占发布 `map → odom`：
+实车 ZLIO/TDT 建图与导航统一走 3D 建图路线：使用 `sentry_localization.launch.py mode:=mapping` + `/backend_node/save_map` 生成 3D `map.pcd` 与先验图，再用离线工具按通行高度带在同一 `map` 坐标系下导出 Nav2 二维图（`.pgm` + `.yaml`，可选 `--keyframes` 沿关键帧局部清零自由区，以及 `--fit-ground-plane --free-from-ground` 拟合地面平面并按观测地面点清零自由区）。该模式由 `backend_node` 独占发布 `map → odom`：
 
 ```bash
 python3 tools/navigation/pcd_to_nav2_map.py \
-  --pcd /path/to/map.pcd --output /path/to/nav2.yaml
+  --pcd /path/to/map.pcd --output /path/to/nav2.yaml \
+  --keyframes /path/to/keyframes.txt --fit-ground-plane --free-from-ground
 ```
 
 CAD 底盘共用原控制器：`wheel_radii` 可选逐轮半径，`wheel_command_topics` 可选四个 Float64 出口，`max_wheel_acceleration` 默认 0（不限制），`require_fresh_stamp` 默认 false。CAD 仿真显式设置 80 rad/s²、100 Hz 和双重超时检查；零指令及超时绕过斜坡直接停车。新参数取默认值时，实车和旧 Gazebo 仍使用原 Float64MultiArray 输出。

@@ -175,12 +175,76 @@ class PcdToNav2MapTest(unittest.TestCase):
             (['--resolution', '0'], '--resolution'),
             (['--resolution', 'nan'], '--resolution'),
             (['--padding', '-1'], '--padding'),
+            (['--ground-tolerance', '-0.1'], '--ground-tolerance'),
+            (['--ground-tolerance', 'nan'], '--ground-tolerance'),
+            (['--ground-clear-radius', '-0.1'], '--ground-clear-radius'),
+            (['--ground-clear-radius', 'inf'], '--ground-clear-radius'),
             (['--min-z', '0.6'], '--min-z'),
             (['--ground-z', 'inf'], 'Height limits'),
             (['--min-points-per-cell', '0'], '--min-points-per-cell'),
         ):
             with self.subTest(options=options):
                 self.assert_cli_error(options, message)
+
+    def test_fit_ground_plane_crops_tilted_tunnels_symmetrically(self):
+        # Tilted floor z = 0.01*x - 0.01*y - 0.10 across a 10m arena, plus two
+        # 0.25m-high tunnel roofs on opposite ends that would diverge under constant ground-z.
+        xs, ys = np.meshgrid(np.linspace(0.0, 10.0, 21), np.linspace(0.0, 8.0, 17))
+        floor_pts = [(float(x), float(y), 0.01 * x - 0.01 * y - 0.10)
+                     for x, y in zip(xs.ravel(), ys.ravel())]
+        # Tunnel 1 at (1.5, 7.5): floor z = -0.160, roof at +0.25 -> z = +0.090
+        # Tunnel 2 at (8.5, 0.5): floor z = -0.020, roof at +0.25 -> z = +0.230
+        roof1 = (1.5, 7.5, 0.01 * 1.5 - 0.01 * 7.5 - 0.10 + 0.25)
+        roof2 = (8.5, 0.5, 0.01 * 8.5 - 0.01 * 0.5 - 0.10 + 0.25)
+        wall = (5.0, 4.0, 0.01 * 5.0 - 0.01 * 4.0 - 0.10 + 0.18)
+        self.write_xyz(floor_pts + [roof1, roof2, wall])
+
+        def cell_value(yaml_path, x, y):
+            meta = yaml.safe_load(yaml_path.read_text(encoding='utf-8'))
+            pixels = read_pgm(yaml_path.with_suffix('.pgm'))
+            ox, oy, _ = meta['origin']
+            res = meta['resolution']
+            col = math.floor((x - ox) / res)
+            row = pixels.shape[0] - 1 - math.floor((y - oy) / res)
+            return int(pixels[row, col])
+
+        std_yaml = self.directory / 'std.yaml'
+        self.run_cli(std_yaml, '--fit-ground-plane', '--min-z', '0.10', '--max-z', '0.34', '--resolution', '0.5')
+        self.assertEqual(cell_value(std_yaml, 1.5, 7.5), 0)
+        self.assertEqual(cell_value(std_yaml, 8.5, 0.5), 0)
+        self.assertEqual(cell_value(std_yaml, 5.0, 4.0), 0)
+
+        clr_yaml = self.directory / 'clr.yaml'
+        self.run_cli(clr_yaml, '--fit-ground-plane', '--min-z', '0.10', '--max-z', '0.22', '--resolution', '0.5')
+        self.assertEqual(cell_value(clr_yaml, 1.5, 7.5), 254)
+        self.assertEqual(cell_value(clr_yaml, 8.5, 0.5), 254)
+        self.assertEqual(cell_value(clr_yaml, 5.0, 4.0), 0)
+
+    def test_free_from_ground_clears_observed_floor_without_clearing_obstacle_interior(self):
+        # Floor points at (0.25, 0.25) and (1.75, 0.25); obstacle wall at (3.25, 0.25);
+        # high/unvisited interior around (4.75, 4.75) has no ground points (z=0.80 > max_z).
+        self.write_xyz([
+            (0.25, 0.25, 0.0),
+            (1.75, 0.25, 0.01),
+            (3.25, 0.25, 0.25),
+            (4.75, 4.75, 0.80),
+        ])
+        out = self.directory / 'ground_free.yaml'
+        self.run_cli(out, '--free-from-ground', '--ground-tolerance', '0.05',
+                     '--ground-clear-radius', '0.15', '--resolution', '0.5', '--padding', '0.5')
+        meta = yaml.safe_load(out.read_text(encoding='utf-8'))
+        pixels = read_pgm(out.with_suffix('.pgm'))
+        ox, oy, _ = meta['origin']
+        res = meta['resolution']
+
+        def pixel(x, y):
+            return int(pixels[pixels.shape[0] - 1 - math.floor((y - oy) / res),
+                              math.floor((x - ox) / res)])
+
+        self.assertEqual(pixel(0.25, 0.25), 254)
+        self.assertEqual(pixel(1.75, 0.25), 254)
+        self.assertEqual(pixel(3.25, 0.25), 0)
+        self.assertEqual(pixel(4.75, 4.75), 205)
 
     def test_empty_and_nonfinite_point_clouds(self):
         self.write_xyz([])

@@ -1,0 +1,15 @@
+# Startup-relative RMUL 2027 closed-loop mapping waypoints (origin at spawn (2.0, 2.0, yaw=0))
+# map frame, yaw in radians. S-corridor on the 12 m x 8 m field avoids the
+# 0.25 m x 0.80 m tunnels for ega_folded.
+name,x,y,yaw
+wp0_start,0.0,0.0,0.0
+wp1_left_north,-0.4,4.8,1.5708
+wp2_left_return,0.0,0.0,0.0
+wp3_mid_south,4.2,0.0,0.0
+wp4_mid_north,4.4,4.7,1.5708
+wp5_right_north,9.0,4.7,-1.5708
+wp6_right_south,9.0,0.0,-1.5708
+wp7_right_return,9.0,4.7,3.1416
+wp8_mid_north_return,4.4,4.7,-1.5708
+wp9_mid_south_return,4.2,0.0,3.1416
+wp10_close_loop,0.0,0.0,0.0

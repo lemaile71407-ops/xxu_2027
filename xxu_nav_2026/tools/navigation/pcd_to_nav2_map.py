@@ -183,10 +183,11 @@ def read_keyframe_xy(path):
     return np.array(positions)
 
 
-def _clear_keyframe_neighborhoods(image, keyframe_xy, origin, resolution):
+def _clear_disk_neighborhoods(image, centers_xy, origin, resolution, radius):
+    if not len(centers_xy):
+        return
     height, width = image.shape
-    radius = KEYFRAME_CLEAR_RADIUS_M
-    for x, y in keyframe_xy:
+    for x, y in centers_xy:
         low = np.maximum(0, np.floor((np.array([x, y]) - radius - origin) / resolution))
         high = np.minimum([width - 1, height - 1],
                           np.floor((np.array([x, y]) + radius - origin) / resolution))
@@ -201,12 +202,43 @@ def _clear_keyframe_neighborhoods(image, keyframe_xy, origin, resolution):
         neighborhood[within_radius] = FREE
 
     # Include each containing cell even when its center is outside the radius.
-    cols, y_cells = np.floor((keyframe_xy - origin) / resolution).astype(np.intp).T
+    cols, y_cells = np.floor((centers_xy - origin) / resolution).astype(np.intp).T
     image[height - 1 - y_cells, cols] = FREE
 
 
+def _clear_keyframe_neighborhoods(image, keyframe_xy, origin, resolution):
+    _clear_disk_neighborhoods(image, keyframe_xy, origin, resolution, KEYFRAME_CLEAR_RADIUS_M)
+
+
+def fit_ground_plane(points, init_percentile=15.0, init_band=0.08,
+                     inlier_threshold=0.04, iterations=5, max_slope=0.25):
+    """Fit a low-slope ground plane z = a*x + b*y + c via iterative least squares."""
+    points = points[np.isfinite(points).all(axis=1)]
+    if len(points) < 3:
+        raise ValueError('Ground plane fit requires at least 3 finite XYZ points')
+    design = np.column_stack([points[:, 0], points[:, 1], np.ones(len(points))])
+    z = points[:, 2]
+    z0 = float(np.percentile(z, init_percentile))
+    inliers = np.abs(z - z0) <= init_band
+    if int(inliers.sum()) < 3:
+        raise ValueError('Insufficient initial ground-plane inliers')
+    coef = None
+    for _ in range(iterations):
+        coef, _, _, _ = np.linalg.lstsq(design[inliers], z[inliers], rcond=None)
+        if not np.isfinite(coef).all():
+            raise ValueError('Ground plane fit produced non-finite coefficients')
+        inliers = np.abs(z - (design @ coef)) <= inlier_threshold
+        if int(inliers.sum()) < 3:
+            raise ValueError('Insufficient ground-plane inliers during refinement')
+    a, b, c = map(float, coef)
+    if math.hypot(a, b) > max_slope:
+        raise ValueError(f'Fitted ground plane slope {math.hypot(a, b):.3f} exceeds max_slope {max_slope:.3f}')
+    return (a, b, c)
+
+
 def rasterize(points, resolution, lower_z, upper_z, padding, min_points_per_cell,
-              keyframe_xy=None):
+              keyframe_xy=None, ground_plane=None, free_from_ground=False,
+              ground_tolerance=0.06, ground_clear_radius=0.15, ground_z=0.0):
     """Return a top-down PGM array and the map-frame XY of the lower-left corner."""
     points = points[np.isfinite(points).all(axis=1)]
     if not len(points):
@@ -228,14 +260,25 @@ def rasterize(points, resolution, lower_z, upper_z, padding, min_points_per_cell
     width, height = map(int, grid_size)
     image = np.full((height, width), UNKNOWN, dtype=np.uint8)
 
-    if keyframe_xy is None:
+    if ground_plane is not None:
+        a, b, c = ground_plane
+        rel_z = points[:, 2] - (a * points[:, 0] + b * points[:, 1] + c)
+        in_band = (rel_z >= lower_z) & (rel_z <= upper_z)
+    else:
+        rel_z = points[:, 2] - ground_z
+        in_band = (points[:, 2] >= lower_z) & (points[:, 2] <= upper_z)
+
+    if keyframe_xy is None and not free_from_ground:
         first_col, first_y = np.floor((cloud_min - origin) / resolution).astype(np.intp)
         last_col, last_y = np.floor((cloud_max - origin) / resolution).astype(np.intp)
         image[height - 1 - last_y:height - first_y, first_col:last_col + 1] = FREE
     else:
-        _clear_keyframe_neighborhoods(image, keyframe_xy, origin, resolution)
+        if keyframe_xy is not None:
+            _clear_keyframe_neighborhoods(image, keyframe_xy, origin, resolution)
+        if free_from_ground:
+            ground_xy = points[np.abs(rel_z) <= ground_tolerance, :2]
+            _clear_disk_neighborhoods(image, ground_xy, origin, resolution, ground_clear_radius)
 
-    in_band = (points[:, 2] >= lower_z) & (points[:, 2] <= upper_z)
     cols, y_cells = np.floor((points[in_band, :2] - origin) / resolution).astype(np.intp).T
     indices = (height - 1 - y_cells) * width + cols
     if min_points_per_cell > 1:
@@ -283,12 +326,24 @@ def main(argv=None):
                         help='Minimum in-band points to mark a cell occupied (default: 1)')
     parser.add_argument('--keyframes', type=Path,
                         help=f'Backend keyframes.txt for local free clearing ({KEYFRAME_CLEAR_RADIUS_M} m radius)')
+    parser.add_argument('--fit-ground-plane', action='store_true',
+                        help='Fit ground plane z = a*x + b*y + c and filter --min-z/--max-z relative to it')
+    parser.add_argument('--free-from-ground', action='store_true',
+                        help='Mark observed ground-point neighborhoods as FREE')
+    parser.add_argument('--ground-tolerance', type=float, default=0.06,
+                        help='Max |z - ground| to classify a point as observed ground (default: 0.06 m)')
+    parser.add_argument('--ground-clear-radius', type=float, default=0.15,
+                        help='Free clearing radius around observed ground points (default: 0.15 m)')
     args = parser.parse_args(argv)
 
     if not math.isfinite(args.resolution) or args.resolution <= 0:
         parser.error('--resolution must be finite and positive')
     if not math.isfinite(args.padding) or args.padding < 0:
         parser.error('--padding must be finite and nonnegative')
+    if not math.isfinite(args.ground_tolerance) or args.ground_tolerance < 0:
+        parser.error('--ground-tolerance must be finite and nonnegative')
+    if not math.isfinite(args.ground_clear_radius) or args.ground_clear_radius < 0:
+        parser.error('--ground-clear-radius must be finite and nonnegative')
     lower_z = args.ground_z + args.min_z
     upper_z = args.ground_z + args.max_z
     if not (math.isfinite(lower_z) and math.isfinite(upper_z) and args.min_z <= args.max_z):
@@ -298,9 +353,17 @@ def main(argv=None):
 
     try:
         points = read_pcd(args.pcd)
+        ground_plane = fit_ground_plane(points) if args.fit_ground_plane else None
+        if ground_plane is not None:
+            print(f'Fitted ground plane: z = {ground_plane[0]:.6f}*x + {ground_plane[1]:.6f}*y + {ground_plane[2]:.4f}')
+            lower_z, upper_z = args.min_z, args.max_z
         keyframe_xy = read_keyframe_xy(args.keyframes) if args.keyframes is not None else None
-        image, origin = rasterize(points, args.resolution, lower_z, upper_z, args.padding,
-                                  args.min_points_per_cell, keyframe_xy)
+        image, origin = rasterize(
+            points, args.resolution, lower_z, upper_z, args.padding,
+            args.min_points_per_cell, keyframe_xy,
+            ground_plane=ground_plane, free_from_ground=args.free_from_ground,
+            ground_tolerance=args.ground_tolerance, ground_clear_radius=args.ground_clear_radius,
+            ground_z=args.ground_z)
         image_path, yaml_path = write_nav2_map(args.output, image, origin, args.resolution)
     except (OSError, ValueError, MemoryError) as error:
         parser.error(str(error))

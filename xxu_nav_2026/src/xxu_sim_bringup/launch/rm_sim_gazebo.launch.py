@@ -133,6 +133,16 @@ def prepare_assets(share, directory, lidar_mode='gpu_lidar', field_model='', rob
     return world_path, model_path, ET.tostring(root, encoding='unicode')
 
 
+def _scan_height(value, name):
+    try:
+        height = float(value)
+    except ValueError as error:
+        raise ValueError(f'{name} must be a finite number') from error
+    if not math.isfinite(height):
+        raise ValueError(f'{name} must be a finite number')
+    return height
+
+
 def launch_setup(context):
     contract = interfaces()
     if LaunchConfiguration('gimbal_mode').perform(context) != 'hold':
@@ -142,6 +152,17 @@ def launch_setup(context):
     profile = robot_profile(LaunchConfiguration('robot_model').perform(context), sim_share)
     custom_robot = bool(profile.geometry)
     geometry = profile.geometry
+    scan_min_height = _scan_height(
+        LaunchConfiguration('scan_min_height').perform(context), 'scan_min_height')
+    scan_max_arg = LaunchConfiguration('scan_max_height', default='').perform(context)
+    base_height = geometry['base_height'] if custom_robot else 0.0
+    if scan_max_arg:
+        scan_max_height = _scan_height(scan_max_arg, 'scan_max_height')
+        if scan_max_height < scan_min_height:
+            raise ValueError('scan_max_height must be greater than or equal to scan_min_height')
+        scan_max_height -= base_height
+    else:
+        scan_max_height = geometry['collision_height'] + 0.02 - base_height if custom_robot else 0.50
     lidar_mode = LaunchConfiguration('lidar_mode').perform(context)
     rgl_point_timing = LaunchConfiguration('rgl_point_timing').perform(context)
     if rgl_point_timing == 'uniform' and lidar_mode != 'rgl':
@@ -283,9 +304,8 @@ def launch_setup(context):
                               if custom_robot and rgl_point_timing == 'uniform' else None),
         node('pointcloud_to_laserscan', 'pointcloud_to_laserscan_node', 'pointcloud_to_laserscan', {
             'use_sim_time': False, 'target_frame': contract.frame('navigation_base'), 'transform_tolerance': 0.05,
-            'min_height': float(lc('scan_min_height').perform(context)) - geometry['base_height']
-                          if custom_robot else ParameterValue(lc('scan_min_height'), value_type=float),
-            'max_height': geometry['collision_height'] + .02 - geometry['base_height'] if custom_robot else 0.50,
+            'min_height': scan_min_height - base_height,
+            'max_height': scan_max_height,
             'angle_min': -3.1415926, 'angle_max': 3.1415926,
             'angle_increment': 0.0087266, 'scan_time': 0.1, 'range_min': 0.3,
             'range_max': 40.0,
@@ -330,6 +350,8 @@ def generate_launch_description():
     return LaunchDescription([DeclareLaunchArgument(key, default_value=value)
                               for key, value in defaults.items()] + [
         SetEnvironmentVariable(name='OMP_NUM_THREADS', value='2'),
+        DeclareLaunchArgument('scan_max_height', default_value='',
+                              description='Ground-relative upper scan height in metres'),
         DeclareLaunchArgument('lidar_mode', default_value='rgl',
                               choices=['rgl', 'gpu_lidar']),
         DeclareLaunchArgument('imu_sampling', default_value='direct', choices=['direct', 'interval_mean']),

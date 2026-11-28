@@ -17,6 +17,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
+from xxu_bringup.backend_config import load_backend_params
 from xxu_bringup.sensor_launch import load_rigid_mount, rigid_sensor_actions
 from xxu_bringup.interfaces import interfaces
 
@@ -36,31 +37,6 @@ def _finite_float(value, name):
     if not math.isfinite(parsed):
         raise ValueError(f'{name} must be a finite number')
     return parsed
-
-
-def _merge_mapping(base, overrides):
-    for key, value in overrides.items():
-        if isinstance(value, dict) and isinstance(base.get(key), dict):
-            _merge_mapping(base[key], value)
-        else:
-            base[key] = value
-    return base
-
-
-def _load_backend_params(path, ancestors=()):
-    resolved = Path(path).resolve()
-    if resolved in ancestors:
-        raise ValueError(f'backend_config inheritance cycle: {resolved}')
-    params = yaml.safe_load(resolved.read_text(encoding='utf-8')) or {}
-    if not isinstance(params, dict):
-        raise ValueError(f'backend_config must be a mapping: {resolved}')
-    parent = params.pop('extends', None)
-    if parent:
-        parent_path = resolved.parent / parent
-        if not parent_path.is_file():
-            raise ValueError(f'backend_config parent must be an existing file: {parent_path}')
-        params = _merge_mapping(_load_backend_params(parent_path, ancestors=(*ancestors, resolved)), params)
-    return params
 
 
 def setup(context):
@@ -100,7 +76,7 @@ def setup(context):
     config.write_text(yaml.safe_dump(frontend, sort_keys=False))
     frames, topics = mount['frames'], mount['topics']
     mode = arg('mode')
-    backend_params = _load_backend_params(arg('backend_config')) if mode == 'config' else {}
+    backend_params = load_backend_params(arg('backend_config')) if mode == 'config' else {}
     localization_enabled = mode == 'localization' or (
         mode == 'config' and bool(backend_params.get('prior_map', {}).get('enabled', False)))
     watchdog_setting = arg('enable_watchdog')

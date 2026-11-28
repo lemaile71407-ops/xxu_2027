@@ -15,13 +15,14 @@ from xxu_bringup.interfaces import interfaces
 from xxu_bringup.navigation_parameters import nav2_parameters
 
 
-def map_server_node(configured_params, map_file, use_sim_time):
+def map_server_node(configured_params, map_file, use_sim_time, condition=None):
     """Construct the navigation map server."""
     return Node(
         package="nav2_map_server",
         executable="map_server",
         name="map_server",
         output="screen",
+        condition=condition,
         parameters=[configured_params, {"yaml_filename": map_file, "use_sim_time": use_sim_time}],
     )
 
@@ -96,13 +97,14 @@ def navigation_server_nodes(selected_nav_params, nav2_common_remaps, contract):
     ]
 
 
-def localization_lifecycle_manager(use_sim_time, autostart, localization_lifecycle_nodes):
+def localization_lifecycle_manager(use_sim_time, autostart, localization_lifecycle_nodes, condition=None):
     """Construct the existing map/localization lifecycle manager."""
     return Node(
         package="nav2_lifecycle_manager",
         executable="lifecycle_manager",
         name="lifecycle_manager_localization",
         output="screen",
+        condition=condition,
         parameters=[{
             "use_sim_time": use_sim_time,
             "autostart": autostart,
@@ -122,6 +124,8 @@ def generate_launch_description():
     rviz_config = LaunchConfiguration("rviz_config")
     autostart = LaunchConfiguration("autostart")
     enable_localization = LaunchConfiguration("enable_localization")
+    use_map_server = LaunchConfiguration("use_map_server")
+    wait_for_tf_only = LaunchConfiguration("wait_for_tf_only")
     idle_scan = LaunchConfiguration("idle_scan")
     localization_mode = LaunchConfiguration("localization_mode")
     cmd_vel_in_topic = LaunchConfiguration("cmd_vel_in_topic")
@@ -129,7 +133,9 @@ def generate_launch_description():
     planner_tolerance = LaunchConfiguration("planner_tolerance")
 
     wait_for_localization = AndSubstitution(enable_localization, autostart)
-    navigation_autostart = AndSubstitution(NotSubstitution(enable_localization), autostart)
+    wait_for_tf = AndSubstitution(wait_for_tf_only, autostart)
+    wait_for_startup = OrSubstitution(wait_for_localization, wait_for_tf)
+    navigation_autostart = AndSubstitution(NotSubstitution(wait_for_startup), autostart)
 
     # Keep standalone Nav2 aligned with the complex_mapping Gazebo world.
     default_map = PathJoinSubstitution([bringup_share, "maps", "complex_map.yaml"])
@@ -162,6 +168,8 @@ def generate_launch_description():
         DeclareLaunchArgument('robot_geometry_file', default_value=''),
         DeclareLaunchArgument('localization_mode', default_value='external',
                              choices=['external']),
+        DeclareLaunchArgument('use_map_server', default_value='true', choices=['true', 'false']),
+        DeclareLaunchArgument('wait_for_tf_only', default_value='false', choices=['false', 'true']),
         DeclareLaunchArgument(
             "enable_localization",
             default_value="true",
@@ -222,8 +230,10 @@ def generate_launch_description():
         ),
         GroupAction(
             actions=[
-                map_server_node(configured_params, map_file, use_sim_time),
-                localization_lifecycle_manager(use_sim_time, autostart, ['map_server']),
+                map_server_node(configured_params, map_file, use_sim_time,
+                                condition=IfCondition(use_map_server)),
+                localization_lifecycle_manager(use_sim_time, autostart, ['map_server'],
+                                               condition=IfCondition(use_map_server)),
                 *navigation_server_nodes(selected_nav_params, nav2_common_remaps, contract),
                 Node(
                     package="nav2_lifecycle_manager",
@@ -241,13 +251,14 @@ def generate_launch_description():
                     executable="nav2_navigation_startup.py",
                     name="nav2_navigation_startup",
                     output="screen",
-                    condition=IfCondition(OrSubstitution(wait_for_localization, idle_scan)),
+                    condition=IfCondition(OrSubstitution(wait_for_startup, idle_scan)),
                     parameters=[{
                         "use_sim_time": use_sim_time,
-                        # Idle scans also require healthy localization before commanding a spin.
-                        "require_localization": True,
+                        "require_localization": ParameterValue(
+                            OrSubstitution(wait_for_localization, NotSubstitution(wait_for_tf_only)),
+                            value_type=bool),
                         "idle_scan": ParameterValue(idle_scan, value_type=bool),
-                        "idle_scan_only": ParameterValue(NotSubstitution(wait_for_localization), value_type=bool),
+                        "idle_scan_only": ParameterValue(NotSubstitution(wait_for_startup), value_type=bool),
                     }],
                 ),
                 Node(
